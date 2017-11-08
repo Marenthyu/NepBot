@@ -400,6 +400,8 @@ class NepBot(NepBotClass):
     autoupdate = False
     pw = None
     nomodalerted = []
+    addchannels = []
+    leavechannels = []
 
     def __init__(self, config, channels, admins):
         super().__init__(config["username"])
@@ -532,6 +534,15 @@ class NepBot(NepBotClass):
 
 
             print("Catching all viewers...")
+            for c in self.addchannels:
+                self.mychannels.append(c)
+            self.addchannels = []
+            for c in self.leavechannels:
+                try:
+                    self.mychannels.remove(c)
+                except:
+                    print("Couldn't remove channel " + str(c) + " from channels, kit wasn't found. Channel list: " + str(self.mychannels))
+            self.leavechannels = []
             try:
                 global activitymap
                 #print("Activitymap: " + str(activitymap))
@@ -582,7 +593,12 @@ class NepBot(NepBotClass):
                         #print(
                         #    "INSERT INTO users (name, points, lastFree, twitchID) VALUE ('{name}', 0, 0, {twitchID})".format(
                         #        name=str(viewer).lower(), twitchID=str(twitchid)))
-                        cur.execute(
+                        cur.execute("SELECT * FROM users WHERE twitchID=%s", [str(twitchid)])
+                        if len(cur.fetchall()) >= 1:
+                            print("Twitch ID already exists. Updating row with new name")
+                            cur.execute("UPDATE users SET name = %s WHERE twitchID = %s", [str(viewer).lower(), str(twitchid)])
+                        else:
+                            cur.execute(
                             "INSERT INTO users (name, points, lastFree, twitchID) VALUE ('{name}', 0, 0, {twitchID})".format(
                                 name=str(viewer).lower(), twitchID=str(twitchid)))
                         #print("Success?")
@@ -1559,28 +1575,38 @@ class NepBot(NepBotClass):
             if len(args) != 1:
                 self.message(channel, "Usage: !nepjoin <channelname>", isWhisper=isWhisper)
                 return
-            chan = str(args[0]).replace("'", "")
-            if ('#' + chan) in self.mychannels:
+            chan = str(args[0]).replace("'", "").lower()
+            if ('#' + chan) in self.mychannels or ('#' + chan) in self.addchannels:
                 self.message(channel, "Already in that channel!", isWhisper=isWhisper)
                 return
             try:
                 cur = db.cursor()
+                cur.execute("SELECT * FROM users WHERE name=%s", [str(chan)])
+                rows = cur.fetchall()
+                if len(rows) < 1:
+                    self.message(channel, "That user is not yet in the database! Let them talk in a channel the Bot is in to change that!", isWhisper=isWhisper)
+                    cur.close()
+                    return
                 cur.execute("INSERT INTO channels(name) VALUE (%s)", [str(chan)])
                 self.join("#" + chan)
-                self.mychannels.append('#' + chan)
                 self.message("#" + chan, "Hi there!", isWhisper=False)
+                self.addchannels.append('#' + chan)
                 self.message(channel, "Joined #" + chan, isWhisper=isWhisper)
                 cur.close()
                 return
             except:
-                self.message(channel, "Tried joining, failed.", isWhisper=isWhisper)
+                self.message(channel, "Tried joining, failed. Tell Marenthyu the following: " + str(sys.exc_info()), isWhisper=isWhisper)
                 print("Error: " + str(sys.exc_info()))
                 return
         if str(command).lower() == "nepleave" and (sender.lower() in self.myadmins or ("#" + str(sender.lower())) == str(channel)):
+            if len(args) > 0:
+                self.message(channel, "nepleave doesn't take in argument. Type it in the channel to leave.", isWhisper=isWhisper)
+                return
             try:
                 cur = db.cursor()
                 cur.execute("DELETE FROM channels WHERE name = '{channel}'".format(channel=str(channel).replace("#", "")))
-                self.mychannels.remove(str(channel))
+                self.leavechannels.append(str(channel))
+                # self.mychannels.remove(str(channel))
                 self.message(channel, "ByeBye!", isWhisper=False)
                 self.part(channel)
                 cur.close()
