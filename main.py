@@ -53,7 +53,7 @@ try:
     for line in lines:
         name, value = line.split("=")
         value = str(value).strip("\n")
-        print("Reading config value '{name}' = '{redacted}'".format(name=name, redacted=value))
+        print("Reading config value '{name}' = '<redacted>'".format(name=name))
         if name == "password":
             dbpw = value
         if name == "hdnoauth":
