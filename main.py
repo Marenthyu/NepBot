@@ -1965,8 +1965,9 @@ b.start(config["oauth"])
 
 print("past start")
 
-#hdnb = HDNBot()
-#hdnb.start(hdnoauth)
+if hdnoauth:
+    hdnb = HDNBot()
+    hdnb.start(hdnoauth)
 
 def startPubSub(nepbot):
 
