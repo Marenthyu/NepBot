@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 # coding=utf-8
 import pymysql
-import atexit
 import pydle
 import random
 from random import choice
@@ -244,7 +243,6 @@ def sendalert(channel, waifu, user):
                     json=discordbody)
 
         cur.close()
-        currentAlert += 1
 
 def followsme(name):
     cur = db.cursor()
@@ -1943,15 +1941,6 @@ for row in rows:
     blacklist.append(row[0])
 curg.close()
 
-
-def closeonexit():
-    print("Exiting. timestamp: " + str(datetime.datetime.now()))
-    import pdb
-    pdb.pm()
-    db.close()
-
-
-atexit.register(closeonexit)
 headers = {"Client-ID":str(config["clientID"]), "Accept":"application/vnd.twitchtv.v5+json"}
 r = requests.get("https://api.twitch.tv/kraken/users", headers=headers, params={"login":str(config["username"]).lower()})
 j = r.json()
