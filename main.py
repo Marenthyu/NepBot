@@ -523,7 +523,7 @@ class NepBot(NepBotClass):
                 try:
                     self.mychannels.remove(c)
                 except:
-                    print("Couldn't remove channel " + str(c) + " from channels, kit wasn't found. Channel list: " + str(self.mychannels))
+                    print("Couldn't remove channel " + str(c) + " from channels, it wasn't found. Channel list: " + str(self.mychannels))
             self.leavechannels = []
             try:
                 global activitymap
@@ -963,11 +963,11 @@ class NepBot(NepBotClass):
                 return
             if str(command).lower() == "booster":
                 if len(args) < 1:
-                    self.message(channel, "Usage: !booster buy <standard/super> OR !booster select <take/disenchant> (for each waifu) OR !booster show", isWhisper=isWhisper)
+                    self.message(channel, "Usage: !booster buy <standard/super/ultimate> OR !booster select <take/disenchant> (for each waifu) OR !booster show", isWhisper=isWhisper)
                     return
                 if args[0] == "show":
                     if str(sender).lower() not in openbooster.keys():
-                        self.message(channel, str(sender).lower() + ", you do not have an open booster. Buy one using !booster buy <standard/super>", isWhisper=isWhisper)
+                        self.message(channel, str(sender).lower() + ", you do not have an open booster. Buy one using !booster buy <standard/super/ultimate>", isWhisper=isWhisper)
                         return
                     # cur = db.cursor()
                     cards = openbooster[str(sender).lower()]
@@ -999,7 +999,7 @@ class NepBot(NepBotClass):
                     return
                 if args[0] == "select":
                     if str(sender).lower() not in openbooster.keys():
-                        self.message(channel, "{user}, you currently do not have an open booster. Buy one using !booster buy <standard/super>".format(user=str(sender)), isWhisper=isWhisper)
+                        self.message(channel, "{user}, you currently do not have an open booster. Buy one using !booster buy <standard/super/ultimate>".format(user=str(sender)), isWhisper=isWhisper)
                         return
                     if len(args) - 1 != len(openbooster[str(sender).lower()]):
                         self.message(channel, "You did not specify the correct amount of keep/disenchant. Please provide " + str(len(openbooster[str(sender).lower()])), isWhisper=isWhisper)
