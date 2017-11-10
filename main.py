@@ -480,7 +480,7 @@ class NepBot(NepBotClass):
         def timer():
             with busyLock:
                 global t
-                t = Timer(30, timer)
+                t = Timer(300, timer)
                 t.start()
                 print("Refreshing Database Connection...")
                 global db
