@@ -222,9 +222,11 @@ def sendalert(channel, waifu, user):
             }
         ]}
         try:
-            token = str(cur.fetchall()[0][0])
-            alertbody.update({"access_token": token})
-            req = requests.post(streamlabsalerturl, headers=alertheaders, json=alertbody)
+            tokenInfo = cur.fetchall()
+            if len(tokenInfo) > 0 and tokenInfo[0][0] is not None:
+                token = str(tokenInfo[0][0])
+                alertbody.update({"access_token": token})
+                req = requests.post(streamlabsalerturl, headers=alertheaders, json=alertbody)
         except:
             print("Tried to alert for " + str(channel) + ", " + str(waifu) + ", " + str(user) + ", but failed. Continuing with discord alerts.")
 
@@ -319,23 +321,13 @@ def dropCard(rarity=-1, super=False, ultra=False):
     else:
         #print("Dropping card of rarity " + str(rarity))
         cur = db.cursor()
-        cur.execute("SELECT * FROM waifus WHERE rarity='{0}'".format(rarity))
-        rows = cur.fetchall()
-        max = len(rows)
         raritymax = int(config["rarity" + str(rarity) + "Max"])
-        retcount = 0
-        retid = 0
-        while retid == 0 or retcount >= raritymax:
-
-            r = random.randint(0, max - 1)
-            retid = rows[r][0]
-
-            cur.execute(
-                "SELECT SUM(amount) AS totalCards FROM has_waifu JOIN users on has_waifu.userid = users.id WHERE has_waifu.waifuid = '{0}'".format(
-                    str(retid)))
+        while True:
+            cur.execute("SELECT * FROM waifus WHERE rarity = %s ORDER BY RAND() LIMIT 1", (rarity,))
+            retid = cur.fetchone()[0]
+            cur.execute("SELECT SUM(amount) FROM has_waifu INNER JOIN users ON has_waifu.userid = users.id WHERE waifuid = %s", (retid,))
             retcount = cur.fetchone()[0] or 0
-            #print("retid: " + str(retid) + ", retcount: " + str(retcount) + ", raritymax: " + str(raritymax))
-            if raritymax == 0:
+            if raritymax == 0 or raritymax > retcount:
                 break
         cur.close()
         #print("Dropping ID " + str(retid))
@@ -358,6 +350,12 @@ def giveCard(user, id):
         #print("giving using:")
         #print("INSERT INTO has_waifu(userid, waifuid, amount) VALUE ('{userid}', '{waifuid}', '1')".format(userid=userid, waifuid=str(id)))
         cur.execute("INSERT INTO has_waifu(userid, waifuid, amount) VALUE ('{userid}', '{waifuid}', '1')".format(userid=userid, waifuid=str(id)))
+    cur.close()
+    
+def logDrop(userid, waifuid, source, channel, isWhisper):
+    trueChannel = "$$whisper$$" if isWhisper else channel
+    cur = db.cursor()
+    cur.execute("INSERT INTO drops(userid, waifuid, source, channel, timestamp) VALUES(%s, %s, %s, %s, %s)", (userid, waifuid, source, trueChannel, current_milli_time()))
     cur.close()
 
 # From https://github.com/Shizmob/pydle/issues/35
@@ -532,31 +530,24 @@ class NepBot(NepBotClass):
                 validactivity = []
                 for channel in self.channels:
                     #print("Fetching for channel " + str(channel))
-                    with urllib.request.urlopen('https://tmi.twitch.tv/group/user/' + str(channel).replace("#", "") + '/chatters') as response:
-                        data = json.loads(response.read().decode())
-                        chatters = data["chatters"]
-                        mods = chatters["moderators"]
-                        staff = chatters["staff"]
-                        admins = chatters["admins"]
-                        globalmods = chatters["global_mods"]
-                        viewers = chatters["viewers"]
+                    channelName = str(channel).replace("#", "")
+                    try:
+                        with urllib.request.urlopen('https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
+                            data = json.loads(response.read().decode())
+                            chatters = data["chatters"]
+                            a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters["global_mods"] + chatters["viewers"]
 
-                        a = []
-                        a.append(mods)
-                        a.append(staff)
-                        a.append(admins)
-                        a.append(globalmods)
-                        a.append(viewers)
-
-                        for sub in a:
-                            for viewer in sub:
+                            for viewer in a:
                                 if viewer not in doneusers:
                                     doneusers.append(viewer)
-                                if isLive[str(channel).replace("#", "")] and viewer not in validactivity:
+                                if isLive[channelName] and viewer not in validactivity:
                                     validactivity.append(viewer)
+                    except:
+                        print("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
+                        print("Error: " + str(sys.exc_info()))
                 cur = db.cursor()
                 # process all users
-                print("Catched users, giving points and creating accounts")
+                print("Caught users, giving points and creating accounts")
                 with busyLock:
                     for viewer in doneusers:
                         cur.execute("SELECT COUNT(*) FROM users WHERE name='{0}'".format(str(viewer).lower()))
@@ -867,7 +858,7 @@ class NepBot(NepBotClass):
                     cur.execute(
                             "UPDATE users SET lastFree='{timestamp}' WHERE twitchID='{name}'".format(name=str(tags['user-id']),
                                                                                              timestamp=current_milli_time()))
-                    cur.execute("INSERT INTO drops(userid, waifuid) VALUE (%s, %s)", [str(tags['user-id']), id])
+                    logDrop(str(tags['user-id']), id, "freewaifu", channel, isWhisper)
                 elif freeAvailable:
                     #print("too many cards")
                     self.message(channel, str(tags['display-name']) + ", your hand is full! !disenchant something or upgrade your hand!", isWhisper=isWhisper)
@@ -949,6 +940,7 @@ class NepBot(NepBotClass):
                     link=row[2], price=str(price)), isWhisper=isWhisper)
                 giveCard(str(sender).lower(), str(row[0]))
                 cur.close()
+                logDrop(str(tags['user-id']), str(row[0]), "buy", channel, isWhisper)
                 return
             if str(command).lower() == "giveme" and sender.lower() in self.myadmins:
                 cur = db.cursor()
@@ -1098,7 +1090,7 @@ class NepBot(NepBotClass):
                             else:
                                 cardstring += toadd
 
-                            cur.execute("INSERT INTO drops(userid, waifuid) VALUE (%s, %s)", [str(tags['user-id']), str(card)])
+                            logDrop(str(tags['user-id']), str(card), "boosters.standard", channel, isWhisper)
                         cur.close()
 
                         token = ''.join(choice(ascii_letters) for v in range(10))
@@ -1168,7 +1160,7 @@ class NepBot(NepBotClass):
                             else:
                                 cardstring += toadd
 
-                            cur.execute("INSERT INTO drops(userid, waifuid) VALUE (%s, %s)", [str(tags['user-id']), str(card)])
+                            logDrop(str(tags['user-id']), str(card), "boosters.super", channel, isWhisper)
                         if not gotuncommon:
                             try:
                                 cards.remove(cards[0])
@@ -1229,7 +1221,7 @@ class NepBot(NepBotClass):
                             else:
                                 cardstring += toadd
 
-                            cur.execute("INSERT INTO drops(userid, waifuid) VALUE (%s, %s)", [str(tags['user-id']), str(card)])
+                            logDrop(str(tags['user-id']), str(card), "boosters.ultimate", channel, isWhisper)
 
                         cards = sorted(cards)
                         openbooster[str(sender).lower()] = cards
