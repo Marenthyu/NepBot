@@ -321,23 +321,13 @@ def dropCard(rarity=-1, super=False, ultra=False):
     else:
         #print("Dropping card of rarity " + str(rarity))
         cur = db.cursor()
-        cur.execute("SELECT * FROM waifus WHERE rarity='{0}'".format(rarity))
-        rows = cur.fetchall()
-        max = len(rows)
         raritymax = int(config["rarity" + str(rarity) + "Max"])
-        retcount = 0
-        retid = 0
-        while retid == 0 or retcount >= raritymax:
-
-            r = random.randint(0, max - 1)
-            retid = rows[r][0]
-
-            cur.execute(
-                "SELECT SUM(amount) AS totalCards FROM has_waifu JOIN users on has_waifu.userid = users.id WHERE has_waifu.waifuid = '{0}'".format(
-                    str(retid)))
+        while True:
+            cur.execute("SELECT * FROM waifus WHERE rarity = %s ORDER BY RAND() LIMIT 1", (rarity,))
+            retid = cur.fetchone()[0]
+            cur.execute("SELECT SUM(amount) FROM has_waifu INNER JOIN users ON has_waifu.userid = users.id WHERE waifuid = %s", (retid,))
             retcount = cur.fetchone()[0] or 0
-            #print("retid: " + str(retid) + ", retcount: " + str(retcount) + ", raritymax: " + str(raritymax))
-            if raritymax == 0:
+            if raritymax == 0 or raritymax > retcount:
                 break
         cur.close()
         #print("Dropping ID " + str(retid))
