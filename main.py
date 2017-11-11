@@ -222,9 +222,11 @@ def sendalert(channel, waifu, user):
             }
         ]}
         try:
-            token = str(cur.fetchall()[0][0])
-            alertbody.update({"access_token": token})
-            req = requests.post(streamlabsalerturl, headers=alertheaders, json=alertbody)
+            tokenInfo = cur.fetchall()
+            if len(tokenInfo) > 0 and tokenInfo[0][0] is not None:
+                token = str(tokenInfo[0][0])
+                alertbody.update({"access_token": token})
+                req = requests.post(streamlabsalerturl, headers=alertheaders, json=alertbody)
         except:
             print("Tried to alert for " + str(channel) + ", " + str(waifu) + ", " + str(user) + ", but failed. Continuing with discord alerts.")
 
@@ -358,6 +360,12 @@ def giveCard(user, id):
         #print("giving using:")
         #print("INSERT INTO has_waifu(userid, waifuid, amount) VALUE ('{userid}', '{waifuid}', '1')".format(userid=userid, waifuid=str(id)))
         cur.execute("INSERT INTO has_waifu(userid, waifuid, amount) VALUE ('{userid}', '{waifuid}', '1')".format(userid=userid, waifuid=str(id)))
+    cur.close()
+    
+def logDrop(userid, waifuid, source, channel, isWhisper):
+    trueChannel = "$$whisper$$" if isWhisper else channel
+    cur = db.cursor()
+    cur.execute("INSERT INTO drops(userid, waifuid, source, channel, timestamp) VALUES(%s, %s, %s, %s, %s)", (userid, waifuid, source, trueChannel, current_milli_time()))
     cur.close()
 
 # From https://github.com/Shizmob/pydle/issues/35
@@ -867,7 +875,7 @@ class NepBot(NepBotClass):
                     cur.execute(
                             "UPDATE users SET lastFree='{timestamp}' WHERE twitchID='{name}'".format(name=str(tags['user-id']),
                                                                                              timestamp=current_milli_time()))
-                    cur.execute("INSERT INTO drops(userid, waifuid) VALUE (%s, %s)", [str(tags['user-id']), id])
+                    logDrop(str(tags['user-id']), id, "freewaifu", channel, isWhisper)
                 elif freeAvailable:
                     #print("too many cards")
                     self.message(channel, str(tags['display-name']) + ", your hand is full! !disenchant something or upgrade your hand!", isWhisper=isWhisper)
@@ -949,6 +957,7 @@ class NepBot(NepBotClass):
                     link=row[2], price=str(price)), isWhisper=isWhisper)
                 giveCard(str(sender).lower(), str(row[0]))
                 cur.close()
+                logDrop(str(tags['user-id']), str(row[0]), "buy", channel, isWhisper)
                 return
             if str(command).lower() == "giveme" and sender.lower() in self.myadmins:
                 cur = db.cursor()
@@ -1098,7 +1107,7 @@ class NepBot(NepBotClass):
                             else:
                                 cardstring += toadd
 
-                            cur.execute("INSERT INTO drops(userid, waifuid) VALUE (%s, %s)", [str(tags['user-id']), str(card)])
+                            logDrop(str(tags['user-id']), str(card), "boosters.standard", channel, isWhisper)
                         cur.close()
 
                         token = ''.join(choice(ascii_letters) for v in range(10))
@@ -1168,7 +1177,7 @@ class NepBot(NepBotClass):
                             else:
                                 cardstring += toadd
 
-                            cur.execute("INSERT INTO drops(userid, waifuid) VALUE (%s, %s)", [str(tags['user-id']), str(card)])
+                            logDrop(str(tags['user-id']), str(card), "boosters.super", channel, isWhisper)
                         if not gotuncommon:
                             try:
                                 cards.remove(cards[0])
@@ -1229,7 +1238,7 @@ class NepBot(NepBotClass):
                             else:
                                 cardstring += toadd
 
-                            cur.execute("INSERT INTO drops(userid, waifuid) VALUE (%s, %s)", [str(tags['user-id']), str(card)])
+                            logDrop(str(tags['user-id']), str(card), "boosters.ultimate", channel, isWhisper)
 
                         cards = sorted(cards)
                         openbooster[str(sender).lower()] = cards
