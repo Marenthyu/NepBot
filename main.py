@@ -530,31 +530,24 @@ class NepBot(NepBotClass):
                 validactivity = []
                 for channel in self.channels:
                     #print("Fetching for channel " + str(channel))
-                    with urllib.request.urlopen('https://tmi.twitch.tv/group/user/' + str(channel).replace("#", "") + '/chatters') as response:
-                        data = json.loads(response.read().decode())
-                        chatters = data["chatters"]
-                        mods = chatters["moderators"]
-                        staff = chatters["staff"]
-                        admins = chatters["admins"]
-                        globalmods = chatters["global_mods"]
-                        viewers = chatters["viewers"]
+                    channelName = str(channel).replace("#", "")
+                    try:
+                        with urllib.request.urlopen('https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
+                            data = json.loads(response.read().decode())
+                            chatters = data["chatters"]
+                            a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters["global_mods"] + chatters["viewers"]
 
-                        a = []
-                        a.append(mods)
-                        a.append(staff)
-                        a.append(admins)
-                        a.append(globalmods)
-                        a.append(viewers)
-
-                        for sub in a:
-                            for viewer in sub:
+                            for viewer in a:
                                 if viewer not in doneusers:
                                     doneusers.append(viewer)
-                                if isLive[str(channel).replace("#", "")] and viewer not in validactivity:
+                                if isLive[channelName] and viewer not in validactivity:
                                     validactivity.append(viewer)
+                    except:
+                        print("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
+                        print("Error: " + str(sys.exc_info()))
                 cur = db.cursor()
                 # process all users
-                print("Catched users, giving points and creating accounts")
+                print("Caught users, giving points and creating accounts")
                 with busyLock:
                     for viewer in doneusers:
                         cur.execute("SELECT COUNT(*) FROM users WHERE name='{0}'".format(str(viewer).lower()))
