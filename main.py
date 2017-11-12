@@ -81,6 +81,21 @@ streamlabsauthurl = "https://www.streamlabs.com/api/v1.0/authorize?client_id=" +
 streamlabsalerturl = "https://streamlabs.com/api/v1.0/alerts"
 alertheaders = {"Content-Type":"application/json", "User-Agent":"Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"}
 
+def getHand(twitchid):
+    try:
+        tID = int(twitchid)
+    except:
+        print("Got non-integer id for getHand. Aborting.")
+        return []
+    cur = db.cursor()
+    ret = []
+    cur.execute("SELECT amount, waifus.name, waifus.id, rarity, series, image FROM has_waifu JOIN users ON has_waifu.userid = users.id JOIN waifus ON has_waifu.waifuid = waifus.id WHERE users.twitchID = %s", [str(tID)])
+    rows = cur.fetchall()
+    for row in rows:
+        ret.append({"name":row[1], "amount":row[0], "id":row[2], "rarity":row[3], "series":row[4], "image":row[5]})
+    cur.close()
+    return ret
+
 def search(query):
     cur = db.cursor()
     cur.execute("SELECT id, name, series, rarity FROM waifus WHERE Name LIKE %s", ["%" + str(query) + "%"])
@@ -89,7 +104,6 @@ def search(query):
     for row in rows:
         ret.append({'id':row[0], 'name':row[1], 'series':row[2], 'rarity':row[3]})
     return ret
-
 
 def whoHas(id):
     try:
@@ -332,7 +346,6 @@ def dropCard(rarity=-1, super=False, ultra=False):
         cur.close()
         #print("Dropping ID " + str(retid))
         return retid
-
 
 def giveCard(user, id):
     cur = db.cursor()
@@ -1808,6 +1821,44 @@ class NepBot(NepBotClass):
                     a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
                     datestring = "{0}".format(a).split(".")[0]
                     self.message(channel, "Sorry, {user}, please wait {t} until you can search again.".format(user=str(sender), t=datestring), isWhisper=isWhisper)
+            if str(command).lower() == "promote":
+                if len(args) != 1:
+                    self.message(channel, "Usage: !promote <id>", isWhisper)
+                    return
+                try:
+                    waifuid = int(args[0])
+                except:
+                    self.message(channel, "Please provide a whole number, an id, not anything else!", isWhisper)
+                    return
+                maxID = maxWaifuID()
+                if waifuid <= 0 or waifuid > maxID:
+                    self.message(channel, "Please provide an id between 1 and " + str(maxID), isWhisper)
+                    return
+
+                w = getWaifuById(waifuid)
+                needamount = int(config["rarity" + str(w["rarity"]) + "Max"])
+                if (needamount <= 1):
+                    self.message(channel, "Sorry, you cannot upgrade " + config["rarity" + str(w["rarity"]) + "Name"] + " waifus.", isWhisper)
+                    return
+                hand = getHand(tags["user-id"])
+                #print("got hand: " + str(hand))
+                hasall = False
+                haveamount = 0
+                for slot in hand:
+                    if int(slot["id"]) == int(waifuid):
+                        haveamount = int(slot["amount"])
+                        if haveamount == needamount:
+                            hasall = True
+                        break
+                if not hasall:
+                    self.message(channel, "Sorry, {user}, you only have {have}/{need} copies of that waifu.".format(user=tags["display-name"], have=str(haveamount), need=str(needamount)), isWhisper)
+                    return
+                cur = db.cursor()
+                cur.execute("UPDATE waifus SET rarity = '6' WHERE id = %s", [str(waifuid)])
+                cur.execute("UPDATE has_waifu SET amount = '1' WHERE waifuid = %s", [str(waifuid)])
+                cur.close()
+                self.message(channel, "Successfully promoted " + w["name"] + " to god rarity! May Miku have mercy on their soul...", isWhisper)
+
 
 class HDNBot(pydle.Client):
     instance = None
