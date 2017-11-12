@@ -1012,15 +1012,18 @@ class NepBot(NepBotClass):
                         
                     # check for shorthand syntax
                     if len(args) == 2:
-                        selectArgs = []
-                        for letter in args[1].lower():
-                            if letter != 'd' and letter != 'k':
-                                self.message(channel, "When using shorthand booster syntax, please only use the letters d and k.", isWhisper=isWhisper)
-                                return
-                            elif letter == 'd':
-                                selectArgs.append("disenchant")
-                            else:
-                                selectArgs.append("keep")
+                        if args[1].lower() == 'deall' or args[1].lower() == 'disenchantall':
+                            selectArgs = ["disenchant"] * len(openbooster[str(sender).lower()])
+                        else:
+                            selectArgs = []
+                            for letter in args[1].lower():
+                                if letter != 'd' and letter != 'k':
+                                    self.message(channel, "When using shorthand booster syntax, please only use the letters d and k.", isWhisper=isWhisper)
+                                    return
+                                elif letter == 'd':
+                                    selectArgs.append("disenchant")
+                                else:
+                                    selectArgs.append("keep")
                     else:
                         selectArgs = args[1:]
                     
