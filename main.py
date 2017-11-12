@@ -870,40 +870,56 @@ class NepBot(NepBotClass):
                 cur.close()
                 return
             if str(command).lower() == "disenchant":
-                if len(args) != 1:
-                    self.message(channel, "Usage: !disenchant <ID>", isWhisper=isWhisper)
+                if len(args) == 0 or (len(args) == 1 and len(args[0]) == 0):
+                    self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
                     return
+                ids = []
                 try:
-                    id = int(args[0])
+                    for arg in args:
+                        ids.append(int(arg))
+                except:
+                    self.message(channel, "Could not decipher one or more of the waifu IDs you provided.", isWhisper=isWhisper)
+                    return
+                    
+                try:
+                    inStrings = ",".join(["%s"] * len(ids))
                     cur = db.cursor()
-                    cur.execute(
-                        "SELECT SUM(amount) AS totalCards FROM has_waifu JOIN users on has_waifu.userid = users.id WHERE users.twitchID = '{0}' AND has_waifu.waifuid = '{1}'".format(
-                            str(tags['user-id']), str(id)))
-                    try:
-                        amount = int(cur.fetchone()[0])
-                    except:
-                        amount = 0
-                    if amount == 0:
-                        self.message(channel, "You do not have that waifu!", isWhisper=isWhisper)
-                        cur.close()
+                    cur.execute("SELECT waifuid, userid, amount, rarity FROM has_waifu INNER JOIN users ON has_waifu.userid = users.id INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE users.twitchID = %s AND waifuid IN({0})".format(inStrings), [tags['user-id']] + ids)
+                    hasInfo = cur.fetchall()
+                    
+                    # work out if any waifu is actually missing from their hand.
+                    missing = ids[:]
+                    for row in hasInfo:
+                        missing.remove(int(row[0]))
+                    
+                    if len(missing) > 0:
+                        if len(missing) == 1:
+                            self.message(channel, "You don't own waifu %d." % missing[0], isWhisper=isWhisper)
+                        else:
+                            self.message(channel, "You don't own the following waifus: %s" % ", ".join([str(id) for id in missing]), isWhisper=isWhisper)
                         return
-                    elif amount == 1:
-                        cur.execute("SELECT id FROM users WHERE name='{name}'".format(name=str(sender).lower()))
-                        userid = cur.fetchone()[0]
-                        cur.execute("DELETE FROM has_waifu WHERE waifuid = '{waifuid}' AND userid = '{userid}'".format(userid=userid, waifuid=id))
+                    
+                    # handle disenchants appropriately
+                    pointsGain = 0
+                    for row in hasInfo:
+                        pointsGain += int(config["rarity" + str(row[3]) + "Value"])
+                        if row[2] == 1:
+                            # delet this
+                            cur.execute("DELETE FROM has_waifu WHERE waifuid = %s AND userid = %s", (row[0], row[1]))
+                        else:
+                            cur.execute("UPDATE has_waifu SET amount = amount - 1 WHERE waifuid = %s AND userid = %s", (row[0], row[1]))
+                            
+                    addPoints(str(sender).lower(), pointsGain)
+                    
+                    if len(ids) == 1:
+                        self.message(channel, "Successfully disenchanted waifu %d and added %d points to %s's account" % (ids[0], pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
                     else:
-                        cur.execute(
-                            "UPDATE has_waifu JOIN users on has_waifu.userid = users.id SET amount = amount-'1' WHERE users.name='{name}' AND waifuid='{id}'".format(
-                                name=str(sender).lower(), id=str(id)))
-                    cur.execute("SELECT rarity FROM waifus WHERE id = '{0}'".format(id))
-                    rarity = cur.fetchone()[0]
-                    value = int(config["rarity" + str(rarity) + "Value"])
-                    cur.execute("UPDATE users SET points = points+'{value}' WHERE twitchID='{name}'".format(value=str(value), name=str(tags['user-id'])))
-                    self.message(channel, "Successfully disenchanted waifu {waifu} and added {value} points to {user}'s account".format(value=value, waifu=str(id), user=str(tags['display-name'])), isWhisper=isWhisper)
+                        self.message(channel, "Successfully disenchanted %d waifus and added %d points to %s's account" % (len(ids), pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                    
                     cur.close()
                     return
                 except:
-                    self.message("Usage: !disenchant <ID>", isWhisper=isWhisper)
+                    self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
                     return
             if str(command).lower() == "giveme" and not sender.lower() in self.myadmins:
                 self.message(channel, "Sorry, you are not an admin.", isWhisper=isWhisper)
@@ -993,11 +1009,29 @@ class NepBot(NepBotClass):
                     if str(sender).lower() not in openbooster.keys():
                         self.message(channel, "{user}, you currently do not have an open booster. Buy one using !booster buy <standard/super/ultimate>".format(user=str(sender)), isWhisper=isWhisper)
                         return
-                    if len(args) - 1 != len(openbooster[str(sender).lower()]):
+                        
+                    # check for shorthand syntax
+                    if len(args) == 2:
+                        if args[1].lower() == 'deall' or args[1].lower() == 'disenchantall':
+                            selectArgs = ["disenchant"] * len(openbooster[str(sender).lower()])
+                        else:
+                            selectArgs = []
+                            for letter in args[1].lower():
+                                if letter != 'd' and letter != 'k':
+                                    self.message(channel, "When using shorthand booster syntax, please only use the letters d and k.", isWhisper=isWhisper)
+                                    return
+                                elif letter == 'd':
+                                    selectArgs.append("disenchant")
+                                else:
+                                    selectArgs.append("keep")
+                    else:
+                        selectArgs = args[1:]
+                    
+                    if len(selectArgs) != len(openbooster[str(sender).lower()]):
                         self.message(channel, "You did not specify the correct amount of keep/disenchant. Please provide " + str(len(openbooster[str(sender).lower()])), isWhisper=isWhisper)
                         return
                     keeping = 0
-                    for arg in args[1:]:
+                    for arg in selectArgs:
                         if not (str(arg).lower() == "keep" or str(arg).lower() == "disenchant"):
                             self.message(channel, "Sorry, but " + str(arg).lower() + " is not a valid option. Use keep or disenchant", isWhisper=isWhisper)
                             return
@@ -1015,7 +1049,7 @@ class NepBot(NepBotClass):
                     cur = db.cursor()
                     keeps = []
                     des = []
-                    for arg in args[1:]:
+                    for arg in selectArgs:
                         if str(arg).lower() == "keep":
                             #print("Cards: " + str(cards))
                             #print("Current c: " + str(c))
