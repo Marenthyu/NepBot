@@ -87,7 +87,8 @@ def placeBet(channel, userid, betms):
     cur = db.cursor()
     cur.execute("SELECT isOpen FROM bets WHERE channel= %s", [str(channel)])
     rows = cur.fetchall()
-    if len(rows) <1 or int([0][0]) < 1:
+    if len(rows) < 1 or int(rows[0][0]) < 1:
+        print(rows)
         cur.close()
         return False
     cur.execute("INSERT INTO placed_bets(channel, twitchID, bet) VALUE (%s, %s, %s)", [str(channel), str(userid), str(betms)])
@@ -1237,7 +1238,10 @@ class NepBot(NepBotClass):
                                 cardstring += toadd
 
                             logDrop(str(tags['user-id']), str(card), row[2], "boosters.standard", channel, isWhisper)
+                            if str(row[0]) == "120":
+                                self.message(channel, "I hear thou cry, so here i am...", isWhisper)
                         cur.close()
+
 
                         token = ''.join(choice(ascii_letters) for v in range(10))
                         addDisplayToken(token, cards)
