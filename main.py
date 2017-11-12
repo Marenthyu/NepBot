@@ -1009,11 +1009,26 @@ class NepBot(NepBotClass):
                     if str(sender).lower() not in openbooster.keys():
                         self.message(channel, "{user}, you currently do not have an open booster. Buy one using !booster buy <standard/super/ultimate>".format(user=str(sender)), isWhisper=isWhisper)
                         return
-                    if len(args) - 1 != len(openbooster[str(sender).lower()]):
+                        
+                    # check for shorthand syntax
+                    if len(args) == 2:
+                        selectArgs = []
+                        for letter in args[1].lower():
+                            if letter != 'd' and letter != 'k':
+                                self.message(channel, "When using shorthand booster syntax, please only use the letters d and k.", isWhisper=isWhisper)
+                                return
+                            elif letter == 'd':
+                                selectArgs.append("disenchant")
+                            else:
+                                selectArgs.append("keep")
+                    else:
+                        selectArgs = args[1:]
+                    
+                    if len(selectArgs) != len(openbooster[str(sender).lower()]):
                         self.message(channel, "You did not specify the correct amount of keep/disenchant. Please provide " + str(len(openbooster[str(sender).lower()])), isWhisper=isWhisper)
                         return
                     keeping = 0
-                    for arg in args[1:]:
+                    for arg in selectArgs:
                         if not (str(arg).lower() == "keep" or str(arg).lower() == "disenchant"):
                             self.message(channel, "Sorry, but " + str(arg).lower() + " is not a valid option. Use keep or disenchant", isWhisper=isWhisper)
                             return
@@ -1031,7 +1046,7 @@ class NepBot(NepBotClass):
                     cur = db.cursor()
                     keeps = []
                     des = []
-                    for arg in args[1:]:
+                    for arg in selectArgs:
                         if str(arg).lower() == "keep":
                             #print("Cards: " + str(cards))
                             #print("Current c: " + str(c))
