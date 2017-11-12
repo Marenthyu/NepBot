@@ -21,6 +21,7 @@ from twisted.internet.protocol import ReconnectingClientFactory
 from twisted.internet.ssl import optionsForClientTLS
 
 import sys
+import re
 
 games = ['Hyperdimension Neptunia Re;Birth1', 'Hyperdimension Neptunia Re;Birth2: Sisters Generation',
          'Four Goddesses Online: Cyber Dimension Neptune', 'Hyperdimension Neptunia mk2',
@@ -80,6 +81,100 @@ busyLock = threading.Lock()
 streamlabsauthurl = "https://www.streamlabs.com/api/v1.0/authorize?client_id=" + streamlabsclient + "&redirect_uri=http://marenthyu.de/cgi-bin/waifucallback.cgi&response_type=code&scope=alerts.create&state="
 streamlabsalerturl = "https://streamlabs.com/api/v1.0/alerts"
 alertheaders = {"Content-Type":"application/json", "User-Agent":"Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"}
+time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-9]{2})(\.(?P<ms>[0-9]{1,3}))?')
+
+def placeBet(channel, userid, betms):
+    cur = db.cursor()
+    cur.execute("SELECT isOpen FROM bets WHERE channel= %s", [str(channel)])
+    rows = cur.fetchall()
+    if len(rows) <1 or int([0][0]) < 1:
+        cur.close()
+        return False
+    cur.execute("INSERT INTO placed_bets(channel, twitchID, bet) VALUE (%s, %s, %s)", [str(channel), str(userid), str(betms)])
+    cur.close()
+    return True
+
+def endBet(channel):
+        cur = db.cursor()
+        cur.execute("SELECT startTime FROM bets WHERE channel = %s", [str(channel)])
+        rows = cur.fetchall()
+        timeresult = current_milli_time() - int(rows[0][0])
+        cur.execute("SELECT bet, twitchID FROM bets JOIN placed_bets ON bets.channel = placed_bets.channel")
+        rows = cur.fetchall()
+        first = None
+        second = None
+        third = None
+        for row in rows:
+            if first == None:
+                first = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
+            elif int(first["timedelta"]) > current_milli_time() - int(row[0]):
+                third = second
+                second = first
+                first = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
+            elif second == None:
+                second = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
+            elif int(second["timedelta"]) > current_milli_time() - int(row[0]):
+                third = second
+                second = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
+            elif third == None or int(third["timedelta"]) > current_milli_time() - int(row[0]):
+                third = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
+
+        winners = [first, second, third]
+        actualwinners = []
+        for winner in winners:
+            if winner is not None:
+                cur.execute("SELECT name FROM users WHERE twitchID = %s", [str(winner["id"])])
+                rows = cur.fetchall()
+                row = rows[0]
+                winner["name"] = str(row[0])
+
+            else:
+                winner = {"name":"Noone"}
+            actualwinners.append(winner)
+        cur.close()
+        return actualwinners
+
+def startBet(channel):
+        cur = db.cursor()
+        cur.execute("SELECT channel, isOpen, startTime FROM bets WHERE channel = %s", [str(channel)])
+        rows = cur.fetchall()
+        if len(rows) > 0:
+            cur.execute("UPDATE bets SET startTime = %s WHERE channel = %s", [str(current_milli_time()), str(channel)])
+        else:
+            cur.execute("INSERT INTO bets(channel, isOpen, startTime) VALUE (%s, %s, %s)",
+                        [str(channel), str(0), str(current_milli_time())])
+        cur.close()
+
+def resetBet(channel):
+        cur = db.cursor()
+        cur.execute("SELECT channel, isOpen, startTime FROM bets WHERE channel = %s", [str(channel)])
+        rows = cur.fetchall()
+        if len(rows) > 0:
+            cur.execute("UPDATE bets SET isOpen = '0' WHERE channel = %s", [str(channel)])
+        else:
+            cur.execute("INSERT INTO bets(channel, isOpen, startTime) VALUE (%s, %s, %s)", [str(channel), str(0), str(current_milli_time())])
+        cur.execute("DELETE FROM placed_bets WHERE channel = %s", [str(channel)])
+        cur.close()
+
+def closeBet(channel):
+        cur = db.cursor()
+        cur.execute("SELECT channel, isOpen, startTime FROM bets WHERE channel = %s", [str(channel)])
+        rows = cur.fetchall()
+        if len(rows) > 0:
+            cur.execute("UPDATE bets SET isOpen = '0' WHERE channel = %s", [str(channel)])
+        else:
+            cur.execute("INSERT INTO bets(channel, isOpen, startTime) VALUE (%s, %s, %s)", [str(channel), str(0), str(current_milli_time())])
+        cur.close()
+
+def openBet(channel):
+        cur = db.cursor()
+        cur.execute("SELECT channel, isOpen, startTime FROM bets WHERE channel = %s", [str(channel)])
+        rows = cur.fetchall()
+        if len(rows) > 0:
+            cur.execute("UPDATE bets SET isOpen = '1' WHERE channel = %s", [str(channel)])
+        else:
+            cur.execute("INSERT INTO bets(channel, isOpen, startTime) VALUE (%s, %s, %s)", [str(channel), str(1), str(current_milli_time())])
+        cur.close()
 
 def getHand(twitchid):
     try:
@@ -241,8 +336,11 @@ def sendalert(channel, waifu, user):
                 token = str(tokenInfo[0][0])
                 alertbody.update({"access_token": token})
                 req = requests.post(streamlabsalerturl, headers=alertheaders, json=alertbody)
+                if req.status_code != 200:
+                    print("response for streamlabs alert: " + str(req.status_code) + "; " + str(req.text))
         except:
             print("Tried to alert for " + str(channel) + ", " + str(waifu) + ", " + str(user) + ", but failed. Continuing with discord alerts.")
+            print("Error: " + str(sys.exc_info()))
 
         cur.execute("SELECT url FROM discordHooks")
         discordhooks = cur.fetchall()
@@ -1859,7 +1957,62 @@ class NepBot(NepBotClass):
                 cur.execute("UPDATE has_waifu SET amount = '1' WHERE waifuid = %s", [str(waifuid)])
                 cur.close()
                 self.message(channel, "Successfully promoted " + w["name"] + " to god rarity! May Miku have mercy on their soul...", isWhisper)
+                return
+            if str(command).lower() == "bet":
+                if len(args) < 1:
+                    self.message(channel, "Usage: !bet <time> OR (as channel owner) !bet open OR !bet close OR !bet start OR !bet end OR !bet reset", isWhisper)
+                    return
+                match = time_regex.fullmatch(args[0])
+                if match:
+                    bet = match.groupdict()
+                    ms = 0
+                    if bet["ms"] is None:
+                        bet["ms"] = "0"
+                    while len(bet["ms"]) < 3:
+                        bet["ms"] = bet["ms"] + "0"
+                    ms = int(bet["ms"])
+                    betms = int(bet["hours"]) * 3600000 + int(bet["minutes"]) * 60000 + int(bet["seconds"]) * 1000 + ms
+                    open = placeBet(channel, tags["user-id"], betms)
+                    if open:
+                        self.message(channel,
+                                     "Successfully parsed bet: {h}h {min}min {s}s {ms}ms".format(h=bet["hours"],
+                                                                                                 min=bet["minutes"],
+                                                                                                 s=bet["seconds"],
+                                                                                                 ms=str(betms%1000)),
+                                     isWhisper)
+                    else:
+                        self.message(channel, "The bets aren't open right now, sorry!", isWhisper)
+                    return
+                elif str(tags["badges"]).find("broadcaster") > -1:
+                    if str(args[0]).lower() == "open":
+                        openBet(str(channel).lower())
+                        self.message(channel, "Bets are now open! Use !bet HH:MM:SS(.ms) to submit your bet!")
+                        return
+                    elif str(args[0]).lower() == "close":
+                        closeBet(str(channel).lower())
+                        self.message(channel, "Bets are now closed! good luck to everyone who bid!")
+                        return
+                    elif str(args[0]).lower() == "start":
+                        startBet(str(channel).lower())
+                        self.message(channel, "Taking current time as start time! Good Luck!")
+                        return
+                    elif str(args[0]).lower() == "reset":
+                        resetBet(str(channel).lower())
+                        self.message(channel, "Reset your bet and cleared all entries!")
+                        return
+                    elif str(args[0]).lower() == "end":
+                        winners = endBet(str(channel).lower())
+                        self.message(channel, "Bet has ended! The top 3 closest were: {first}, {second}, {third}".format(first=winners[0]["name"], second=winners[1]["name"], third=winners[2]["name"]))
+                        return
+                    else:
+                        self.message(channel,
+                                     "Usage: !bet <time> OR (as channel owner) !bet open OR !bet close OR !bet start OR !bet end OR !bet reset",
+                                     isWhisper)
 
+                    return
+                else:
+                    self.message(channel, "Only the broadcaster can manage a bet! Sorry!", isWhisper)
+                    return
 
 class HDNBot(pydle.Client):
     instance = None
