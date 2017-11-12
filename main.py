@@ -107,18 +107,18 @@ def endBet(channel):
         third = None
         for row in rows:
             if first == None:
-                first = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
-            elif int(first["timedelta"]) > current_milli_time() - int(row[0]):
+                first = {"id":row[1], "timedelta":abs(int(row[0]) - timeresult)}
+            elif int(first["timedelta"]) > abs(int(row[0]) - timeresult) :
                 third = second
                 second = first
-                first = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
+                first = {"id":row[1], "timedelta":abs(int(row[0]) - timeresult) }
             elif second == None:
-                second = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
-            elif int(second["timedelta"]) > current_milli_time() - int(row[0]):
+                second = {"id":row[1], "timedelta":abs(int(row[0]) - timeresult) }
+            elif int(second["timedelta"]) > abs(int(row[0]) - timeresult) :
                 third = second
-                second = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
-            elif third == None or int(third["timedelta"]) > current_milli_time() - int(row[0]):
-                third = {"id":row[1], "timedelta":current_milli_time() - int(row[0])}
+                second = {"id":row[1], "timedelta":abs(int(row[0]) - timeresult) }
+            elif third == None or int(third["timedelta"]) > abs(int(row[0]) - timeresult) :
+                third = {"id":row[1], "timedelta":abs(int(row[0]) - timeresult) }
 
         winners = [first, second, third]
         actualwinners = []
