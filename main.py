@@ -503,17 +503,18 @@ class NepBot(NepBotClass):
                     print("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
             print("Checking live status of channels...")
-            cur = db.cursor()
-            cur.execute("SELECT users.name, users.twitchID FROM channels join users ON channels.name = users.name")
-            rows = cur.fetchall()
-            isLive = {}
-            channelids = []
-            idtoname = {}
-            requrl = "https://api.twitch.tv/helix/streams?type=live&user_id="
-            for row in rows:
-                channelids.append(str(row[1]))
-                idtoname[str(row[1])] = row[0]
-                isLive[str(row[0])] = False
+            with busyLock:
+                cur = db.cursor()
+                cur.execute("SELECT users.name, users.twitchID FROM channels join users ON channels.name = users.name")
+                rows = cur.fetchall()
+                isLive = {}
+                channelids = []
+                idtoname = {}
+                requrl = "https://api.twitch.tv/helix/streams?type=live&user_id="
+                for row in rows:
+                    channelids.append(str(row[1]))
+                    idtoname[str(row[1])] = row[0]
+                    isLive[str(row[0])] = False
             requrl += "&user_id=".join(channelids)
             twitchheader = {"Client-ID":config["clientID"]}
             with requests.get(requrl, headers=twitchheader) as response:
