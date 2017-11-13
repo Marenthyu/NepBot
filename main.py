@@ -72,11 +72,12 @@ except:
     sys.exit(1)
 
 
-db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True")
-openbooster = {}
+db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
 trades = {}
 activitymap = {}
 blacklist = []
+visiblepacks = ""
+
 busyLock = threading.Lock()
 streamlabsauthurl = "https://www.streamlabs.com/api/v1.0/authorize?client_id=" + streamlabsclient + "&redirect_uri=http://marenthyu.de/cgi-bin/waifucallback.cgi&response_type=code&scope=alerts.create&state="
 streamlabsalerturl = "https://streamlabs.com/api/v1.0/alerts"
@@ -385,19 +386,19 @@ def maxWaifuID():
     cur.close()
     return ret
 
-def dropCard(rarity=-1, super=False, ultra=False):
+def dropCard(rarity=-1, upgradeChances=None):
     random.seed()
     if rarity == -1:
+        if upgradeChances is None:
+            upgradeChances = [float(config["rarity%dUpgradeChance" % i]) for i in range(6)]
         i = 0
         rarity = 0
         while (i < 6):
             r = random.random()
-            if r <= (float(config["rarity{rarity}UpgradeChance{super}".format(rarity=str(rarity), super=("Super" if super else ("Ultimate" if ultra else "")))])):
+            if r <= upgradeChances[i]:
                 rarity = rarity + 1
                 i = i + 1
                 continue
-            if super and rarity == 0:
-                rarity = 1
             break
         return dropCard(rarity)
     else:
@@ -560,7 +561,7 @@ class NepBot(NepBotClass):
                 except:
                     print("Error closing db connection cleanly, ignoring.")
                 try:
-                    db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True")
+                    db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
                 except:
                     print("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
@@ -1014,35 +1015,49 @@ class NepBot(NepBotClass):
                 return
             if command == "booster":
                 if len(args) < 1:
-                    self.message(channel, "Usage: !booster buy <standard/super/ultimate> OR !booster select <take/disenchant> (for each waifu) OR !booster show", isWhisper=isWhisper)
+                    self.message(channel, "Usage: !booster buy <%s> OR !booster select <take/disenchant> (for each waifu) OR !booster show" % visiblepacks, isWhisper=isWhisper)
                     return
+                    
+                cmd = args[0].lower()
+                # even more shorthand shortcut for disenchant all
+                if cmd == "trash":
+                    cmd = "select"
+                    args = ["select", "deall"]
+                
+                cur = db.cursor()
+                cur.execute("SELECT id FROM boosters_opened WHERE userid = %s AND status = 'open'", [tags['user-id']])
+                boosterinfo = cur.fetchone()
+                
+                if (args[0] == "show" or args[0] == "select") and boosterinfo is None:
+                    self.message(channel, tags['display-name'] + ", you do not have an open booster. Buy one using !booster buy <%s>" % visiblepacks, isWhisper=isWhisper)
+                    cur.close()
+                    return
+                
                 if args[0] == "show":
-                    if sender not in openbooster.keys():
-                        self.message(channel, tags['display-name'] + ", you do not have an open booster. Buy one using !booster buy <standard/super/ultimate>", isWhisper=isWhisper)
-                        return
-                    cards = openbooster[sender]
+                    cur.execute("SELECT waifuid FROM boosters_cards WHERE boosterid = %s", [boosterinfo[0]])
+                    cardrows = cur.fetchall()
+                    cards = [row[0] for row in cardrows]
                     token = ''.join(choice(ascii_letters) for v in range(10))
                     addDisplayToken(token, cards)
                     droplink = "http://waifus.de/booster?token=" + token
                     self.message(channel, "{user}, your current open booster pack: {droplink}".format(user=tags['display-name'], droplink=droplink), isWhisper=isWhisper)
+                    cur.close()
                     return
-                # even more shorthand shortcut for disenchant all
-                if args[0] == "trash":
-                    args = ["select", "deall"]
+                
                 if args[0] == "select":
-                    if sender not in openbooster.keys():
-                        self.message(channel, "{user}, you currently do not have an open booster. Buy one using !booster buy <standard/super/ultimate>".format(user=tags['display-name']), isWhisper=isWhisper)
-                        return
-                        
+                    cur.execute("SELECT waifuid FROM boosters_cards WHERE boosterid = %s", [boosterinfo[0]])
+                    cardrows = cur.fetchall()
+                    cards = [row[0] for row in cardrows]
                     # check for shorthand syntax
                     if len(args) == 2:
                         if args[1].lower() == 'deall' or args[1].lower() == 'disenchantall':
-                            selectArgs = ["disenchant"] * len(openbooster[sender])
+                            selectArgs = ["disenchant"] * len(cards)
                         else:
                             selectArgs = []
                             for letter in args[1].lower():
                                 if letter != 'd' and letter != 'k':
                                     self.message(channel, "When using shorthand booster syntax, please only use the letters d and k.", isWhisper=isWhisper)
+                                    cur.close()
                                     return
                                 elif letter == 'd':
                                     selectArgs.append("disenchant")
@@ -1051,22 +1066,23 @@ class NepBot(NepBotClass):
                     else:
                         selectArgs = args[1:]
                     
-                    if len(selectArgs) != len(openbooster[sender]):
+                    if len(selectArgs) != len(cards):
                         self.message(channel, "You did not specify the correct amount of keep/disenchant. Please provide " + str(len(openbooster[sender])), isWhisper=isWhisper)
+                        cur.close()
                         return
                     keeping = 0
                     for arg in selectArgs:
-                        if not (str(arg).lower() == "keep" or str(arg).lower() == "disenchant"):
-                            self.message(channel, "Sorry, but " + str(arg).lower() + " is not a valid option. Use keep or disenchant", isWhisper=isWhisper)
+                        if not (arg.lower() == "keep" or arg.lower() == "disenchant"):
+                            self.message(channel, "Sorry, but " + arg.lower() + " is not a valid option. Use keep or disenchant", isWhisper=isWhisper)
+                            cur.close()
                             return
-                        if str(arg).lower() == "keep":
+                        if arg.lower() == "keep":
                             keeping += 1
                     currCards = currentCards(tags['user-id'])
-                    #self.message(channel, "keeping: " + str(keeping) + ", currCards: " + str(currCards) + ", limit: " + str(config["handLimit"]))
                     if keeping + currCards > handLimit(tags['user-id']) and keeping != 0:
                         self.message(channel, "You can't keep that many waifus! !disenchant some!", isWhisper=isWhisper)
+                        cur.close()
                         return
-                    cards = openbooster[sender]
                     gottenpoints = 0
                     response = "You take your booster pack and: "
                     c = 2
@@ -1080,7 +1096,7 @@ class NepBot(NepBotClass):
                         else:
                             # Disenchant
                             id = cards[c-2]
-                            cur.execute("SELECT rarity FROM waifus WHERE id = '{0}'".format(id))
+                            cur.execute("SELECT rarity FROM waifus WHERE id = %s", [id])
                             rarity = cur.fetchone()[0]
                             value = int(config["rarity" + str(rarity) + "Value"])
                             des.append(id)
@@ -1092,141 +1108,72 @@ class NepBot(NepBotClass):
                     if len(des) > 0:
                         response += " disenchant " + ', '.join(str(x) for x in des) + ";"
                     self.message(channel, response + " netting a total of " + str(gottenpoints) + " points.", isWhisper=isWhisper)
+                    cur.execute("UPDATE boosters_opened SET status = 'closed', updated = %s WHERE id = %s", [current_milli_time(), boosterinfo[0]])
                     cur.close()
-                    openbooster.pop(sender)
                     return
                 if args[0] == "buy":
-                    if sender in openbooster.keys():
+                    if boosterinfo is not None:
                         self.message(channel, "You already have an open booster. Select the waifus you want to keep or disenchant first!", isWhisper=isWhisper)
+                        cur.close()
                         return
                     if len(args) < 2:
-                        self.message(channel, "Usage: !booster buy <standard/super/ultimate>", isWhisper=isWhisper)
-                        return
-                    if args[1] == "standard":
-                        if not hasPoints(tags['user-id'], config["packPrice"]):
-                            self.message(channel, tags['display-name'] + ", sorry, you don't have enough points to buy a booster pack. You need " + str(config["packPrice"]), isWhisper=isWhisper)
-                            return
-                        addPoints(tags['user-id'], 0 - int(config["packPrice"]))
-
-                        cards = []
-                        i = 0
-                        while i < 6:
-                            while True:
-                                ca = dropCard(super=False)
-                                if ca not in cards:
-                                    cards.append(ca)
-                                    break
-                            i += 1
-                        
-                        cards = sorted(cards)
-                        openbooster[sender] = cards
-                        alertwaifus = []
-                        
-                        cur = db.cursor()
-                        for card in cards:
-                            cur.execute("SELECT id, name, rarity, series, image FROM waifus WHERE id='" + str(card) + "'")
-                            row = cur.fetchone()
-                            toadd = "[{id}][{rarity}] {name} from {series} - {image}; ".format(id=row[0], rarity=str(
-                                config["rarity" + str(row[2]) + "Name"]), name=row[1], series=row[3], image=row[4])
-                            if int(row[2]) > 3:
-                                alertwaifus.append( {"name":str(row[1]), "rarity":int(row[2]), "image":str(row[4])})
-
-                            logDrop(str(tags['user-id']), str(card), row[2], "boosters.standard", channel, isWhisper)
-                            if str(row[0]) == "120":
-                                self.message(channel, "I hear thou cry, so here i am...", isWhisper)
+                        self.message(channel, "Usage: !booster buy <%s>" % visiblepacks, isWhisper=isWhisper)
                         cur.close()
-
-
-                        token = ''.join(choice(ascii_letters) for v in range(10))
-                        addDisplayToken(token, cards)
-                        droplink = "http://waifus.de/booster?token=" + token
-                        self.message(channel, "{user}, you open a standard booster pack and you get: {droplink}".format(user=tags['display-name'], droplink=droplink), isWhisper=isWhisper)
-                        for w in alertwaifus:
-                            threading.Thread(target=sendalert, args=(channel, w, str(tags["display-name"]))).start()
                         return
-                    if str(args[1]).lower() == "super":
-                        if not hasPoints(tags['user-id'], config["superPackPrice"]):
-                            self.message(channel, tags['display-name'] + ", sorry, you don't have enough points to buy a booster pack. You need " + str(config["superPackPrice"]), isWhisper=isWhisper)
-                            return
-                        addPoints(tags['user-id'], 0 - int(config["superPackPrice"]))
-
-                        cards = []
-                        i = 0
-                        while i < 5:
-                            while True:
-                                ca = dropCard(super=True)
-                                if ca not in cards:
-                                    cards.append(ca)
-                                    break
-                            i += 1
-
-
-                        cur = db.cursor()
-                        alertwaifus = []
-                        bestwaifu = {"rarity":0}
-                        for card in cards:
-                            cur.execute("SELECT id, name, rarity, series, image FROM waifus WHERE id='" + str(card) + "'")
-                            row = cur.fetchone()
+                    
+                    packname = args[1].lower()
+                    cur.execute("SELECT cost, numCards, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s AND buyable = 1", [packname])
+                    packinfo = cur.fetchone()
+                    
+                    if packinfo is None:
+                        self.message(channel, "Invalid booster type. Packs available right now: %s." % visiblepacks, isWhisper=isWhisper)
+                        cur.close()
+                        return
+                        
+                    if not hasPoints(tags['user-id'], packinfo[0]):
+                        self.message(channel, "{user}, sorry, you don't have enough points to buy a {name} booster pack. You need {points}.".format(user=tags['display-name'], name=packname, points=str(packinfo[0])))
+                        cur.close()
+                        return
+                        
+                    addPoints(tags['user-id'], -packinfo[0])
+                    
+                    cards = []
+                    for i in range(packinfo[1]):
+                        while True:
+                            ca = int(dropCard(upgradeChances=packinfo[2:]))
+                            if ca not in cards:
+                                cards.append(ca)
+                                break
+                                
+                    cards = sorted(cards)
+                    alertwaifus = []
+                    
+                    for card in cards:
+                        cur.execute("SELECT name, rarity, image FROM waifus WHERE id = %s", [card])
+                        row = cur.fetchone()
+                        
+                        if row[1] > 3:
+                            alertwaifus.append( {"name":str(row[0]), "rarity":int(row[1]), "image":str(row[2])})
                             
-                            if int(row[2]) > 3:
-                                alertwaifus.append( {"name":str(row[1]), "rarity":int(row[2]), "image":str(row[4])})
-
-                            logDrop(str(tags['user-id']), str(card), row[2], "boosters.super", channel, isWhisper)
+                        logDrop(str(tags['user-id']), str(card), row[1], "boosters.%s" % packname, channel, isWhisper)
                         
-                        cards = sorted(cards)
-                        openbooster[sender] = cards
-                        cur.close()
-
-                        token = ''.join(choice(ascii_letters) for v in range(10))
-                        addDisplayToken(token, cards)
-                        droplink = "http://waifus.de/booster?token=" + token
-                        self.message(channel, "{user}, you open a super booster pack and you get: {droplink}".format(user=tags['display-name'], droplink=droplink), isWhisper=isWhisper)
-                        for w in alertwaifus:
-                            threading.Thread(target=sendalert, args=(channel, w, str(tags["display-name"]))).start()
-
-                        return
-                    if str(args[1]).lower() == "ultimate":
-                        if not hasPoints(tags['user-id'], config["ultimatePackPrice"]):
-                            self.message(channel, tags['display-name'] + ", sorry, you don't have enough points to buy an ultimate booster pack. You need " + str(config["ultimatePackPrice"]), isWhisper=isWhisper)
-                            return
-                        addPoints(tags['user-id'], 0 - int(config["ultimatePackPrice"]))
-
-                        cards = []
-                        i = 0
-                        while i < 3:
-                            while True:
-                                ca = dropCard(ultra=True)
-                                if ca not in cards:
-                                    cards.append(ca)
-                                    break
-                            i += 1
-
-                        cur = db.cursor()
-                        newcard = 0
-                        alertwaifus = []
-                        for card in cards:
-                            cur.execute("SELECT id, name, rarity, series, image FROM waifus WHERE id='" + str(card) + "'")
-                            row = cur.fetchone()
+                        if card == 120:
+                            self.message(channel, "I hear thou cry, so here i am...", isWhisper=isWhisper)
                             
-                            if int(row[2]) > 3:
-                                alertwaifus.append( {"name":str(row[1]), "rarity":int(row[2]), "image":str(row[4])})
+                    # insert opened booster
+                    cur.execute("INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, %s, %s, %s, 'open')", [tags['user-id'], packname, packinfo[0], current_milli_time()])
+                    boosterid = cur.lastrowid
+                    cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)", [(boosterid, card) for card in cards])
+                    cur.close()
 
-                            logDrop(str(tags['user-id']), str(card), row[2], "boosters.ultimate", channel, isWhisper)
-
-                        cards = sorted(cards)
-                        openbooster[sender] = cards
-                        cur.close()
-
-                        token = ''.join(choice(ascii_letters) for v in range(10))
-                        addDisplayToken(token, cards)
-                        droplink = "http://waifus.de/booster?token=" + token
-                        self.message(channel, "{user}, you open an ultimate booster pack and you get: {droplink}".format(user=tags['display-name'], droplink=droplink), isWhisper=isWhisper)
-                        for w in alertwaifus:
-                            threading.Thread(target=sendalert, args=(channel, w, str(tags["display-name"]))).start()
-
-                        return
-                    self.message(channel, "Invalid booster type. Try standard, super or ultimate.", isWhisper=isWhisper)
+                    token = ''.join(choice(ascii_letters) for v in range(10))
+                    addDisplayToken(token, cards)
+                    droplink = "http://waifus.de/booster?token=" + token
+                    self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
+                    for w in alertwaifus:
+                        threading.Thread(target=sendalert, args=(channel, w, str(tags["display-name"]))).start()
                     return
+                    
             if command == "trade":
                 ourid = int(tags['user-id'])
                 if len(args) < 2:
@@ -1563,6 +1510,11 @@ class NepBot(NepBotClass):
                 blacklist = []
                 for row in cur.fetchall():
                     blacklist.append(row[0])
+                global visiblepacks
+                # visible packs
+                cur.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
+                packrows = cur.fetchall()
+                visiblepacks = "/".join(row[0] for row in packrows)
                 cur.close()
                 self.message(channel, "Config reloaded.", isWhisper=isWhisper)
                 return
@@ -1730,7 +1682,7 @@ class NepBot(NepBotClass):
                         self.message(channel, "Multiple results (Use !lookup for more details): " + ", ".join(
                             map(lambda waifu: str(waifu['id']), result)), isWhisper=isWhisper)
                     if sender not in self.myadmins:
-                        cur.execute("UPDATE users SET lastSearch = %s WHERE id = %s", [current_milli_time(), tags['user-id'])
+                        cur.execute("UPDATE users SET lastSearch = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
                     return
                 else:
                     a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
@@ -1985,6 +1937,11 @@ curg.execute("SELECT name FROM blacklist")
 rows = curg.fetchall()
 for row in rows:
     blacklist.append(row[0])
+    
+# visible packs
+curg.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
+packrows = curg.fetchall()
+visiblepacks = "/".join(row[0] for row in packrows)
 curg.close()
 
 headers = {"Client-ID":str(config["clientID"]), "Accept":"application/vnd.twitchtv.v5+json"}
