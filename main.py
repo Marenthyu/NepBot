@@ -645,9 +645,9 @@ class NepBot(NepBotClass):
                             else:
                                 cur.execute("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)", [twitchid, lviewer])
                             #print("Success?")
-                        pointGain = config["passivePoints"]
+                        pointGain = int(config["passivePoints"])
                         if lviewer in activitymap and lviewer in validactivity:
-                            pointGain += max(10 - activitymap[lviewer], 0)
+                            pointGain += max(10 - int(activitymap[lviewer]), 0)
                         # global point multiplier would go here
                         cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [pointGain, lviewer])
                     cur.close()
@@ -1028,12 +1028,12 @@ class NepBot(NepBotClass):
                 cur.execute("SELECT id FROM boosters_opened WHERE userid = %s AND status = 'open'", [tags['user-id']])
                 boosterinfo = cur.fetchone()
                 
-                if (args[0] == "show" or args[0] == "select") and boosterinfo is None:
+                if (cmd == "show" or cmd == "select") and boosterinfo is None:
                     self.message(channel, tags['display-name'] + ", you do not have an open booster. Buy one using !booster buy <%s>" % visiblepacks, isWhisper=isWhisper)
                     cur.close()
                     return
                 
-                if args[0] == "show":
+                if cmd == "show":
                     cur.execute("SELECT waifuid FROM boosters_cards WHERE boosterid = %s", [boosterinfo[0]])
                     cardrows = cur.fetchall()
                     cards = [row[0] for row in cardrows]
@@ -1044,7 +1044,7 @@ class NepBot(NepBotClass):
                     cur.close()
                     return
                 
-                if args[0] == "select":
+                if cmd == "select":
                     cur.execute("SELECT waifuid FROM boosters_cards WHERE boosterid = %s", [boosterinfo[0]])
                     cardrows = cur.fetchall()
                     cards = [row[0] for row in cardrows]
@@ -1111,7 +1111,7 @@ class NepBot(NepBotClass):
                     cur.execute("UPDATE boosters_opened SET status = 'closed', updated = %s WHERE id = %s", [current_milli_time(), boosterinfo[0]])
                     cur.close()
                     return
-                if args[0] == "buy":
+                if cmd == "buy":
                     if boosterinfo is not None:
                         self.message(channel, "You already have an open booster. Select the waifus you want to keep or disenchant first!", isWhisper=isWhisper)
                         cur.close()
