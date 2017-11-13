@@ -1118,6 +1118,9 @@ class NepBot(NepBotClass):
                     # if thirdcardstring != "":
                     #     self.message(channel, thirdcardstring)
                     return
+                # even more shorthand shortcut for disenchant all
+                if args[0] == "trash":
+                    args = ["select", "deall"]
                 if args[0] == "select":
                     if str(sender).lower() not in openbooster.keys():
                         self.message(channel, "{user}, you currently do not have an open booster. Buy one using !booster buy <standard/super/ultimate>".format(user=str(sender)), isWhisper=isWhisper)
