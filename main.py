@@ -889,7 +889,7 @@ class NepBot(NepBotClass):
                 nextFree = 79200000 + int(res[0])
                 limit = int(res[1])
                 freeAvailable = nextFree < current_milli_time()
-                if freeAvailable and currentCards(str(sender)) < limit:
+                if freeAvailable and currentCards(tags['user-id']) < limit:
                     #print("egliable, dropping card.")
                     cur.execute("SELECT * FROM waifus WHERE id='{0}'".format(dropCard()))
                     row = cur.fetchone()
@@ -1061,7 +1061,7 @@ class NepBot(NepBotClass):
                             return
                         if str(arg).lower() == "keep":
                             keeping += 1
-                    currCards = currentCards(sender)
+                    currCards = currentCards(tags['user-id'])
                     #self.message(channel, "keeping: " + str(keeping) + ", currCards: " + str(currCards) + ", limit: " + str(config["handLimit"]))
                     if keeping + currCards > handLimit(tags['user-id']) and keeping != 0:
                         self.message(channel, "You can't keep that many waifus! !disenchant some!", isWhisper=isWhisper)
