@@ -86,76 +86,84 @@ time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-
 
 def placeBet(channel, userid, betms):
     cur = db.cursor()
-    cur.execute("SELECT isOpen FROM bets WHERE channel= %s", [str(channel)])
-    rows = cur.fetchall()
-    if len(rows) < 1 or int(rows[0][0]) < 1:
-        print(rows)
+    cur.execute("SELECT id FROM bets WHERE channel = %s AND status = 'open' LIMIT 1", [channel])
+    row = cur.fetchone()
+    if row is None:
         cur.close()
         return False
-    cur.execute("INSERT INTO placed_bets(channel, userid, bet) VALUE (%s, %s, %s)", [str(channel), str(userid), str(betms)])
+    cur.execute("REPLACE INTO placed_bets (betid, userid, bet) VALUE (%s, %s, %s)", [row[0], userid, betms])
     cur.close()
     return True
 
 def endBet(channel):
+    # find started bet data
     cur = db.cursor()
-    cur.execute("SELECT startTime FROM bets WHERE channel = %s", [channel])
-    rows = cur.fetchall()
-    timeresult = current_milli_time() - int(rows[0][0])
-    cur.execute("SELECT bet, userid FROM placed_bets WHERE channel = %s", [channel])
+    cur.execute("SELECT id FROM bets WHERE channel = %s AND status = 'started' LIMIT 1", [channel])
+    row = cur.fetchone()
+    if row is None:
+        cur.close()
+        return None
+    
+    # mark the bet as closed
+    endTime = current_milli_time()
+    cur.execute("UPDATE bets SET status = 'completed', endTime = %s WHERE id = %s", [endTime, row[0]])
+    
+    # calculate preliminary results
+    cur.close()
+    return getBetResults(row[0])
+    
+    
+def getBetResults(betid):
+    # get bet data
+    cur = db.cursor()
+    cur.execute("SELECT status, startTime, endTime FROM bets WHERE id = %s", [betid])
+    betrow = cur.fetchone()
+    if betrow is None:
+        cur.close()
+        return None
+        
+    if betrow[0] != 'completed' and betrow[0] != 'paid':
+        cur.close()
+        return None
+        
+    timeresult = betrow[2] - betrow[1]
+    cur.execute("SELECT bet, userid, users.name FROM placed_bets INNER JOIN users ON placed_bets.userid = users.id WHERE betid = %s", [betid])
     rows = cur.fetchall()
     placements = sorted(rows, key=lambda row: abs(int(row[0]) - timeresult))
-    actualwinners = []
-    for i in range(0, 3):
-        if len(placements) > i:
-            winner = placements[i]
-            cur.execute("SELECT name FROM users WHERE id = %s", [winner[1]])
-            actualwinners.append({"id": winner[1], "name": cur.fetchone()[0], "timedelta": abs(int(winner[0]) - timeresult)})
-        else:
-            actualwinners.append({"name": "No-one"})
+    actualwinners = [{"id": row[1], "name": row[2], "bet": row[0], "timedelta": row[0] - timeresult} for row in placements]
     cur.close()
-    return actualwinners
+    return {"result": timeresult, "winners": actualwinners}
+    
 
 def startBet(channel):
     cur = db.cursor()
-    cur.execute("SELECT channel, isOpen, startTime FROM bets WHERE channel = %s", [str(channel)])
-    rows = cur.fetchall()
-    if len(rows) > 0:
-        cur.execute("UPDATE bets SET startTime = %s WHERE channel = %s", [str(current_milli_time()), str(channel)])
+    cur.execute("SELECT id FROM bets WHERE channel = %s AND status = 'open' LIMIT 1", [channel])
+    row = cur.fetchone()
+    if row is not None:
+        cur.execute("UPDATE bets SET startTime = %s, status = 'started' WHERE id = %s", [current_milli_time(), row[0]])
+        cur.close()
+        return True
     else:
-        cur.execute("INSERT INTO bets(channel, isOpen, startTime) VALUE (%s, %s, %s)",
-                    [str(channel), str(0), str(current_milli_time())])
-    cur.close()
-
-def resetBet(channel):
-    cur = db.cursor()
-    cur.execute("SELECT channel, isOpen, startTime FROM bets WHERE channel = %s", [str(channel)])
-    rows = cur.fetchall()
-    if len(rows) > 0:
-        cur.execute("UPDATE bets SET isOpen = '0' WHERE channel = %s", [str(channel)])
-    else:
-        cur.execute("INSERT INTO bets(channel, isOpen, startTime) VALUE (%s, %s, %s)", [str(channel), str(0), str(current_milli_time())])
-    cur.execute("DELETE FROM placed_bets WHERE channel = %s", [str(channel)])
-    cur.close()
-
-def closeBet(channel):
-    cur = db.cursor()
-    cur.execute("SELECT channel, isOpen, startTime FROM bets WHERE channel = %s", [str(channel)])
-    rows = cur.fetchall()
-    if len(rows) > 0:
-        cur.execute("UPDATE bets SET isOpen = '0' WHERE channel = %s", [str(channel)])
-    else:
-        cur.execute("INSERT INTO bets(channel, isOpen, startTime) VALUE (%s, %s, %s)", [str(channel), str(0), str(current_milli_time())])
-    cur.close()
+        cur.close()
+        return False
 
 def openBet(channel):
     cur = db.cursor()
-    cur.execute("SELECT channel, isOpen, startTime FROM bets WHERE channel = %s", [str(channel)])
-    rows = cur.fetchall()
-    if len(rows) > 0:
-        cur.execute("UPDATE bets SET isOpen = '1' WHERE channel = %s", [str(channel)])
+    cur.execute("SELECT COUNT(*) FROM bets WHERE channel = %s AND status IN('open', 'started')", [channel])
+    result = cur.fetchone()[0] or 0
+    if result > 0:
+        cur.close()
+        return False
     else:
-        cur.execute("INSERT INTO bets(channel, isOpen, startTime) VALUE (%s, %s, %s)", [str(channel), str(1), str(current_milli_time())])
+        cur.execute("INSERT INTO bets(channel, status) VALUE (%s, 'open')", [channel])
+        cur.close()
+        return True
+        
+def cancelBet(channel):
+    cur = db.cursor()
+    affected = cur.execute("UPDATE bets SET status = 'cancelled' WHERE channel = %s AND status IN('open', 'started')", [channel])
     cur.close()
+    return affected > 0
 
 def getHand(twitchid):
     try:
@@ -433,6 +441,21 @@ def logDrop(userid, waifuid, rarity, source, channel, isWhisper):
     cur = db.cursor()
     cur.execute("INSERT INTO drops(userid, waifuid, rarity, source, channel, timestamp) VALUES(%s, %s, %s, %s, %s, %s)", (userid, waifuid, rarity, source, trueChannel, current_milli_time()))
     cur.close()
+    
+def formatRank(rankNum):
+    if (rankNum % 100) // 10 == 1 or rankNum % 10 == 0 or rankNum % 10 > 3:
+        return "%dth" % rankNum
+    elif rankNum % 10 == 1:
+        return "%dst" % rankNum
+    elif rankNum % 10 == 2:
+        return "%dnd" % rankNum
+    else:
+        return "%drd" % rankNum
+        
+def formatTimeDelta(ms):
+    baseRepr = str(datetime.timedelta(milliseconds=ms, microseconds=0))
+    return baseRepr[:-3] if "." in baseRepr else baseRepr
+    
 
 # From https://github.com/Shizmob/pydle/issues/35
 class PrivMessageTagSupport(pydle.features.ircv3.TaggedMessageSupport):
@@ -1728,8 +1751,9 @@ class NepBot(NepBotClass):
                 return
             if command == "bet":
                 if len(args) < 1:
-                    self.message(channel, "Usage: !bet <time> OR (as channel owner) !bet open OR !bet close OR !bet start OR !bet end OR !bet reset", isWhisper)
+                    self.message(channel, "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results", isWhisper)
                     return
+                canManageBets = str(tags["badges"]).find("broadcaster") > -1 or sender in self.myadmins
                 match = time_regex.fullmatch(args[0])
                 if match:
                     bet = match.groupdict()
@@ -1740,45 +1764,245 @@ class NepBot(NepBotClass):
                         bet["ms"] = bet["ms"] + "0"
                     ms = int(bet["ms"])
                     betms = int(bet["hours"]) * 3600000 + int(bet["minutes"]) * 60000 + int(bet["seconds"]) * 1000 + ms
+                    if sender == channel[1:]:
+                        self.message(channel, "You can't bet in your own channel, sorry!", isWhisper)
+                        return
                     open = placeBet(channel, tags["user-id"], betms)
                     if open:
                         self.message(channel,
-                                     "Successfully parsed bet: {h}h {min}min {s}s {ms}ms".format(h=bet["hours"],
+                                     "Successfully entered {name}'s bet: {h}h {min}min {s}s {ms}ms".format(h=bet["hours"],
                                                                                                  min=bet["minutes"],
                                                                                                  s=bet["seconds"],
-                                                                                                 ms=str(betms%1000)),
+                                                                                                 ms=str(betms%1000),
+                                                                                                 name=tags['display-name']),
                                      isWhisper)
                     else:
                         self.message(channel, "The bets aren't open right now, sorry!", isWhisper)
                     return
-                elif str(tags["badges"]).find("broadcaster") > -1:
-                    if str(args[0]).lower() == "open":
-                        openBet(str(channel).lower())
-                        self.message(channel, "Bets are now open! Use !bet HH:MM:SS(.ms) to submit your bet!")
+                else:
+                    subcmd = str(args[0]).lower()
+                    if canManageBets and subcmd == "open":
+                        if openBet(channel):
+                            self.message(channel, "Bets are now open! Use !bet HH:MM:SS(.ms) to submit your bet!")
+                        else:
+                            self.message(channel, "There is already a prediction contest in progress in your channel! Use !bet status to check what to do next!")
                         return
-                    elif str(args[0]).lower() == "close":
-                        closeBet(str(channel).lower())
-                        self.message(channel, "Bets are now closed! good luck to everyone who bid!")
+                    elif canManageBets and subcmd == "start":
+                        if startBet(channel):
+                            self.message(channel, "Taking current time as start time! Good Luck! Bets are now closed.")
+                        else:
+                            self.message(channel, "There wasn't an open prediction contest in your channel! Use !bet status to check current contest status.")
                         return
-                    elif str(args[0]).lower() == "start":
-                        startBet(str(channel).lower())
-                        self.message(channel, "Taking current time as start time! Good Luck!")
+                    elif canManageBets and subcmd == "end":
+                        resultData = endBet(str(channel).lower())
+                        if resultData is None:
+                            self.message(channel, "There wasn't a prediction contest in progress in your channel! Use !bet status to check current contest status.")
+                        else:
+                            formattedTime = formatTimeDelta(resultData["result"])
+                            winners = resultData["winners"]
+                            winnerNames = []
+                            for n in range(3):
+                                winnerNames.append(winners[n]["name"] if len(winners) > n else "No-one")
+                            self.message(channel, "Contest has ended in {time}! The top 3 closest were: {first}, {second}, {third}".format(time=formattedTime, first=winnerNames[0], second=winnerNames[1], third=winnerNames[2]))
                         return
-                    elif str(args[0]).lower() == "reset":
-                        resetBet(str(channel).lower())
-                        self.message(channel, "Reset your bet and cleared all entries!")
+                    elif canManageBets and subcmd == "cancel":
+                        if cancelBet(channel):
+                            self.message(channel, "Cancelled the current prediction contest! Start a new one with !bet open.")
+                        else:
+                            self.message(channel, "There was no open or in-progress prediction contest in your channel! Start a new one with !bet open.")
                         return
-                    elif str(args[0]).lower() == "end":
-                        winners = endBet(str(channel).lower())
-                        self.message(channel, "Bet has ended! The top 3 closest were: {first}, {second}, {third}".format(first=winners[0]["name"], second=winners[1]["name"], third=winners[2]["name"]))
+                    elif subcmd == "status":
+                        # check for most recent betting
+                        cur = db.cursor()
+                        cur.execute("SELECT id, status, startTime, endTime FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1", [channel])
+                        betRow = cur.fetchone()
+                        if betRow is None:
+                            if canManageBets:
+                                self.message(channel, "No time prediction contests have been done in this channel yet. Use !bet open to open one.")
+                            else:
+                                self.message(channel, "No time prediction contests have been done in this channel yet.")
+                        elif betRow[1] == 'cancelled':
+                            if canManageBets:
+                                self.message(channel, "No time prediction contest in progress. The most recent contest was cancelled. Use !bet open to open a new one.")
+                            else:
+                                self.message(channel, "No time prediction contest in progress. The most recent contest was cancelled.")
+                        else:
+                            cur.execute("SELECT COUNT(*) FROM placed_bets WHERE betid = %s", [betRow[0]])
+                            numBets = cur.fetchone()[0] or 0
+                            if betRow[1] == 'open':
+                                if canManageBets:
+                                    self.message(channel, "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer." % numBets)
+                                else:
+                                    self.message(channel, "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
+                            elif betRow[1] == 'started':
+                                elapsed = current_milli_time() - betRow[2]
+                                formattedTime = formatTimeDelta(elapsed)
+                                if canManageBets:
+                                    self.message(channel, "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results." % (formattedTime, numBets))
+                                else:
+                                    self.message(channel, "Run in progress - elapsed time %s. %d bets were placed." % (formattedTime, numBets))
+                            else:
+                                formattedTime = formatTimeDelta(betRow[3] - betRow[2])
+                                if canManageBets:
+                                    self.message(channel, "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed. Use !bet results to see full results or !bet open to open a new one." % (formattedTime, numBets))
+                                else:
+                                    self.message(channel, "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed." % (formattedTime, numBets))
+                        cur.close()
+                        return
+                    elif canManageBets and subcmd == "results":
+                        cur = db.cursor()
+                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1", [channel])
+                        betRow = cur.fetchone()
+                        if betRow is None:
+                            self.message(channel, "No time prediction contests have been done in this channel yet.", isWhisper)
+                        elif betRow[1] == 'cancelled':
+                            self.message(channel, "The most recent contest in this channel was cancelled.", isWhisper)
+                        elif betRow[1] == 'open' or betRow[1] == 'started':
+                            self.message(channel, "There is a contest currently in progress in this channel, check !bet status.", isWhisper)
+                        else:
+                            resultData = getBetResults(betRow[0])
+                            if resultData is None:
+                                self.message(channel, "Error retrieving results.", isWhisper)
+                                cur.close()
+                                return
+                                
+                            formattedTime = formatTimeDelta(resultData["result"])
+                            messages = ["The most recent contest finished in %s." % formattedTime]
+                            if len(resultData["winners"]) == 0:
+                                messages[0] += " There were no bets placed."
+                            else:
+                                messages[0] += " Results: "
+                                place = 0
+                                for row in resultData["winners"]:
+                                    place += 1
+                                    formattedDelta = ("-" if row["timedelta"] < 0 else "+") + formatTimeDelta(abs(row["timedelta"]))
+                                    formattedBet = formatTimeDelta(row["bet"])
+                                    entry = "({place}) {name} - {time} ({delta}); ".format(place=place, name=row["name"], time=formattedBet, delta=formattedDelta)
+                                    if len(entry) + len(messages[-1]) > 500:
+                                        messages.append(entry)
+                                    else:
+                                        messages[-1] += entry
+                            
+                            first = True
+                            for message in messages:
+                                if not first:
+                                    time.sleep(0.5)
+                                self.message(channel, message, isWhisper)
+                                first = False
+                        cur.close()
+                        return
+                    elif sender in self.myadmins and subcmd == "payout":
+                        # pay out most recent bet in this channel
+                        cur = db.cursor()
+                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1", [channel])
+                        betRow = cur.fetchone()
+                        if betRow is None or (betRow[1] != 'paid' and betRow[1] != 'completed'):
+                            self.message(channel, "There is no pending time prediction contest to be paid out for this channel.", isWhisper)
+                        elif betRow[1] == 'paid':
+                            self.message(channel, "The most recent contest in this channel was already paid out.", isWhisper)
+                        else:
+                            # do the thing
+                            resultData = getBetResults(betRow[0])
+                            if resultData is None:
+                                self.message(channel, "Error retrieving results.", isWhisper)
+                                cur.close()
+                                return
+                                
+                            numEntries = len(resultData["winners"])
+                                
+                            if numEntries < 2:
+                                self.message(channel, "This contest had 0 or 1 entrants, no payout.", isWhisper)
+                                cur.close()
+                                return
+                            
+                            # calculate prize multiplier based on run length
+                            # uses varying log depending on > or < 2h
+                            if resultData["result"] < 7200000:
+                                prizeMultiplier = 1 / (math.log(7200000.0 / resultData["result"], 5) + 1)
+                            else:
+                                prizeMultiplier = math.log(resultData["result"] / 7200000.0, 5) + 1
+                                
+                            # cutoff for half prize is delta of 1/15th of run length
+                            halfCutoff = resultData["result"] / 15
+                                
+                            # calculate first run of prizes
+                            prizes = []
+                            place = 0
+                            for winner in resultData["winners"]:
+                                place += 1
+                                if place == numEntries:
+                                    prize = 500
+                                elif place == numEntries - 1:
+                                    prize = 750
+                                else:
+                                    prize = (numEntries - 1 - place) * 1000
+                                    
+                                # apply multipliers
+                                prize *= prizeMultiplier
+                                
+                                if abs(winner["timedelta"]) > halfCutoff:
+                                    prize *= 0.5
+                                elif abs(winner["timedelta"]) < 10:
+                                    # what a lucky SoB
+                                    prize *= 10
+                                elif abs(winner["timedelta"]) < 1000:
+                                    # 3x multiplier for within a second
+                                    prize *= 3
+                                elif int(winner["bet"] / 60000.0) == int(resultData["result"] / 60000.0) and resultData["result"] > 3600000:
+                                    # 2x multiplier if hour and minute match, only if run was longer than 1hr
+                                    prize *= 2
+                                    
+                                # make our prizes nice, also set a minimum prize of 50 per place
+                                roundNum = 100.0 if prize > 5000 else 50.0
+                                prize = max(int(round(prize/roundNum)*roundNum), 50 * (numEntries + 1 - place))
+                                    
+                                prizes.append(prize)
+                                addPoints(winner["id"], prize)
+                                cur.execute("UPDATE placed_bets SET prize = %s WHERE betid = %s AND userid = %s", [prize, betRow[0], winner["id"]])
+                                
+                            paidOut = sum(prizes)
+                                
+                            # broadcaster prize for runs > 1h
+                            # run length in hours * 1000, capped to match first place prize
+                            if resultData["result"] >= 3600000:
+                                bcPrize = max(int(round(resultData["result"] / 3600.0 / 50.0) * 50), 50)
+                                bcPrize = min(bcPrize, prizes[0])
+                                
+                                cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
+                                paidOut += bcPrize
+                            else:
+                                bcPrize = 0
+                                
+                            cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s WHERE id = %s", [paidOut, bcPrize, betRow[0]])
+                                
+                            messages = ["Paid out %d total points in prizes. Payouts: " % paidOut]
+                            for i in range(numEntries):
+                                msg = "{name} ({place}) - {points} points; ".format(name=resultData["winners"][i]["name"], place=formatRank(i+1), points=prizes[i])
+                                if len(messages[-1] + msg) > 500:
+                                    messages.append(msg)
+                                else:
+                                    messages[-1] += msg
+                                    
+                            if bcPrize > 0:
+                                msg = "{name} (broadcaster) - {points} points".format(name=channel[1:], points=bcPrize)
+                                if len(messages[-1] + msg) > 500:
+                                    messages.append(msg)
+                                else:
+                                    messages[-1] += msg
+                                    
+                            first = True
+                            for message in messages:
+                                if not first:
+                                    time.sleep(0.5)
+                                self.message(channel, message, isWhisper)
+                                first = False
+                            
+                        cur.close()
                         return
                     else:
                         self.message(channel,
-                                     "Usage: !bet <time> OR (as channel owner) !bet open OR !bet close OR !bet start OR !bet end OR !bet reset",
+                                     "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
                                      isWhisper)
-                    return
-                else:
-                    self.message(channel, "Only the broadcaster can manage a bet! Sorry!", isWhisper)
                     return
 
 class HDNBot(pydle.Client):
