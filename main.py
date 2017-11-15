@@ -441,6 +441,21 @@ def logDrop(userid, waifuid, rarity, source, channel, isWhisper):
     cur = db.cursor()
     cur.execute("INSERT INTO drops(userid, waifuid, rarity, source, channel, timestamp) VALUES(%s, %s, %s, %s, %s, %s)", (userid, waifuid, rarity, source, trueChannel, current_milli_time()))
     cur.close()
+    
+def formatRank(rankNum):
+    if (rankNum % 100) // 10 == 1 or rankNum % 10 == 0 or rankNum % 10 > 3:
+        return "%dth" % rankNum
+    elif rankNum % 10 == 1:
+        return "%dst" % rankNum
+    elif rankNum % 10 == 2:
+        return "%dnd" % rankNum
+    else:
+        return "%drd" % rankNum
+        
+def formatTimeDelta(ms):
+    baseRepr = str(datetime.timedelta(milliseconds=ms, microseconds=0))
+    return baseRepr[:-3] if "." in baseRepr else baseRepr
+    
 
 # From https://github.com/Shizmob/pydle/issues/35
 class PrivMessageTagSupport(pydle.features.ircv3.TaggedMessageSupport):
@@ -1783,7 +1798,7 @@ class NepBot(NepBotClass):
                         if resultData is None:
                             self.message(channel, "There wasn't a prediction contest in progress in your channel! Use !bet status to check current contest status.")
                         else:
-                            formattedTime = str(datetime.timedelta(milliseconds=resultData["result"], microseconds=0))[:-3]
+                            formattedTime = formatTimeDelta(resultData["result"])
                             winners = resultData["winners"]
                             winnerNames = []
                             for n in range(3):
@@ -1821,13 +1836,13 @@ class NepBot(NepBotClass):
                                     self.message(channel, "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
                             elif betRow[1] == 'started':
                                 elapsed = current_milli_time() - betRow[2]
-                                formattedTime = str(datetime.timedelta(milliseconds=elapsed, microseconds=0))[:-3]
+                                formattedTime = formatTimeDelta(elapsed)
                                 if canManageBets:
                                     self.message(channel, "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results." % (formattedTime, numBets))
                                 else:
                                     self.message(channel, "Run in progress - elapsed time %s. %d bets were placed." % (formattedTime, numBets))
                             else:
-                                formattedTime = str(datetime.timedelta(milliseconds=betRow[3] - betRow[2], microseconds=0))[:-3]
+                                formattedTime = formatTimeDelta(betRow[3] - betRow[2])
                                 if canManageBets:
                                     self.message(channel, "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed. Use !bet results to see full results or !bet open to open a new one." % (formattedTime, numBets))
                                 else:
@@ -1851,7 +1866,7 @@ class NepBot(NepBotClass):
                                 cur.close()
                                 return
                                 
-                            formattedTime = str(datetime.timedelta(milliseconds=resultData["result"], microseconds=0))[:-3]
+                            formattedTime = formatTimeDelta(resultData["result"])
                             messages = ["The most recent contest finished in %s." % formattedTime]
                             if len(resultData["winners"]) == 0:
                                 messages[0] += " There were no bets placed."
@@ -1860,8 +1875,8 @@ class NepBot(NepBotClass):
                                 place = 0
                                 for row in resultData["winners"]:
                                     place += 1
-                                    formattedDelta = ("-" if row["timedelta"] < 0 else "+") + str(datetime.timedelta(milliseconds=abs(row["timedelta"]), microseconds=0))[:-3]
-                                    formattedBet = str(datetime.timedelta(milliseconds=row["bet"], microseconds=0))[:-3]
+                                    formattedDelta = ("-" if row["timedelta"] < 0 else "+") + formatTimeDelta(abs(row["timedelta"]))
+                                    formattedBet = formatTimeDelta(row["bet"])
                                     entry = "({place}) {name} - {time} ({delta}); ".format(place=place, name=row["name"], time=formattedBet, delta=formattedDelta)
                                     if len(entry) + len(messages[-1]) > 500:
                                         messages.append(entry)
@@ -1874,6 +1889,114 @@ class NepBot(NepBotClass):
                                     time.sleep(0.5)
                                 self.message(channel, message, isWhisper)
                                 first = False
+                        cur.close()
+                        return
+                    elif sender in self.myadmins and subcmd == "payout":
+                        # pay out most recent bet in this channel
+                        cur = db.cursor()
+                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1", [channel])
+                        betRow = cur.fetchone()
+                        if betRow is None or (betRow[1] != 'paid' and betRow[1] != 'completed'):
+                            self.message(channel, "There is no pending time prediction contest to be paid out for this channel.", isWhisper)
+                        elif betRow[1] == 'paid':
+                            self.message(channel, "The most recent contest in this channel was already paid out.", isWhisper)
+                        else:
+                            # do the thing
+                            resultData = getBetResults(betRow[0])
+                            if resultData is None:
+                                self.message(channel, "Error retrieving results.", isWhisper)
+                                cur.close()
+                                return
+                                
+                            numEntries = len(resultData["winners"])
+                                
+                            if numEntries < 2:
+                                self.message(channel, "This contest had 0 or 1 entrants, no payout.", isWhisper)
+                                cur.close()
+                                return
+                            
+                            # calculate prize multiplier based on run length
+                            # uses varying log depending on > or < 2h
+                            if resultData["result"] < 7200000:
+                                prizeMultiplier = 1 / (math.log(7200000.0 / resultData["result"], 5) + 1)
+                            else:
+                                prizeMultiplier = math.log(resultData["result"] / 7200000.0, 5) + 1
+                                
+                            # cutoff for half prize is delta of 1/15th of run length
+                            halfCutoff = resultData["result"] / 15
+                                
+                            # calculate first run of prizes
+                            prizes = []
+                            place = 0
+                            for winner in resultData["winners"]:
+                                place += 1
+                                if place == numEntries:
+                                    prize = 500
+                                elif place == numEntries - 1:
+                                    prize = 750
+                                else:
+                                    prize = (numEntries - 1 - place) * 1000
+                                    
+                                # apply multipliers
+                                prize *= prizeMultiplier
+                                
+                                if abs(winner["timedelta"]) > halfCutoff:
+                                    prize *= 0.5
+                                elif abs(winner["timedelta"]) < 10:
+                                    # what a lucky SoB
+                                    prize *= 10
+                                elif abs(winner["timedelta"]) < 1000:
+                                    # 3x multiplier for within a second
+                                    prize *= 3
+                                elif int(winner["bet"] / 60000.0) == int(resultData["result"] / 60000.0) and resultData["result"] > 3600000:
+                                    # 2x multiplier if hour and minute match, only if run was longer than 1hr
+                                    prize *= 2
+                                    
+                                # make our prizes nice, also set a minimum prize of 50 per place
+                                roundNum = 100.0 if prize > 5000 else 50.0
+                                prize = max(int(round(prize/roundNum)*roundNum), 50 * (numEntries + 1 - place))
+                                    
+                                prizes.append(prize)
+                                addPoints(winner["id"], prize)
+                                cur.execute("UPDATE placed_bets SET prize = %s WHERE betid = %s AND userid = %s", [prize, betRow[0], winner["id"]])
+                                
+                            paidOut = sum(prizes)
+                                
+                            # broadcaster prize for runs > 1h
+                            # run length in hours * 1000, capped to match first place prize
+                            if resultData["result"] >= 3600000:
+                                bcPrize = max(int(round(resultData["result"] / 3600.0 / 50.0) * 50), 50)
+                                bcPrize = min(bcPrize, prizes[0])
+                                
+                                cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
+                                paidOut += bcPrize
+                            else:
+                                bcPrize = 0
+                                
+                            cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s WHERE id = %s", [paidOut, bcPrize, betRow[0]])
+                                
+                            messages = ["Paid out %d total points in prizes. Payouts: " % paidOut]
+                            for i in range(numEntries):
+                                msg = "{name} ({place}) - {points} points; ".format(name=resultData["winners"][i]["name"], place=formatRank(i+1), points=prizes[i])
+                                if len(messages[-1] + msg) > 500:
+                                    messages.append(msg)
+                                else:
+                                    messages[-1] += msg
+                                    
+                            if bcPrize > 0:
+                                msg = "{name} (broadcaster) - {points} points".format(name=channel[1:], points=bcPrize)
+                                if len(messages[-1] + msg) > 500:
+                                    messages.append(msg)
+                                else:
+                                    messages[-1] += msg
+                                    
+                            first = True
+                            for message in messages:
+                                if not first:
+                                    time.sleep(0.5)
+                                self.message(channel, message, isWhisper)
+                                first = False
+                            
                         cur.close()
                         return
                     else:
