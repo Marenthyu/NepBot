@@ -173,7 +173,7 @@ def getHand(twitchid):
         print("Got non-integer id for getHand. Aborting.")
         return []
     cur = db.cursor()
-    cur.execute("SELECT amount, waifus.name, waifus.id, rarity, series, image FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s", [tID])
+    cur.execute("SELECT amount, waifus.name, waifus.id, rarity, series, image FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < 7) DESC", [tID])
     rows = cur.fetchall()
     cur.close()
     return [{"name":row[1], "amount":row[0], "id":row[2], "rarity":row[3], "series":row[4], "image":row[5]} for row in rows]
@@ -383,7 +383,7 @@ def addPoints(userid, amount):
 
 def currentCards(userid):
     cur = db.cursor()
-    cur.execute("SELECT SUM(amount) AS totalCards FROM has_waifu WHERE userid = %s", [userid])
+    cur.execute("SELECT SUM(amount) AS totalCards FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s AND waifus.rarity < 7", [userid])
     ret = cur.fetchone()[0] or 0
     cur.close()
     return ret
@@ -897,7 +897,7 @@ class NepBot(NepBotClass):
                         self.message("#jtv", "/w %s %s" % (sender, message))
                 else:
                     limit = handLimit(tags['user-id'])
-                    self.message(channel, "{user}, you can have {limit} waifus and your current hand is: {link}".format(user=tags['display-name'], limit=limit, link=dropLink), isWhisper=isWhisper)
+                    self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(user=tags['display-name'], limit=limit, link=dropLink, curr=currentCards(tags['user-id'])), isWhisper=isWhisper)
                 return
             if command == "points":
                 #print("Checking points for " + sender)
