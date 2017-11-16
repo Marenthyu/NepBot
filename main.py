@@ -12,6 +12,7 @@ import requests
 import json
 import threading
 import math
+import functools
 from string import ascii_letters
 
 from twisted.internet import reactor
@@ -1145,7 +1146,7 @@ class NepBot(NepBotClass):
                         return
                     
                     packname = args[1].lower()
-                    cur.execute("SELECT cost, numCards, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s AND buyable = 1", [packname])
+                    cur.execute("SELECT cost, numCards, guaranteedSCrarity, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s AND buyable = 1", [packname])
                     packinfo = cur.fetchone()
                     
                     if packinfo is None:
@@ -1160,10 +1161,19 @@ class NepBot(NepBotClass):
                         
                     addPoints(tags['user-id'], -packinfo[0])
                     
+                    normalChances = packinfo[3:]
+                    if packinfo[2] == 0:
+                        firstPullChances = normalChances
+                    elif packinfo[2] == 6:
+                        firstPullChances = [1, 1, 1, 1, 1, 1]
+                    else:
+                        minFR = packinfo[2]
+                        firstPullChances = ([1] * minFR) + [functools.reduce((lambda x, y: x*y), normalChances[:minFR+1])] + list(normalChances[minFR+1:])
+                    
                     cards = []
                     for i in range(packinfo[1]):
                         while True:
-                            ca = int(dropCard(upgradeChances=packinfo[2:]))
+                            ca = int(dropCard(upgradeChances=(firstPullChances if len(cards) == 0 else normalChances)))
                             if ca not in cards:
                                 cards.append(ca)
                                 break
