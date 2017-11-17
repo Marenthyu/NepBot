@@ -92,7 +92,7 @@ def placeBet(channel, userid, betms):
     if row is None:
         cur.close()
         return False
-    cur.execute("REPLACE INTO placed_bets (betid, userid, bet) VALUE (%s, %s, %s)", [row[0], userid, betms])
+    cur.execute("REPLACE INTO placed_bets (betid, userid, bet, updated) VALUE (%s, %s, %s, %s)", [row[0], userid, betms, current_milli_time()])
     cur.close()
     return True
 
@@ -128,7 +128,7 @@ def getBetResults(betid):
         return None
         
     timeresult = betrow[2] - betrow[1]
-    cur.execute("SELECT bet, userid, users.name FROM placed_bets INNER JOIN users ON placed_bets.userid = users.id WHERE betid = %s", [betid])
+    cur.execute("SELECT bet, userid, users.name FROM placed_bets INNER JOIN users ON placed_bets.userid = users.id WHERE betid = %s ORDER BY updated ASC", [betid])
     rows = cur.fetchall()
     placements = sorted(rows, key=lambda row: abs(int(row[0]) - timeresult))
     actualwinners = [{"id": row[1], "name": row[2], "bet": row[0], "timedelta": row[0] - timeresult} for row in placements]
@@ -1975,9 +1975,10 @@ class NepBot(NepBotClass):
                                 
                             # broadcaster prize for runs > 1h
                             # run length in hours * 1000, capped to match first place prize
+                            # minimum = 1/3rd of first place prize
                             if resultData["result"] >= 3600000:
-                                bcPrize = max(int(round(resultData["result"] / 3600.0 / 50.0) * 50), 50)
-                                bcPrize = min(bcPrize, prizes[0])
+                                bcPrize = min(max(resultData["result"] / 3600.0, max(prizes) / 3.0, 50), max(prizes))
+                                bcPrize = int(round(bcPrize / 50.0) * 50)
                                 
                                 cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
                                 paidOut += bcPrize
@@ -1985,6 +1986,9 @@ class NepBot(NepBotClass):
                                 bcPrize = 0
                                 
                             cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s WHERE id = %s", [paidOut, bcPrize, betRow[0]])
+                            
+                            # take away points from the bot account
+                            cur.execute("UPDATE users SET points = points - %s WHERE name = %s", [config["username"]])
                                 
                             messages = ["Paid out %d total points in prizes. Payouts: " % paidOut]
                             for i in range(numEntries):
