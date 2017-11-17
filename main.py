@@ -1939,14 +1939,14 @@ class NepBot(NepBotClass):
                             halfCutoff = resultData["result"] / 15
                             
                             # pick prize pool based on number of entrants, max 12 different prizes
-                            prizePool = [10000, 9000, 8000, 7000, 6000, 5000, 4000, 3000, 2000, 1000, 750, 500][12-min(numEntries, 12):]
+                            prizePool = [10000, 9000, 8000, 7000, 6000, 5000, 4000, 3000, 2000, 1000, 750, 500][-min(numEntries, 12):]
                                 
                             # calculate first run of prizes
                             prizes = []
                             place = 0
                             for winner in resultData["winners"]:
                                 place += 1
-                                prize = prizePool[min(place - 1, numEntries - 1)]
+                                prize = prizePool[min(place - 1, 11)]
                                     
                                 # apply multipliers
                                 prize *= prizeMultiplier
