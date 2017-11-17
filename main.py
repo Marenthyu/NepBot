@@ -1891,7 +1891,7 @@ class NepBot(NepBotClass):
                                     formattedDelta = ("-" if row["timedelta"] < 0 else "+") + formatTimeDelta(abs(row["timedelta"]))
                                     formattedBet = formatTimeDelta(row["bet"])
                                     entry = "({place}) {name} - {time} ({delta}); ".format(place=place, name=row["name"], time=formattedBet, delta=formattedDelta)
-                                    if len(entry) + len(messages[-1]) > 500:
+                                    if len(entry) + len(messages[-1]) > 400:
                                         messages.append(entry)
                                     else:
                                         messages[-1] += entry
@@ -1988,19 +1988,19 @@ class NepBot(NepBotClass):
                             cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s WHERE id = %s", [paidOut, bcPrize, betRow[0]])
                             
                             # take away points from the bot account
-                            cur.execute("UPDATE users SET points = points - %s WHERE name = %s", [config["username"]])
+                            cur.execute("UPDATE users SET points = points - %s WHERE name = %s", [paidOut, config["username"]])
                                 
                             messages = ["Paid out %d total points in prizes. Payouts: " % paidOut]
                             for i in range(numEntries):
                                 msg = "{name} ({place}) - {points} points; ".format(name=resultData["winners"][i]["name"], place=formatRank(i+1), points=prizes[i])
-                                if len(messages[-1] + msg) > 500:
+                                if len(messages[-1] + msg) > 400:
                                     messages.append(msg)
                                 else:
                                     messages[-1] += msg
                                     
                             if bcPrize > 0:
                                 msg = "{name} (broadcaster) - {points} points".format(name=channel[1:], points=bcPrize)
-                                if len(messages[-1] + msg) > 500:
+                                if len(messages[-1] + msg) > 400:
                                     messages.append(msg)
                                 else:
                                     messages[-1] += msg
