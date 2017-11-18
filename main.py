@@ -576,7 +576,7 @@ class NepBot(NepBotClass):
         def timer():
             with busyLock:
                 global t
-                t = Timer(300, timer)
+                t = Timer(int(config["cycleLength"]), timer)
                 t.start()
                 print("Refreshing Database Connection...")
                 global db
@@ -672,7 +672,8 @@ class NepBot(NepBotClass):
                         pointGain = int(config["passivePoints"])
                         if lviewer in activitymap and lviewer in validactivity:
                             pointGain += max(10 - int(activitymap[lviewer]), 0)
-                        # global point multiplier would go here
+                            
+                        pointGain = round(pointGain * float(config["pointsMultiplier"]))
                         cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [pointGain, lviewer])
                     cur.close()
 
