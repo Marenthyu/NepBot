@@ -283,28 +283,63 @@ def updateGame(game):
 
 def setFollows(user):
     MyClientProtocol.instance.setFollowButtons(user)
+    
+def sendStreamlabsAlert(channel, data):
+    # assumes busyLock is already reserved
+    cur = db.cursor()
+    if '#' in channel:
+        channel = channel[1:]
+    cur.execute("SELECT alertkey FROM channels WHERE name = %s LIMIT 1", [channel])
+    tokenRow = cur.fetchone()
+    if tokenRow is not None and tokenRow[0] is not None:
+        data['access_token'] = tokenRow[0]
+        try:
+            req = requests.post(streamlabsalerturl, headers=alertheaders, json=data)
+            if req.status_code != 200:
+                print("response for streamlabs alert: " + str(req.status_code) + "; " + str(req.text))
+        except:
+            print("Tried to send a Streamlabs alert to %s, but failed." % channel)
+            print("Error: " + str(sys.exc_info()))
+            
+    cur.close()
+    
+def sendDiscordAlert(data):
+    # assumes busyLock is already reserved
+    cur = db.cursor()
+    cur.execute("SELECT url FROM discordHooks")
+    discordhooks = cur.fetchall()
 
-def sendalert(channel, waifu, user):
+    for row in discordhooks:
+        url = row[0]
+        req2 = requests.post(
+            url,
+            json=data)
+        while req2.status_code == 429:
+            time.sleep((req2.headers["Retry-After"] / 1000) + 1)
+            req2 = requests.post(
+                url,
+                json=data)
+
+    cur.close()
+
+def sendDrawAlert(channel, waifu, user):
     print("Alerting for waifu " + str(waifu))
     with busyLock:
-        cur = db.cursor()
-        cur.execute("SELECT alertkey FROM channels WHERE channels.name='{name}'".format(name=str(channel).replace("#", "").lower()))
         message = "{user} drew [{rarity}] {name}!".format(user=str(user),
                                                           rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
                                                           name=str(waifu["name"]))
         alertbody = {"type": "donation", "image_href": waifu["image"],
                      "sound_href": config["alertSound"], "duration": int(config["alertDuration"]), "message": message}
+        sendStreamlabsAlert(channel, alertbody)
         discordbody = {"username": "Waifu TCG", "embeds": [
             {
                 "title": "A {rarity} waifu has been dropped!".format(
-                    rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"])),
-                "color": int(config["rarity" + str(waifu["rarity"]) + "EmbedColor"])
+                    rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]))
             },
             {
                 "type": "rich",
                 "title": "{user} dropped {name}!".format(user=str(user), name=str(waifu["name"])),
                 "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
-                "color": int(config["rarity" + str(waifu["rarity"]) + "EmbedColor"]),
                 "footer": {
                     "text": "Waifu TCG by Marenthyu"
                 },
@@ -317,33 +352,73 @@ def sendalert(channel, waifu, user):
                 }
             }
         ]}
-        try:
-            tokenInfo = cur.fetchall()
-            if len(tokenInfo) > 0 and tokenInfo[0][0] is not None:
-                token = str(tokenInfo[0][0])
-                alertbody.update({"access_token": token})
-                req = requests.post(streamlabsalerturl, headers=alertheaders, json=alertbody)
-                if req.status_code != 200:
-                    print("response for streamlabs alert: " + str(req.status_code) + "; " + str(req.text))
-        except:
-            print("Tried to alert for " + str(channel) + ", " + str(waifu) + ", " + str(user) + ", but failed. Continuing with discord alerts.")
-            print("Error: " + str(sys.exc_info()))
-
-        cur.execute("SELECT url FROM discordHooks")
-        discordhooks = cur.fetchall()
-
-        for row in discordhooks:
-            url = row[0]
-            req2 = requests.post(
-                url,
-                json=discordbody)
-            while req2.status_code == 429:
-                time.sleep((req2.headers["Retry-After"] / 1000) + 1)
-                req2 = requests.post(
-                    url,
-                    json=discordbody)
-
-        cur.close()
+        colorKey = "rarity" + str(waifu["rarity"]) + "EmbedColor"
+        if colorKey in config:
+            discordbody["embeds"][0]["color"] = int(config[colorKey])
+            discordbody["embeds"][1]["color"] = int(config[colorKey])
+        sendDiscordAlert(discordbody)
+        
+def sendDisenchantAlert(channel, waifu, user):
+    with busyLock:
+        # no streamlabs alert for now
+        # todo maybe make a b&w copy of the waifu image
+        discordbody = {"username": "Waifu TCG", "embeds": [
+            {
+                "title": "A {rarity} waifu has been disenchanted!".format(
+                    rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]))
+            },
+            {
+                "type": "rich",
+                "title": "{name} has been disenchanted! Press F to pay respects.".format(name=str(waifu["name"])),
+                "footer": {
+                    "text": "Waifu TCG by Marenthyu"
+                },
+                "image": {
+                    "url": str(waifu["image"])
+                },
+                "provider": {
+                    "name": "Marenthyu",
+                    "url": "http://marenthyu.de"
+                }
+            }
+        ]}
+        colorKey = "rarity" + str(waifu["rarity"]) + "EmbedColor"
+        if colorKey in config:
+            discordbody["embeds"][0]["color"] = int(config[colorKey])
+            discordbody["embeds"][1]["color"] = int(config[colorKey])
+        sendDiscordAlert(discordbody)
+        
+def sendPromotionAlert(channel, waifu, user):
+    print("Alerting for waifu " + str(waifu))
+    with busyLock:
+        message = "{user} promoted {name} to god!".format(user=str(user),
+                                                          name=str(waifu["name"]))
+        alertbody = {"type": "donation", "image_href": waifu["image"],
+                     "sound_href": config["alertSound"], "duration": int(config["alertDuration"]), "message": message}
+        sendStreamlabsAlert(channel, alertbody)
+        discordbody = {"username": "Waifu TCG", "embeds": [
+            {
+                "title": "A waifu has been upgraded to god rarity!",
+                "color": int(config["rarity6EmbedColor"])
+            },
+            {
+                "type": "rich",
+                "title": "{user} promoted {name} to god rarity!".format(user=str(user), name=str(waifu["name"])),
+                "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
+                "color": int(config["rarity6EmbedColor"]),
+                "footer": {
+                    "text": "Waifu TCG by Marenthyu"
+                },
+                "image": {
+                    "url": str(waifu["image"])
+                },
+                "provider": {
+                    "name": "Marenthyu",
+                    "url": "http://marenthyu.de"
+                }
+            }
+        ]}
+        sendDiscordAlert(discordbody)
 
 def followsme(userid):
     try:
@@ -919,8 +994,8 @@ class NepBot(NepBotClass):
                     #print("egliable, dropping card.")
                     cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id='{0}'".format(dropCard()))
                     row = cur.fetchone()
-                    if int(row[3])>3:
-                        threading.Thread(target=sendalert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2]}, str(tags["display-name"]))).start()
+                    if int(row[3]) >= int(config["drawAlertMinimumRarity"]):
+                        threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2]}, str(tags["display-name"]))).start()
                     self.message(channel, tags['display-name'] + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
                         id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
                         link=row[2]), isWhisper=isWhisper)
@@ -953,7 +1028,7 @@ class NepBot(NepBotClass):
                 try:
                     inStrings = ",".join(["%s"] * len(ids))
                     cur = db.cursor()
-                    cur.execute("SELECT has_waifu.waifuid, has_waifu.amount, waifus.rarity FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s AND waifuid IN({0})".format(inStrings), [tags['user-id']] + ids)
+                    cur.execute("SELECT has_waifu.waifuid, has_waifu.amount, waifus.rarity, waifus.name, waifus.image FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s AND waifuid IN({0})".format(inStrings), [tags['user-id']] + ids)
                     hasInfo = cur.fetchall()
                     
                     # work out if any waifu is actually missing from their hand.
@@ -972,6 +1047,9 @@ class NepBot(NepBotClass):
                     pointsGain = 0
                     for row in hasInfo:
                         pointsGain += int(config["rarity" + str(row[2]) + "Value"])
+                        if row[2] >= int(config["disenchantAlertMinimumRarity"]):
+                            # valuable waifu disenchanted
+                            threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":row[3], "rarity":row[2], "image":row[4]}, str(tags["display-name"]))).start()
                         if row[1] == 1:
                             # delet this
                             cur.execute("DELETE FROM has_waifu WHERE waifuid = %s AND userid = %s", (row[0], tags['user-id']))
@@ -990,8 +1068,8 @@ class NepBot(NepBotClass):
                 except:
                     self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
                     return
-            if command == "giveme" and sender not in self.myadmins:
-                self.message(channel, "Sorry, you are not an admin.", isWhisper=isWhisper)
+            if command == "giveme":
+                self.message(channel, "No.", isWhisper=isWhisper)
                 return
             if command == "buy":
                 if len(args) != 1:
@@ -1026,17 +1104,8 @@ class NepBot(NepBotClass):
                 giveCard(tags['user-id'], str(row[0]))
                 cur.close()
                 logDrop(str(tags['user-id']), str(row[0]), rarity, "buy", channel, isWhisper)
-                return
-            if command == "giveme" and sender in self.myadmins:
-                cur = db.cursor()
-                cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id='{0}'".format(dropCard(args[0])))
-                row = cur.fetchone()
-                self.message(channel, str(
-                    sender) + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
-                    id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
-                    link=row[2]), isWhisper=isWhisper)
-                giveCard(tags['user-id'], str(row[0]))
-                cur.close()
+                if row[3] >= int(config["drawAlertMinimumRarity"]):
+                    threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2]}, str(tags["display-name"]))).start()
                 return
             if command == "booster":
                 if len(args) < 1:
@@ -1121,9 +1190,12 @@ class NepBot(NepBotClass):
                         else:
                             # Disenchant
                             id = cards[c-2]
-                            cur.execute("SELECT rarity FROM waifus WHERE id = %s", [id])
-                            rarity = cur.fetchone()[0]
-                            value = int(config["rarity" + str(rarity) + "Value"])
+                            cur.execute("SELECT rarity, name, image FROM waifus WHERE id = %s", [id])
+                            waifu = cur.fetchone()
+                            if waifu[0] >= int(config["disenchantAlertMinimumRarity"]):
+                                # valuable waifu being disenchanted
+                                threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":waifu[1], "rarity":waifu[0], "image":waifu[2]}, str(tags["display-name"]))).start()
+                            value = int(config["rarity" + str(waifu[0]) + "Value"])
                             des.append(id)
                             gottenpoints += value
                         c += 1
@@ -1156,7 +1228,7 @@ class NepBot(NepBotClass):
                         return
                         
                     if not hasPoints(tags['user-id'], packinfo[0]):
-                        self.message(channel, "{user}, sorry, you don't have enough points to buy a {name} booster pack. You need {points}.".format(user=tags['display-name'], name=packname, points=str(packinfo[0])))
+                        self.message(channel, "{user}, sorry, you don't have enough points to buy a {name} booster pack. You need {points}.".format(user=tags['display-name'], name=packname, points=str(packinfo[0])), isWhisper=isWhisper)
                         cur.close()
                         return
                         
@@ -1186,7 +1258,7 @@ class NepBot(NepBotClass):
                         cur.execute("SELECT name, rarity, image FROM waifus WHERE id = %s", [card])
                         row = cur.fetchone()
                         
-                        if row[1] > 3:
+                        if row[1] >= int(config["drawAlertMinimumRarity"]):
                             alertwaifus.append( {"name":str(row[0]), "rarity":int(row[1]), "image":str(row[2])})
                             
                         logDrop(str(tags['user-id']), str(card), row[1], "boosters.%s" % packname, channel, isWhisper)
@@ -1205,7 +1277,7 @@ class NepBot(NepBotClass):
                     droplink = "http://waifus.de/booster?token=" + token
                     self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
                     for w in alertwaifus:
-                        threading.Thread(target=sendalert, args=(channel, w, str(tags["display-name"]))).start()
+                        threading.Thread(target=sendDrawAlert, args=(channel, w, str(tags["display-name"]))).start()
                     return
                     
             if command == "trade":
@@ -1437,7 +1509,7 @@ class NepBot(NepBotClass):
                             self.message(channel, "{user}, Alerts are not yet set up for your channel. Do !alerts setup".format(user=tags['display-name']), isWhisper=isWhisper)
                             return
                         if str(args[0]).lower() == "test":
-                            threading.Thread(target=sendalert, args=(sender, {"name":"Test Alert, please ignore", "rarity":6, "image":"http://t.fuelr.at/k6g"}, str(tags["display-name"]))).start()
+                            threading.Thread(target=sendDrawAlert, args=(sender, {"name":"Test Alert, please ignore", "rarity":6, "image":"http://t.fuelr.at/k6g"}, str(tags["display-name"]))).start()
                             self.message(channel, "Test Alert sent.", isWhisper=isWhisper)
                             return
                         self.message("#jtv", "/w {user} Please go to the following link and allow access: {link}{user}".format(user=sender, link=str(streamlabsauthurl)), isWhisper=False)
@@ -1762,6 +1834,7 @@ class NepBot(NepBotClass):
                 cur.execute("UPDATE has_waifu SET amount = '1' WHERE waifuid = %s", [str(waifuid)])
                 cur.close()
                 self.message(channel, "Successfully promoted " + w["name"] + " to god rarity! May Miku have mercy on their soul...", isWhisper)
+                threading.Thread(target=sendPromotionAlert, args=(channel, w, str(tags["display-name"]))).start()
                 return
             if command == "bet":
                 if len(args) < 1:
