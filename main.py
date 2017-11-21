@@ -334,14 +334,12 @@ def sendDrawAlert(channel, waifu, user):
         discordbody = {"username": "Waifu TCG", "embeds": [
             {
                 "title": "A {rarity} waifu has been dropped!".format(
-                    rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"])),
-                "color": int(config["rarity" + str(waifu["rarity"]) + "EmbedColor"])
+                    rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]))
             },
             {
                 "type": "rich",
                 "title": "{user} dropped {name}!".format(user=str(user), name=str(waifu["name"])),
                 "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
-                "color": int(config["rarity" + str(waifu["rarity"]) + "EmbedColor"]),
                 "footer": {
                     "text": "Waifu TCG by Marenthyu"
                 },
@@ -354,6 +352,10 @@ def sendDrawAlert(channel, waifu, user):
                 }
             }
         ]}
+        colorKey = "rarity" + str(waifu["rarity"]) + "EmbedColor"
+        if colorKey in config:
+            discordbody["embeds"][0]["color"] = int(config[colorKey])
+            discordbody["embeds"][1]["color"] = int(config[colorKey])
         sendDiscordAlert(discordbody)
         
 def sendDisenchantAlert(channel, waifu, user):
@@ -363,13 +365,11 @@ def sendDisenchantAlert(channel, waifu, user):
         discordbody = {"username": "Waifu TCG", "embeds": [
             {
                 "title": "A {rarity} waifu has been disenchanted!".format(
-                    rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"])),
-                "color": int(config["rarity" + str(waifu["rarity"]) + "EmbedColor"])
+                    rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]))
             },
             {
                 "type": "rich",
                 "title": "{name} has been disenchanted! Press F to pay respects.".format(name=str(waifu["name"])),
-                "color": int(config["rarity" + str(waifu["rarity"]) + "EmbedColor"]),
                 "footer": {
                     "text": "Waifu TCG by Marenthyu"
                 },
@@ -382,6 +382,10 @@ def sendDisenchantAlert(channel, waifu, user):
                 }
             }
         ]}
+        colorKey = "rarity" + str(waifu["rarity"]) + "EmbedColor"
+        if colorKey in config:
+            discordbody["embeds"][0]["color"] = int(config[colorKey])
+            discordbody["embeds"][1]["color"] = int(config[colorKey])
         sendDiscordAlert(discordbody)
         
 def sendPromotionAlert(channel, waifu, user):
@@ -990,7 +994,7 @@ class NepBot(NepBotClass):
                     #print("egliable, dropping card.")
                     cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id='{0}'".format(dropCard()))
                     row = cur.fetchone()
-                    if int(row[3])>3:
+                    if int(row[3]) >= int(config["drawAlertMinimumRarity"]):
                         threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2]}, str(tags["display-name"]))).start()
                     self.message(channel, tags['display-name'] + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
                         id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
@@ -1043,7 +1047,7 @@ class NepBot(NepBotClass):
                     pointsGain = 0
                     for row in hasInfo:
                         pointsGain += int(config["rarity" + str(row[2]) + "Value"])
-                        if row[2] > 4:
+                        if row[2] >= int(config["disenchantAlertMinimumRarity"]):
                             # valuable waifu disenchanted
                             threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":row[3], "rarity":row[2], "image":row[4]}, str(tags["display-name"]))).start()
                         if row[1] == 1:
@@ -1064,8 +1068,8 @@ class NepBot(NepBotClass):
                 except:
                     self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
                     return
-            if command == "giveme" and sender not in self.myadmins:
-                self.message(channel, "Sorry, you are not an admin.", isWhisper=isWhisper)
+            if command == "giveme":
+                self.message(channel, "No.", isWhisper=isWhisper)
                 return
             if command == "buy":
                 if len(args) != 1:
@@ -1100,17 +1104,8 @@ class NepBot(NepBotClass):
                 giveCard(tags['user-id'], str(row[0]))
                 cur.close()
                 logDrop(str(tags['user-id']), str(row[0]), rarity, "buy", channel, isWhisper)
-                return
-            if command == "giveme" and sender in self.myadmins:
-                cur = db.cursor()
-                cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id='{0}'".format(dropCard(args[0])))
-                row = cur.fetchone()
-                self.message(channel, str(
-                    sender) + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
-                    id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
-                    link=row[2]), isWhisper=isWhisper)
-                giveCard(tags['user-id'], str(row[0]))
-                cur.close()
+                if row[3] >= int(config["drawAlertMinimumRarity"]):
+                    threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2]}, str(tags["display-name"]))).start()
                 return
             if command == "booster":
                 if len(args) < 1:
@@ -1197,7 +1192,7 @@ class NepBot(NepBotClass):
                             id = cards[c-2]
                             cur.execute("SELECT rarity, name, image FROM waifus WHERE id = %s", [id])
                             waifu = cur.fetchone()
-                            if waifu[0] > 4:
+                            if waifu[0] >= int(config["disenchantAlertMinimumRarity"]):
                                 # valuable waifu being disenchanted
                                 threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":waifu[1], "rarity":waifu[0], "image":waifu[2]}, str(tags["display-name"]))).start()
                             value = int(config["rarity" + str(waifu[0]) + "Value"])
@@ -1233,7 +1228,7 @@ class NepBot(NepBotClass):
                         return
                         
                     if not hasPoints(tags['user-id'], packinfo[0]):
-                        self.message(channel, "{user}, sorry, you don't have enough points to buy a {name} booster pack. You need {points}.".format(user=tags['display-name'], name=packname, points=str(packinfo[0])))
+                        self.message(channel, "{user}, sorry, you don't have enough points to buy a {name} booster pack. You need {points}.".format(user=tags['display-name'], name=packname, points=str(packinfo[0])), isWhisper=isWhisper)
                         cur.close()
                         return
                         
@@ -1263,7 +1258,7 @@ class NepBot(NepBotClass):
                         cur.execute("SELECT name, rarity, image FROM waifus WHERE id = %s", [card])
                         row = cur.fetchone()
                         
-                        if row[1] > 3:
+                        if row[1] >= int(config["drawAlertMinimumRarity"]):
                             alertwaifus.append( {"name":str(row[0]), "rarity":int(row[1]), "image":str(row[2])})
                             
                         logDrop(str(tags['user-id']), str(card), row[1], "boosters.%s" % packname, channel, isWhisper)
