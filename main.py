@@ -2100,8 +2100,12 @@ class NepBot(NepBotClass):
                     self.message(channel, "Usage: !import url", isWhisper)
                     return
                     
+                url = args[0]
+                if "pastebin.com" in url and "/raw/" not in url:
+                    url = url.replace("pastebin.com/", "pastebin.com/raw/")
+                
                 try:
-                    r = requests.get(args[0])
+                    r = requests.get(url)
                     data = r.text.splitlines()
                     lineno = 0
                     errorlines = []
