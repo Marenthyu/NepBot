@@ -1736,7 +1736,7 @@ class NepBot(NepBotClass):
             if command == "upgrade":
                 user = tags['user-id']
                 limit = handLimit(user)
-                price = int(250 * (math.pow(2, (limit - 7))))
+                price = int(int(config["firstUpgradeCost"]) * math.pow(2, limit - 7))
                 if len(args) != 1:
                     self.message(channel, "{user}, your current hand limit is {limit}. To add a slot for {price} points, use !upgrade buy".format(user=tags['display-name'], limit=str(limit), price=str(price)), isWhisper=isWhisper)
                     return
