@@ -84,6 +84,7 @@ streamlabsauthurl = "https://www.streamlabs.com/api/v1.0/authorize?client_id=" +
 streamlabsalerturl = "https://streamlabs.com/api/v1.0/alerts"
 alertheaders = {"Content-Type":"application/json", "User-Agent":"Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"}
 time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-9]{2})(\.(?P<ms>[0-9]{1,3}))?')
+waifu_regex = re.compile('(\[(?P<id>[0-9]+?)\])?(?P<name>.+?) ?- ?(?P<series>.+?) ?- ?(?P<rarity>[0-6]) ?- ?(?P<link>.+?)')
 
 def placeBet(channel, userid, betms):
     cur = db.cursor()
@@ -2092,6 +2093,41 @@ class NepBot(NepBotClass):
                         self.message(channel,
                                      "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
                                      isWhisper)
+                    return
+                    
+            if command == "import" and sender in self.myadmins:
+                if len(args) != 1:
+                    self.message(channel, "Usage: !import url", isWhisper)
+                    return
+                    
+                try:
+                    r = requests.get(args[0])
+                    data = r.text.splitlines()
+                    lineno = 0
+                    errorlines = []
+                    addwaifus = []
+                    for line in data:
+                        lineno += 1
+                        if not line.strip():
+                            continue
+                        match = waifu_regex.fullmatch(line.strip())
+                        if match:
+                            addwaifus.append(match.groupdict())
+                        else:
+                            errorlines.append(lineno)
+                            
+                    if len(errorlines) > 0:
+                        self.message(channel, "Error processing waifu data from lines: %s. Please fix formatting and try again." % ", ".join(str(lineno) for lineno in errorlines), isWhisper)
+                        return
+                    else:
+                        cur = db.cursor()
+                        cur.executemany("INSERT INTO waifus (Name, image, rarity, series) VALUES(%s, %s, %s, %s)", [(waifu["name"], waifu["link"], int(waifu["rarity"]), waifu["series"]) for waifu in addwaifus])
+                        cur.close()
+                        self.message(channel, "Successfully added %d waifus to the database." % len(addwaifus), isWhisper)
+                        return
+                except:
+                    self.message(channel, "Error loading waifu data.", isWhisper)
+                    print("Error: " + str(sys.exc_info()))
                     return
 
 class HDNBot(pydle.Client):
