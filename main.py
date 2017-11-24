@@ -334,7 +334,7 @@ def sendDrawAlert(channel, waifu, user):
         chanOwner = str(channel).replace("#", "")
         cur.execute("SELECT config, val FROM alertConfig WHERE channelName = %s", [chanOwner])
         rows = cur.fetchall()
-        cur.close()
+
         alertconfig = {}
         for row in rows:
             alertconfig[row[0]] = row[1]
@@ -344,6 +344,13 @@ def sendDrawAlert(channel, waifu, user):
         alertSound = defaultSound if str("rarity" + str(waifu["rarity"]) + "Sound") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Sound")]
         defaultLength = config["alertDuration"] if "defaultLength" not in keys else alertconfig["defaultLength"]
         alertLength = defaultLength if str("rarity" + str(waifu["rarity"]) + "Length") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Length")]
+        if "id" in waifu.keys():
+            cur.execute("SELECT sound, length FROM waifuAlerts WHERE waifuid=%s", [waifu["id"]])
+            rows = cur.fetchall()
+            if len(rows) == 1:
+                alertLength = int(rows[0][1])
+                alertSound = str(rows[0][0])
+        cur.close()
         alertbody = {"type": alertChannel, "image_href": waifu["image"],
                      "sound_href": alertSound, "duration": int(alertLength), "message": message}
         sendStreamlabsAlert(channel, alertbody)
@@ -1577,6 +1584,15 @@ class NepBot(NepBotClass):
                     cur.execute("SELECT val FROM alertConfig WHERE channelName=%s AND config = %s",
                                 [sender, configName])
                     rows = cur.fetchall()
+                    if configValue == "reset":
+                        cur.execute("DELETE FROM alertConfig WHERE channelName=%s AND config=%s", [sender, configName])
+                        cur.close()
+                        self.message(channel, 'Reset custom alert config "' + configName + '" for your channel.', isWhisper=isWhisper)
+                        return
+                    if configName == "alertChannel" and configValue not in ["host", "donation", "follow", "reset", "subscription"]:
+                        self.message(channel, 'Valid options for alertChannel: "host", "donation", "follow", "subscription", "reset"')
+                        cur.close()
+                        return
                     if len(rows) == 1:
                         cur.execute("UPDATE alertConfig SET val=%s WHERE channelName=%s AND config = %s", [configValue, sender, configName])
                     else:
