@@ -85,6 +85,7 @@ streamlabsalerturl = "https://streamlabs.com/api/v1.0/alerts"
 alertheaders = {"Content-Type":"application/json", "User-Agent":"Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"}
 time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-9]{2})(\.(?P<ms>[0-9]{1,3}))?')
 waifu_regex = re.compile('(\[(?P<id>[0-9]+?)\])?(?P<name>.+?) ?- ?(?P<series>.+?) ?- ?(?P<rarity>[0-6]) ?- ?(?P<link>.+?)')
+validalertconfigvalues = ["alertChannel", "defaultLength", "defaultSound", "rarity4Length", "rarity4Sound", "rarity5Length", "rarity5Sound", "rarity6Length", "rarity6Sound"]
 
 def placeBet(channel, userid, betms):
     cur = db.cursor()
@@ -329,8 +330,22 @@ def sendDrawAlert(channel, waifu, user):
         message = "{user} drew [{rarity}] {name}!".format(user=str(user),
                                                           rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
                                                           name=str(waifu["name"]))
-        alertbody = {"type": "donation", "image_href": waifu["image"],
-                     "sound_href": config["alertSound"], "duration": int(config["alertDuration"]), "message": message}
+        cur = db.cursor()
+        chanOwner = str(channel).replace("#", "")
+        cur.execute("SELECT config, val FROM alertConfig WHERE channelName = %s", [chanOwner])
+        rows = cur.fetchall()
+        cur.close()
+        alertconfig = {}
+        for row in rows:
+            alertconfig[row[0]] = row[1]
+        keys = alertconfig.keys()
+        alertChannel = "donation" if "alertChannel" not in keys else alertconfig["alertChannel"]
+        defaultSound = config["alertSound"] if "defaultSound" not in keys else alertconfig["defaultSound"]
+        alertSound = defaultSound if str("rarity" + str(waifu["rarity"]) + "Sound") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Sound")]
+        defaultLength = config["alertDuration"] if "defaultLength" not in keys else alertconfig["defaultLength"]
+        alertLength = defaultLength if str("rarity" + str(waifu["rarity"]) + "Length") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Length")]
+        alertbody = {"type": alertChannel, "image_href": waifu["image"],
+                     "sound_href": alertSound, "duration": int(alertLength), "message": message}
         sendStreamlabsAlert(channel, alertbody)
         discordbody = {"username": "Waifu TCG", "embeds": [
             {
@@ -1280,7 +1295,6 @@ class NepBot(NepBotClass):
                     for w in alertwaifus:
                         threading.Thread(target=sendDrawAlert, args=(channel, w, str(tags["display-name"]))).start()
                     return
-                    
             if command == "trade":
                 ourid = int(tags['user-id'])
                 if len(args) < 2:
@@ -1494,33 +1508,88 @@ class NepBot(NepBotClass):
                 return
             if command == "help":
                 self.message(channel, "http://waifus.de/help", isWhisper=isWhisper)
-            if command == "alerts":
-                if len(args) != 1:
-                    self.message("Usage: !alerts <setup/test>", isWhisper=isWhisper)
+            if command == "alerts" or command=="alert":
+                if len(args) < 1:
+                    self.message(channel, "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>", isWhisper=isWhisper)
                     return
-                if str(args[0]).lower() != "test" or str(args[0]).lower() != "setup":
+                sender = sender.lower()
+                subcmd = str(args[0]).lower()
+                if subcmd == "setup":
+                    cur = db.cursor()
+                    cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
+                    row = cur.fetchone();
+                    if row[0] is None:
+                        self.message("#jtv",
+                                     "/w {user} Please go to the following link and allow access: {link}{user}".format(
+                                         user=sender, link=str(streamlabsauthurl)), isWhisper=False)
+                        self.message(channel, "Sent you a whisper with a link to set up alerts. If you didnt receive a whisper, try !whisper", isWhisper=isWhisper)
+                    else:
+                        self.message(channel, "Alerts seem to already be set up for your channel! Use !alerts test to test them!", isWhisper)
+                    cur.close()
+                    return
+                if subcmd == "test":
                     try:
-                        cur = db.cursor()
-                        cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
-                        key = cur.fetchall()[0][0]
-                        if key != None and str(args[0]).lower() == "setup":
-                            self.message(channel, "{user}, Alerts seem to already be set up for your channel.".format(user=tags['display-name']), isWhisper=isWhisper)
-                            return
-                        if key == None and str(args[0]).lower() == "test":
-                            self.message(channel, "{user}, Alerts are not yet set up for your channel. Do !alerts setup".format(user=tags['display-name']), isWhisper=isWhisper)
-                            return
-                        if str(args[0]).lower() == "test":
-                            threading.Thread(target=sendDrawAlert, args=(sender, {"name":"Test Alert, please ignore", "rarity":6, "image":"http://t.fuelr.at/k6g"}, str(tags["display-name"]))).start()
-                            self.message(channel, "Test Alert sent.", isWhisper=isWhisper)
-                            return
-                        self.message("#jtv", "/w {user} Please go to the following link and allow access: {link}{user}".format(user=sender, link=str(streamlabsauthurl)), isWhisper=False)
-                        cur.close()
-                        return
+                        rarity = int(args[1])
                     except:
-                        self.message(channel, "The bot is not configured for your channel or other error. Usage: !alerts <test/setup>", isWhisper=isWhisper)
-                        print("Error: " + str(sys.exc_info()[0]))
+                        rarity = 6
+                    cur = db.cursor()
+                    cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
+                    row = cur.fetchone();
+                    cur.close()
+                    if row[0] is None:
+                        self.message(channel, "Alerts do not seem to be set up for your channel, please set them up using !alerts setup", isWhisper=isWhisper)
+                    else:
+                        threading.Thread(target=sendDrawAlert, args=(
+                        sender, {"name": "Test Alert, please ignore", "rarity": rarity, "image": "http://t.fuelr.at/k6g"},
+                        str(tags["display-name"]))).start()
+                        self.message(channel, "Test Alert sent.", isWhisper=isWhisper)
+                    return
+                if subcmd == "config":
+                    try:
+                        configName = args[1]
+                    except:
+                        self.message(channel, "Valid alert config options: " + ", ".join(validalertconfigvalues), isWhisper=isWhisper)
+                        return
+                    if configName == "reset":
+                        cur = db.cursor()
+                        cur.execute("DELETE FROM alertConfig WHERE channelName = %s", [sender])
+                        cur.close()
+                        self.message(channel, "Removed all custom alert config for your channel. #NoireScremRules", isWhisper=isWhisper)
+                        return
+                    if configName not in validalertconfigvalues:
+                        self.message(channel, "Valid alert config options: " + ", ".join(validalertconfigvalues),
+                                     isWhisper=isWhisper)
+                        return
+                    try:
+                        configValue = args[2]
+                    except:
+                        cur = db.cursor()
+                        cur.execute("SELECT val FROM alertConfig WHERE channelName=%s AND config = %s", [sender, configName])
+                        rows = cur.fetchall()
+                        if len(rows) != 1:
+                            self.message(channel, 'Alert config "' + configName + '" is unset for your channel.', isWhisper=isWhisper)
+                        else:
+                            configValue = rows[0][0]
+                            self.message(channel, 'Alert config "' + configName + '" is set to "' + configValue + '" for your channel.', isWhisper=isWhisper)
                         cur.close()
                         return
+                    cur = db.cursor()
+                    cur.execute("SELECT val FROM alertConfig WHERE channelName=%s AND config = %s",
+                                [sender, configName])
+                    rows = cur.fetchall()
+                    if len(rows) == 1:
+                        cur.execute("UPDATE alertConfig SET val=%s WHERE channelName=%s AND config = %s", [configValue, sender, configName])
+                    else:
+                        cur.execute("INSERT INTO alertConfig(val, channelName, config) VALUE (%s, %s, %s)", [configValue, sender, configName])
+                    cur.close()
+                    self.message(channel, 'Set alert config value "' + configName + '" to "' + configValue + '"', isWhisper=isWhisper)
+                    return
+                self.message(channel,
+                    "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
+                    isWhisper=isWhisper)
+                return
+
+
             if command == "followtest" and sender.lower() in self.myadmins:
                 self.message(channel, "Attempting to set follow buttons to hdnmarathon and nepnepbot", isWhisper=isWhisper)
                 setFollows(["hdnmarathon", "nepnepbot"])
