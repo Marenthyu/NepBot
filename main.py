@@ -1604,8 +1604,6 @@ class NepBot(NepBotClass):
                     "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
                     isWhisper=isWhisper)
                 return
-
-
             if command == "followtest" and sender.lower() in self.myadmins:
                 self.message(channel, "Attempting to set follow buttons to hdnmarathon and nepnepbot", isWhisper=isWhisper)
                 setFollows(["hdnmarathon", "nepnepbot"])
@@ -2179,7 +2177,6 @@ class NepBot(NepBotClass):
                                      "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
                                      isWhisper)
                     return
-                    
             if command == "import" and sender in self.myadmins:
                 if len(args) != 1:
                     self.message(channel, "Usage: !import url", isWhisper)
@@ -2218,6 +2215,29 @@ class NepBot(NepBotClass):
                     self.message(channel, "Error loading waifu data.", isWhisper)
                     print("Error: " + str(sys.exc_info()))
                     return
+            if command == "sets" or command == "set":
+                if (len(args) == 0):
+                    self.message(channel, "Available sets: http://waifus.de/sets?user=" + str(sender).lower(), isWhisper=isWhisper)
+                    return
+                subcmd = args[0]
+                if subcmd != "claim":
+                    self.message(channel, "Usage: !sets OR !sets claim", isWhisper=isWhisper)
+                    return
+                else:
+                    cur = db.cursor()
+                    cur.execute("SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets WHERE sets.claimed_by IS NULL AND sets.id NOT IN (SELECT DISTINCT setID FROM set_cards LEFT OUTER JOIN (SELECT * FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.id = %s) as a ON waifuid = cardID JOIN sets ON set_cards.setID = sets.id JOIN waifus ON cardID = waifus.id WHERE a.name IS NULL)", [tags["user-id"]])
+                    rows = cur.fetchall()
+                    if len(rows) == 0:
+                        cur.close()
+                        self.message(channel, "You do not have any completed sets that are available to be claimed.", isWhisper=isWhisper)
+                        return
+                    else:
+                        for row in rows:
+                            cur.execute("UPDATE sets SET claimed_by = %s, claimed_at = %s WHERE sets.id = %s", [tags["user-id"], current_milli_time(), row[0]])
+                            addPoints(tags["user-id"], int(row[2]))
+                            self.message(channel, "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(set=row[1], user=tags["display-name"], reward=row[2]))
+                        cur.close()
+                        return
 
 class HDNBot(pydle.Client):
     instance = None
