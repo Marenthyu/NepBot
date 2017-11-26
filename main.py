@@ -85,7 +85,7 @@ streamlabsalerturl = "https://streamlabs.com/api/v1.0/alerts"
 alertheaders = {"Content-Type":"application/json", "User-Agent":"Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"}
 time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-9]{2})(\.(?P<ms>[0-9]{1,3}))?')
 waifu_regex = re.compile('(\[(?P<id>[0-9]+?)\])?(?P<name>.+?) ?- ?(?P<series>.+?) ?- ?(?P<rarity>[0-6]) ?- ?(?P<link>.+?)')
-validalertconfigvalues = ["alertChannel", "defaultLength", "defaultSound", "rarity4Length", "rarity4Sound", "rarity5Length", "rarity5Sound", "rarity6Length", "rarity6Sound"]
+validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound", "rarity4Length", "rarity4Sound", "rarity5Length", "rarity5Sound", "rarity6Length", "rarity6Sound"]
 
 def placeBet(channel, userid, betms):
     cur = db.cursor()
@@ -335,13 +335,20 @@ def sendDiscordAlert(data):
 def sendDrawAlert(channel, waifu, user, discord=True):
     print("Alerting for waifu " + str(waifu))
     with busyLock:
-        message = "{user} drew [{rarity}] {name}!".format(user=str(user),
+        message = "*{user}* drew [*{rarity}*] {name}!".format(user=str(user),
                                                           rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
                                                           name=str(waifu["name"]))
         cur = db.cursor()
         chanOwner = str(channel).replace("#", "")
         cur.execute("SELECT config, val FROM alertConfig WHERE channelName = %s", [chanOwner])
         rows = cur.fetchall()
+
+        colorKey = "rarity" + str(waifu["rarity"]) + "EmbedColor"
+        colorInt = int(config[colorKey])
+        # Convert RGB int to RGB values
+        blue = colorInt & 255
+        green = (colorInt >> 8) & 255
+        red = (colorInt >> 16) & 255
 
         alertconfig = {}
         for row in rows:
@@ -352,6 +359,10 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         alertSound = defaultSound if str("rarity" + str(waifu["rarity"]) + "Sound") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Sound")]
         defaultLength = config["alertDuration"] if "defaultLength" not in keys else alertconfig["defaultLength"]
         alertLength = defaultLength if str("rarity" + str(waifu["rarity"]) + "Length") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Length")]
+        alertColor = "default" if "color" not in keys else alertconfig["color"]
+
+
+
         if "id" in waifu.keys():
             cur.execute("SELECT sound, length FROM waifuAlerts WHERE waifuid=%s", [waifu["id"]])
             rows = cur.fetchall()
@@ -361,6 +372,9 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         cur.close()
         alertbody = {"type": alertChannel, "image_href": waifu["image"],
                      "sound_href": alertSound, "duration": int(alertLength), "message": message}
+        if alertColor == "rarity":
+            alertbody["special_text_color"] = "rgb({r}, {g}, {b})".format(r=str(red), g=str(green), b=str(blue))
+
         sendStreamlabsAlert(channel, alertbody)
         if discord:
             discordbody = {"username": "Waifu TCG", "embeds": [
@@ -384,7 +398,6 @@ def sendDrawAlert(channel, waifu, user, discord=True):
                     }
                 }
             ]}
-            colorKey = "rarity" + str(waifu["rarity"]) + "EmbedColor"
             if colorKey in config:
                 discordbody["embeds"][0]["color"] = int(config[colorKey])
                 discordbody["embeds"][1]["color"] = int(config[colorKey])
