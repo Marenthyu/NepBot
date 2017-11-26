@@ -210,9 +210,17 @@ def handLimit(userid):
     cur.close()
     return limit
 
-def upgradeHand(userid):
+def paidHandUpgrades(userid):
     cur = db.cursor()
-    cur.execute("UPDATE users SET handLimit = handLimit + 1 WHERE id = %s", [userid])
+    cur.execute("SELECT paidHandUpgrades FROM users WHERE id = %s", [userid])
+    res = cur.fetchone()
+    limit = int(res[0])
+    cur.close()
+    return limit
+
+def upgradeHand(userid, gifted=False):
+    cur = db.cursor()
+    cur.execute("UPDATE users SET handLimit = handLimit + 1, paidHandUpgrades = paidHandUpgrades + %s WHERE id = %s", [0 if gifted else 1, userid])
     cur.close()
 
 def addDisplayToken(token, waifus):
@@ -1820,14 +1828,15 @@ class NepBot(NepBotClass):
             if command == "upgrade":
                 user = tags['user-id']
                 limit = handLimit(user)
-                price = int(int(config["firstUpgradeCost"]) * math.pow(2, limit - 7))
+                purchased = paidHandUpgrades(user)
+                price = int(int(config["firstUpgradeCost"]) * math.pow(2, purchased))
                 if len(args) != 1:
                     self.message(channel, "{user}, your current hand limit is {limit}. To add a slot for {price} points, use !upgrade buy".format(user=tags['display-name'], limit=str(limit), price=str(price)), isWhisper=isWhisper)
                     return
                 if args[0] == "buy":
                     if hasPoints(user, price):
                         addPoints(user, price * -1)
-                        upgradeHand(user)
+                        upgradeHand(user, gifted = False)
                         self.message(channel, "Successfully upgraded {user}'s hand for {price} points!".format(user=tags['display-name'], price=str(price)), isWhisper=isWhisper)
                         return
                     else:
@@ -2238,6 +2247,10 @@ class NepBot(NepBotClass):
                             self.message(channel, "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(set=row[1], user=tags["display-name"], reward=row[2]))
                         cur.close()
                         return
+            if command == "debug" and sender in self.myadmins:
+                upgradeHand(tags["user-id"], gifted=True)
+                self.message(channel, "DEBUG: Upgraded your hand for free.", isWhisper=isWhisper)
+                return
 
 class HDNBot(pydle.Client):
     instance = None
