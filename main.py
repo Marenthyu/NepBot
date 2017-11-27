@@ -1279,14 +1279,26 @@ class NepBot(NepBotClass):
                         
                     addPoints(tags['user-id'], -packinfo[0])
                     
+                    # pity pull?
+                    minRarity = packinfo[2]
+                    pityPullActive = True
+                    
+                    if minRarity >= int(config["pityPullRarity"]):
+                        pityPullActive = False
+                    else:
+                        cur.execute("SELECT spentSinceLastPull FROM users WHERE id = %s", [tags['user-id']])
+                        spent = cur.fetchone()[0]
+                        if spent >= int(config["pityPullAmount"]):
+                            minRarity = int(config["pityPullRarity"])
+                            print("Activated pity pull, rarity = %d" % minRarity)
+                    
                     normalChances = packinfo[3:]
-                    if packinfo[2] == 0:
+                    if minRarity == 0:
                         firstPullChances = normalChances
-                    elif packinfo[2] == 6:
+                    elif minRarity == 6:
                         firstPullChances = [1, 1, 1, 1, 1, 1]
                     else:
-                        minFR = packinfo[2]
-                        firstPullChances = ([1] * minFR) + [functools.reduce((lambda x, y: x*y), normalChances[:minFR+1])] + list(normalChances[minFR+1:])
+                        firstPullChances = ([1] * minRarity) + [functools.reduce((lambda x, y: x*y), normalChances[:minRarity+1])] + list(normalChances[minRarity+1:])
                     
                     cards = []
                     for i in range(packinfo[1]):
@@ -1298,6 +1310,7 @@ class NepBot(NepBotClass):
                                 
                     cards = sorted(cards)
                     alertwaifus = []
+                    pityPullReset = False
                     
                     for card in cards:
                         cur.execute("SELECT name, rarity, image FROM waifus WHERE id = %s", [card])
@@ -1306,16 +1319,27 @@ class NepBot(NepBotClass):
                         if row[1] >= int(config["drawAlertMinimumRarity"]):
                             alertwaifus.append( {"name":str(row[0]), "rarity":int(row[1]), "image":str(row[2]), "id": card})
                             
+                        if row[1] >= int(config["pityPullRarity"]) and pityPullActive:
+                            pityPullReset = True
+                            
                         logDrop(str(tags['user-id']), str(card), row[1], "boosters.%s" % packname, channel, isWhisper)
                         
                         if card == 120:
                             self.message(channel, "I hear thou cry, so here i am...", isWhisper=isWhisper)
                             
+                    # pity pull data update
+                    if pityPullReset:
+                        cur.execute("UPDATE users SET spentSinceLastPull = 0 WHERE id = %s", [tags['user-id']])
+                    elif pityPullActive:
+                        cur.execute("UPDATE users SET spentSinceLastPull = spentSinceLastPull + %s WHERE id = %s", [packinfo[0], tags['user-id']])
+                    
                     # insert opened booster
                     cur.execute("INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, %s, %s, %s, 'open')", [tags['user-id'], packname, packinfo[0], current_milli_time()])
                     boosterid = cur.lastrowid
                     cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)", [(boosterid, card) for card in cards])
                     cur.close()
+                    
+                    
 
                     token = ''.join(choice(ascii_letters) for v in range(10))
                     addDisplayToken(token, cards)
