@@ -2101,12 +2101,8 @@ class NepBot(NepBotClass):
                                     else:
                                         messages[-1] += entry
                             
-                            first = True
                             for message in messages:
-                                if not first:
-                                    time.sleep(0.5)
                                 self.message(channel, message, isWhisper)
-                                first = False
                         cur.close()
                         return
                     elif sender in self.myadmins and subcmd == "payout":
@@ -2210,12 +2206,8 @@ class NepBot(NepBotClass):
                                 else:
                                     messages[-1] += msg
                                     
-                            first = True
                             for message in messages:
-                                if not first:
-                                    time.sleep(0.5)
                                 self.message(channel, message, isWhisper)
-                                first = False
                             
                         cur.close()
                         return
@@ -2327,12 +2319,8 @@ class NepBot(NepBotClass):
                         else:
                             messages[-1] += message
                             
-                    first = True
                     for message in messages:
-                        if not first:
-                            time.sleep(0.5)
                         self.message(channel, message, isWhisper)
-                        first = False
                         
                     cur.close()
                     return
