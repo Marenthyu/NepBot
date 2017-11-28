@@ -71,7 +71,7 @@ try:
         print("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
         sys.exit(1)
     if twitchclientsecret is None:
-        print("Twitch Client Secret not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
+        print("Twitch Client Secret not set. Please add it to the conig file, with 'twitchclientsecret=<pw>'")
         sys.exit(1)
     f.close()
 except:
