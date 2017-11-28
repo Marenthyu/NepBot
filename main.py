@@ -823,10 +823,15 @@ class NepBot(NepBotClass):
                     doneusers = doneusers[100:]
                     
                 # now deal with user names that aren't already in the DB
-                    
+                if len(newUsers) > 10000:
+                    print("DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
+                    newUsers = newUsers[:10000]
                 while len(newUsers) > 0:
                     currentSlice = newUsers[:100]
                     r = requests.get("https://api.twitch.tv/helix/users", headers=headers, params={"login": currentSlice})
+                    if r.status_code == 429:
+                        print("WARNING! Rate Limit Exceeded! Skipping account creation!")
+                        r.raise_for_status()
                     j = r.json()
                     if "data" not in j:
                         # error, what do?
