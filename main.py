@@ -48,6 +48,8 @@ hdnoauth = None
 global streamlabsclient
 streamlabsclient = None
 twitchclientsecret = None
+global t
+t = None
 # read config values from file (db login etc)
 try:
     f = open("nepbot.cfg", "r")
@@ -936,7 +938,9 @@ class NepBot(NepBotClass):
                     print("Error deleting old tokens. skipping this cycle.")
                 cur.close()
 
-        timer()
+        global t
+        if t == None:
+            timer()
 
     def on_capability_twitch_tv_membership_available(self, nothing=None):
         print("WE HAS TWITCH MEMBERSHIP AVAILABLE! ... but we dont want it.")
