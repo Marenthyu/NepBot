@@ -47,6 +47,7 @@ global hdnoauth
 hdnoauth = None
 global streamlabsclient
 streamlabsclient = None
+twitchclientsecret = None
 # read config values from file (db login etc)
 try:
     f = open("nepbot.cfg", "r")
@@ -61,11 +62,16 @@ try:
             hdnoauth = value
         if name == "streamlabsclient":
             streamlabsclient = value
+        if name == "twitchclientsecret":
+            twitchclientsecret = value
     if dbpw == None:
         print("Database password not set. Please add it to the config file, with 'password=<pw>'")
         sys.exit(1)
     if hdnoauth == None:
         print("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
+        sys.exit(1)
+    if twitchclientsecret is None:
+        print("Twitch Client Secret not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
         sys.exit(1)
     f.close()
 except:
@@ -86,6 +92,30 @@ alertheaders = {"Content-Type":"application/json", "User-Agent":"Mozilla/5.0 (Wi
 time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-9]{2})(\.(?P<ms>[0-9]{1,3}))?')
 waifu_regex = re.compile('(\[(?P<id>[0-9]+?)\])?(?P<name>.+?) ?- ?(?P<series>.+?) ?- ?(?P<rarity>[0-6]) ?- ?(?P<link>.+?)')
 validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound", "rarity4Length", "rarity4Sound", "rarity5Length", "rarity5Sound", "rarity6Length", "rarity6Sound"]
+
+def checkAndRenewAppAccessToken():
+    krakenHeaders = {"Authorization": "OAuth %s" % config["appAccessToken"]}
+    r = requests.get("https://api.twitch.tv/kraken", headers=krakenHeaders)
+    resp = r.json()
+
+    if "identified" not in resp or not resp["identified"]:
+        # app access token has expired, get a new one
+        print("Requesting new token")
+        url = 'https://api.twitch.tv/kraken/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (config["clientID"], twitchclientsecret)
+        r = requests.post(url)
+        try:
+            jsondata = r.json()
+            if 'access_token' not in jsondata or 'expires_in' not in jsondata:
+                raise ValueError("Invalid Twitch API response, can't get an app access token.")
+            global config
+            config["appAccessToken"] = jsondata['access_token']
+            print("request done")
+            cur = db.cursor()
+            cur.execute("UPDATE config SET value = %s WHERE name = 'appAccessToken'", [jsondata['access_token']])
+            cur.close()
+        except ValueError as error:
+            print("request was not successful")
+            raise error
 
 def placeBet(channel, userid, betms):
     cur = db.cursor()
@@ -710,29 +740,29 @@ class NepBot(NepBotClass):
                     print("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
             print("Checking live status of channels...")
+            checkAndRenewAppAccessToken()
+            
             with busyLock:
                 cur = db.cursor()
                 cur.execute("SELECT users.name, users.id FROM channels join users ON channels.name = users.name")
                 rows = cur.fetchall()
-                isLive = {}
-                channelids = []
-                idtoname = {}
-                requrl = "https://api.twitch.tv/helix/streams?type=live&user_id="
-                for row in rows:
-                    channelids.append(str(row[1]))
-                    idtoname[str(row[1])] = row[0]
-                    isLive[str(row[0])] = False
-            requrl += "&user_id=".join(channelids)
-            twitchheader = {"Client-ID":config["clientID"]}
-            with requests.get(requrl, headers=twitchheader) as response:
-                data = response.json()["data"]
-                #print("got data from live check:")
-                #print(data)
-                for element in data:
-                    isLive[idtoname[str(element["user_id"])]] = True
-                    print("{user} is live!".format(user=idtoname[str(element["user_id"])]))
-
-
+                
+            channelids = []
+            idtoname = {}
+            isLive = {}
+            for row in rows:
+                channelids.append(str(row[1]))
+                idtoname[str(row[1])] = row[0]
+                isLive[str(row[0])] = False
+            
+            while len(channelids) > 0:
+                currentSlice = channelids[:100]
+                with requests.get("https://api.twitch.tv/helix/streams", headers=headers, params={"type": "live", "user_id": currentSlice}) as response:
+                    data = response.json()["data"]
+                    for element in data:
+                        isLive[idtoname[str(element["user_id"])]] = True
+                        print("{user} is live!".format(user=idtoname[str(element["user_id"])]))
+                channelids = channelids[100:]
 
             print("Catching all viewers...")
             for c in self.addchannels:
@@ -767,39 +797,74 @@ class NepBot(NepBotClass):
                         print("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
                         print("Error: " + str(sys.exc_info()))
                 cur = db.cursor()
+                
                 # process all users
-                print("Caught users, giving points and creating accounts")
-                with busyLock:
-                    for viewer in doneusers:
-                        lviewer = str(viewer).lower()
-                        cur.execute("SELECT COUNT(*) FROM users WHERE name = %s", [lviewer])
-                        if int(cur.fetchone()[0]) == 0:
-                            print("Creating account for " + lviewer)
-                            r = requests.get("https://api.twitch.tv/kraken/users", headers=headers,
-                                             params={"login": lviewer})
-                            j = r.json()
-                            try:
-                                twitchid = j["users"][0]["_id"]
-                            except:
-                                twitchid = 0
-                            cur.execute("SELECT COUNT(*) FROM users WHERE id = %s", [str(twitchid)])
-                            if (cur.fetchone()[0] or 0) > 0:
-                                print("Twitch ID already exists. Updating row with new name")
-                                cur.execute("UPDATE users SET name = %s WHERE id = %s", [lviewer, str(twitchid)])
-                            else:
-                                cur.execute("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)", [twitchid, lviewer])
-                            #print("Success?")
-                        pointGain = int(config["passivePoints"])
-                        if lviewer in activitymap and lviewer in validactivity:
-                            pointGain += max(10 - int(activitymap[lviewer]), 0)
+                print("Caught users, giving points and creating accounts, amount to do = %d" % len(doneusers))
+                newUsers = []
+                
+                while len(doneusers) > 0:
+                    currentSlice = doneusers[:100]
+                    with busyLock:
+                        cur.execute("SELECT name FROM users WHERE name IN(%s)" % ",".join(["%s"] * len(currentSlice)), currentSlice)
+                        foundUsersData = cur.fetchall()
+                    foundUsers = [row[0] for row in foundUsersData]
+                    newUsers += [user for user in currentSlice if user not in foundUsers]
+                    if len(foundUsers) > 0:
+                        updateData = []
+                        for viewer in foundUsers:
+                            pointGain = int(config["passivePoints"])
+                            if viewer in activitymap and viewer in validactivity:
+                                pointGain += max(10 - int(activitymap[viewer]), 0)
+                            updateData.append((pointGain, viewer))
                             
-                        pointGain = round(pointGain * float(config["pointsMultiplier"]))
-                        cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [pointGain, lviewer])
-                    cur.close()
+                        with busyLock:
+                            cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
+                            
+                    doneusers = doneusers[100:]
+                    
+                # now deal with user names that aren't already in the DB
+                    
+                while len(newUsers) > 0:
+                    currentSlice = newUsers[:100]
+                    r = requests.get("https://api.twitch.tv/helix/users", headers=headers, params={"login": currentSlice})
+                    j = r.json()
+                    if "data" not in j:
+                        # error, what do?
+                        r.raise_for_status()
+                        
+                    currentIdMapping = {int(row["id"]):row["login"] for row in j["data"]}
+                    with busyLock:
+                        cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)), [id for id in currentIdMapping])
+                        foundIdsData = cur.fetchall()
+                    localIds = [row[0] for row in foundIdsData]
+                    
+                    # users to update the names for (id already exists)
+                    updateNames = [(currentIdMapping[id], id) for id in currentIdMapping if id in localIds]
+                    if len(updateNames) > 0:
+                        cur.executemany("UPDATE users SET name = %s WHERE id = %s", updateNames)
+                        
+                    # new users (id does not exist)
+                    newAccounts = [(id, currentIdMapping[id]) for id in currentIdMapping if id not in localIds]
+                    if len(newAccounts) > 0:
+                        cur.executemany("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)", newAccounts)
+                        
+                    # actually give points
+                    updateData = []
+                    for id in currentIdMapping:
+                        viewer = currentIdMapping[id]
+                        pointGain = int(config["passivePoints"])
+                        if viewer in activitymap and viewer in validactivity:
+                            pointGain += max(10 - int(activitymap[viewer]), 0)
+                        updateData.append((pointGain, viewer))
+                        
+                    with busyLock:
+                        cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
+                        
+                    # done with this slice
+                    newUsers = newUsers[100:]
 
-
-                    for user in activitymap.keys():
-                        activitymap[user] = activitymap[user] + 1
+                for user in activitymap:
+                    activitymap[user] = activitymap[user] + 1
             except:
                 print("We had an error during passive point gain. skipping this cycle.")
                 print("Error: " + str(sys.exc_info()))
@@ -2538,11 +2603,15 @@ packrows = curg.fetchall()
 visiblepacks = "/".join(row[0] for row in packrows)
 curg.close()
 
-headers = {"Client-ID":str(config["clientID"]), "Accept":"application/vnd.twitchtv.v5+json"}
-r = requests.get("https://api.twitch.tv/kraken/users", headers=headers, params={"login":str(config["username"]).lower()})
+# twitch api init
+checkAndRenewAppAccessToken()
+
+# get user data for the bot itself
+headers = {"Authorization": "Bearer %s" % config["appAccessToken"]}
+r = requests.get("https://api.twitch.tv/helix/users", headers=headers, params={"login":str(config["username"]).lower()})
 j = r.json()
 try:
-    twitchid = j["users"][0]["_id"]
+    twitchid = j["data"][0]["id"]
 except:
     twitchid = 0
 config["twitchid"] = str(twitchid)
