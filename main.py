@@ -1662,7 +1662,7 @@ class NepBot(NepBotClass):
                     if row[0] is None:
                         self.message("#jtv",
                                      "/w {user} Please go to the following link and allow access: {link}{user}".format(
-                                         user=sender, link=str(streamlabsauthurl)), isWhisper=False)
+                                         user=sender.strip(), link=str(streamlabsauthurl).strip()), isWhisper=False)
                         self.message(channel, "Sent you a whisper with a link to set up alerts. If you didnt receive a whisper, try !whisper", isWhisper=isWhisper)
                     else:
                         self.message(channel, "Alerts seem to already be set up for your channel! Use !alerts test to test them!", isWhisper)
