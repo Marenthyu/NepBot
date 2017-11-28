@@ -746,6 +746,7 @@ class NepBot(NepBotClass):
                 cur = db.cursor()
                 cur.execute("SELECT users.name, users.id FROM channels join users ON channels.name = users.name")
                 rows = cur.fetchall()
+                cur.close()
                 
             channelids = []
             idtoname = {}
@@ -796,7 +797,7 @@ class NepBot(NepBotClass):
                     except:
                         print("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
                         print("Error: " + str(sys.exc_info()))
-                cur = db.cursor()
+
                 
                 # process all users
                 print("Caught users, giving points and creating accounts, amount to do = %d" % len(doneusers))
@@ -805,8 +806,10 @@ class NepBot(NepBotClass):
                 while len(doneusers) > 0:
                     currentSlice = doneusers[:100]
                     with busyLock:
+                        cur = db.cursor()
                         cur.execute("SELECT name FROM users WHERE name IN(%s)" % ",".join(["%s"] * len(currentSlice)), currentSlice)
                         foundUsersData = cur.fetchall()
+                        cur.close()
                     foundUsers = [row[0] for row in foundUsersData]
                     newUsers += [user for user in currentSlice if user not in foundUsers]
                     if len(foundUsers) > 0:
@@ -818,7 +821,9 @@ class NepBot(NepBotClass):
                             updateData.append((pointGain, viewer))
                             
                         with busyLock:
+                            cur = db.cursor()
                             cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
+                            cur.close()
                             
                     doneusers = doneusers[100:]
                     
@@ -839,20 +844,27 @@ class NepBot(NepBotClass):
                         
                     currentIdMapping = {int(row["id"]):row["login"] for row in j["data"]}
                     with busyLock:
+                        cur = db.cursor()
                         cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)), [id for id in currentIdMapping])
                         foundIdsData = cur.fetchall()
+                        cur.close()
                     localIds = [row[0] for row in foundIdsData]
                     
                     # users to update the names for (id already exists)
                     updateNames = [(currentIdMapping[id], id) for id in currentIdMapping if id in localIds]
                     if len(updateNames) > 0:
-                        cur.executemany("UPDATE users SET name = %s WHERE id = %s", updateNames)
+                        with busyLock:
+                            cur = db.cursor()
+                            cur.executemany("UPDATE users SET name = %s WHERE id = %s", updateNames)
+                            cur.close()
                         
                     # new users (id does not exist)
                     newAccounts = [(id, currentIdMapping[id]) for id in currentIdMapping if id not in localIds]
                     if len(newAccounts) > 0:
-                        cur.executemany("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)", newAccounts)
-                        
+                        with busyLock:
+                            cur = db.cursor()
+                            cur.executemany("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)", newAccounts)
+                            cur.close()
                     # actually give points
                     updateData = []
                     for id in currentIdMapping:
@@ -863,7 +875,9 @@ class NepBot(NepBotClass):
                         updateData.append((pointGain, viewer))
                         
                     with busyLock:
+                        cur = db.cursor()
                         cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
+                        cur.close()
                         
                     # done with this slice
                     newUsers = newUsers[100:]
