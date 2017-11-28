@@ -66,10 +66,10 @@ try:
             streamlabsclient = value
         if name == "twitchclientsecret":
             twitchclientsecret = value
-    if dbpw == None:
+    if dbpw is None:
         print("Database password not set. Please add it to the config file, with 'password=<pw>'")
         sys.exit(1)
-    if hdnoauth == None:
+    if hdnoauth is None:
         print("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
         sys.exit(1)
     if twitchclientsecret is None:
@@ -256,7 +256,7 @@ def upgradeHand(userid, gifted=False):
     cur.close()
 
 def addDisplayToken(token, waifus):
-    if (waifus == None or len(waifus) == 0):
+    if (waifus is None or len(waifus) == 0):
         return
     valuesstring = "('{token}', {waifu})".format(waifu=str(waifus[0]), token=str(token))
     for w in waifus[1:]:
@@ -898,7 +898,7 @@ class NepBot(NepBotClass):
                     ticker = data["ticker"]
                     current = ticker["current"]
                     wasNone = False
-                    if current == None:
+                    if current is None:
                         current = ticker["next"]
                         wasNone = True
                     current = current["data"]
@@ -939,7 +939,7 @@ class NepBot(NepBotClass):
                 cur.close()
 
         global t
-        if t == None:
+        if t is None:
             timer()
 
     def on_capability_twitch_tv_membership_available(self, nothing=None):
