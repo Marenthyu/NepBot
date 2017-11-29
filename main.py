@@ -716,6 +716,9 @@ class NepBot(NepBotClass):
         self.on_message("#" + str(nick), str(nick), str(params[1]), tags, isWhisper=True)
 
     def on_unknown(self, message):
+        if str(message).find("WHISPER") > -1:
+            self.on_whisper(message)
+            return
         if str(message).find("CLEARCHAT") > -1:
             self.on_clearchat(message)
             return
@@ -730,9 +733,6 @@ class NepBot(NepBotClass):
             return
         if str(message).find("USERNOTICE") > -1:
             logger.info("PogChamp! Someone subbed to someone! here's the message: %s", str(message))
-            return
-        if str(message).find("WHISPER") > -1:
-            self.on_whisper(message)
             return
         super().on_unknown(message)
 
