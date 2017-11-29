@@ -23,6 +23,21 @@ from twisted.internet.ssl import optionsForClientTLS
 
 import sys
 import re
+import logging
+
+formatter = logging.Formatter('[%(asctime)s][%(name)s][%(levelname)s] %(message)s')
+logger = logging.getLogger('nepbot')
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
+fh = logging.FileHandler('debug.log')
+fh.setLevel(logging.DEBUG)
+
+ch = logging.StreamHandler(sys.stdout)
+ch.setLevel(logging.INFO)
+fh.setFormatter(formatter)
+ch.setFormatter(formatter)
+logger.addHandler(fh)
+logger.addHandler(ch)
 
 games = ['Hyperdimension Neptunia Re;Birth1', 'Hyperdimension Neptunia Re;Birth2: Sisters Generation',
          'Four Goddesses Online: Cyber Dimension Neptune', 'Hyperdimension Neptunia mk2',
@@ -57,7 +72,7 @@ try:
     for line in lines:
         name, value = line.split("=")
         value = str(value).strip("\n")
-        print("Reading config value '{name}' = '<redacted>'".format(name=name))
+        logger.info("Reading config value '{name}' = '<redacted>'".format(name=name))
         if name == "password":
             dbpw = value
         if name == "hdnoauth":
@@ -67,17 +82,17 @@ try:
         if name == "twitchclientsecret":
             twitchclientsecret = value
     if dbpw is None:
-        print("Database password not set. Please add it to the config file, with 'password=<pw>'")
+        logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
         sys.exit(1)
     if hdnoauth is None:
-        print("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
+        logger.error("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
         sys.exit(1)
     if twitchclientsecret is None:
-        print("Twitch Client Secret not set. Please add it to the conig file, with 'twitchclientsecret=<pw>'")
+        logger.error("Twitch Client Secret not set. Please add it to the conig file, with 'twitchclientsecret=<pw>'")
         sys.exit(1)
     f.close()
 except:
-    print("Error reading config file (nepbot.cfg), aborting.")
+    logger.error("Error reading config file (nepbot.cfg), aborting.")
     sys.exit(1)
 
 
@@ -102,7 +117,7 @@ def checkAndRenewAppAccessToken():
 
     if "identified" not in resp or not resp["identified"]:
         # app access token has expired, get a new one
-        print("Requesting new token")
+        logger.debug("Requesting new token")
         url = 'https://api.twitch.tv/kraken/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (config["clientID"], twitchclientsecret)
         r = requests.post(url)
         try:
@@ -111,12 +126,12 @@ def checkAndRenewAppAccessToken():
                 raise ValueError("Invalid Twitch API response, can't get an app access token.")
             global config
             config["appAccessToken"] = jsondata['access_token']
-            print("request done")
+            logger.debug("request done")
             cur = db.cursor()
             cur.execute("UPDATE config SET value = %s WHERE name = 'appAccessToken'", [jsondata['access_token']])
             cur.close()
         except ValueError as error:
-            print("request was not successful")
+            logger.error("Access Token renew/get request was not successful")
             raise error
 
 def placeBet(channel, userid, betms):
@@ -204,7 +219,7 @@ def getHand(twitchid):
     try:
         tID = int(twitchid)
     except:
-        print("Got non-integer id for getHand. Aborting.")
+        logger.error("Got non-integer id for getHand. Aborting.")
         return []
     cur = db.cursor()
     cur.execute("SELECT amount, waifus.name, waifus.id, rarity, series, image FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < 7) DESC, waifus.id ASC", [tID])
@@ -274,9 +289,9 @@ def getHoraro():
         #("got horaro ticker: " + str(j))
         return j
     except:
-        print("Horaro Error:")
-        print(str(r.status_code))
-        print(r.text)
+        logger.error("Horaro Error:")
+        logger.error(str(r.status_code))
+        logger.error(r.text)
 
 def updateBoth(game, title):
     myheaders = headers.copy()
@@ -290,8 +305,8 @@ def updateBoth(game, title):
         j = r.json()
         # print("tried to update channel title, response: " + str(j))
     except:
-        print(str(r.status_code))
-        print(r.text)
+        logger.error(str(r.status_code))
+        logger.error(r.text)
 
 def updateTitle(title):
     myheaders = headers.copy()
@@ -305,8 +320,8 @@ def updateTitle(title):
         j = r.json()
         #print("tried to update channel title, response: " + str(j))
     except:
-        print(str(r.status_code))
-        print(r.text)
+        logger.error(str(r.status_code))
+        logger.error(r.text)
 
 def updateGame(game):
     myheaders = headers.copy()
@@ -320,8 +335,8 @@ def updateGame(game):
         j = r.json()
         #print("tried to update channel title, response: " + str(j))
     except:
-        print(str(r.status_code))
-        print(r.text)
+        logger.error(str(r.status_code))
+        logger.error(r.text)
 
 def setFollows(user):
     MyClientProtocol.instance.setFollowButtons(user)
@@ -338,10 +353,10 @@ def sendStreamlabsAlert(channel, data):
         try:
             req = requests.post(streamlabsalerturl, headers=alertheaders, json=data)
             if req.status_code != 200:
-                print("response for streamlabs alert: " + str(req.status_code) + "; " + str(req.text))
+                logger.debug("response for streamlabs alert: " + str(req.status_code) + "; " + str(req.text))
         except:
-            print("Tried to send a Streamlabs alert to %s, but failed." % channel)
-            print("Error: " + str(sys.exc_info()))
+            logger.error("Tried to send a Streamlabs alert to %s, but failed." % channel)
+            logger.error("Error: " + str(sys.exc_info()))
             
     cur.close()
     
@@ -365,7 +380,7 @@ def sendDiscordAlert(data):
     cur.close()
 
 def sendDrawAlert(channel, waifu, user, discord=True):
-    print("Alerting for waifu " + str(waifu))
+    logger.info("Alerting for waifu " + str(waifu))
     with busyLock:
         message = "*{user}* drew [*{rarity}*] {name}!".format(user=str(user),
                                                           rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
@@ -466,7 +481,7 @@ def sendDisenchantAlert(channel, waifu, user):
         sendDiscordAlert(discordbody)
         
 def sendPromotionAlert(channel, waifu, user):
-    print("Alerting for waifu " + str(waifu))
+    logger.info("Alerting for waifu upgrade " + str(waifu))
     with busyLock:
         message = "{user} promoted {name} to god!".format(user=str(user),
                                                           name=str(waifu["name"]))
@@ -657,9 +672,9 @@ class NepBot(NepBotClass):
         reason = str(tags["ban-reason"]).replace("\\s", " ")
         if "ban-duration" in tags.keys():
             duration = tags["ban-duration"]
-            print("{user} got timed out for {duration} seconds in {channel} for: {reason}".format(user=u, channel=chan, reason=reason, duration = duration))
+            logger.info("{user} got timed out for {duration} seconds in {channel} for: {reason}".format(user=u, channel=chan, reason=reason, duration = duration))
         else:
-            print("{user} got permanently banned from {channel}. Reason: {reason}".format(user=u, channel=chan, reason=reason))
+            logger.info("{user} got permanently banned from {channel}. Reason: {reason}".format(user=u, channel=chan, reason=reason))
         return
 
     def on_hosttarget(self, message):
@@ -667,7 +682,7 @@ class NepBot(NepBotClass):
         parts = str(message).split(" ")
         sourcechannel = parts[2].strip("#")
         target = parts[3].strip(":")
-        print("{source} is now hosting {target}".format(source=sourcechannel, target=target))
+        logger.info("{source} is now hosting {target}".format(source=sourcechannel, target=target))
         return
 
     def on_userstate(self, message):
@@ -677,7 +692,7 @@ class NepBot(NepBotClass):
         params = message.params
         # print("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
         if tags["display-name"] == "Nepnepbot" and params[0] != "#nepnepbot" and tags["mod"] != '1' and params[0] not in self.nomodalerted:
-            print("No Mod in " + str(params[0]) + "!")
+            logger.info("No Mod in " + str(params[0]) + "!")
             self.nomodalerted.append(params[0])
             self.message(params[0], "Hey! I noticed i am not a mod here! Please do mod me to avoid any issues!")
         return
@@ -714,7 +729,7 @@ class NepBot(NepBotClass):
             self.on_roomstate(message)
             return
         if str(message).find("USERNOTICE") > -1:
-            print("PogChamp! Someone subbed to someone! here's the message: " + str(message))
+            logger.info("PogChamp! Someone subbed to someone! here's the message: " + str(message))
             return
         if str(message).find("WHISPER") > -1:
             self.on_whisper(message)
@@ -724,24 +739,24 @@ class NepBot(NepBotClass):
     def start(self, password):
         pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
         self.pw = password
-        print("Connecting...")
+        logger.info("Connecting...")
         def timer():
             with busyLock:
                 global t
                 t = Timer(int(config["cycleLength"]), timer)
                 t.start()
-                print("Refreshing Database Connection...")
+                logger.debug("Refreshing Database Connection...")
                 global db
                 try:
                     db.close()
                 except:
-                    print("Error closing db connection cleanly, ignoring.")
+                    logger.warning("Error closing db connection cleanly, ignoring.")
                 try:
                     db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
                 except:
-                    print("Error Reconnecting to DB. Skipping Timer Cycle.")
+                    logger.error("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
-            print("Checking live status of channels...")
+            logger.debug("Checking live status of channels...")
             checkAndRenewAppAccessToken()
             
             with busyLock:
@@ -764,10 +779,10 @@ class NepBot(NepBotClass):
                     data = response.json()["data"]
                     for element in data:
                         isLive[idtoname[str(element["user_id"])]] = True
-                        print("{user} is live!".format(user=idtoname[str(element["user_id"])]))
+                        logger.debug("{user} is live!".format(user=idtoname[str(element["user_id"])]))
                 channelids = channelids[100:]
 
-            print("Catching all viewers...")
+            logger.debug("Catching all viewers...")
             for c in self.addchannels:
                 self.mychannels.append(c)
             self.addchannels = []
@@ -775,7 +790,7 @@ class NepBot(NepBotClass):
                 try:
                     self.mychannels.remove(c)
                 except:
-                    print("Couldn't remove channel " + str(c) + " from channels, it wasn't found. Channel list: " + str(self.mychannels))
+                    logger.warning("Couldn't remove channel " + str(c) + " from channels, it wasn't found. Channel list: " + str(self.mychannels))
             self.leavechannels = []
             try:
                 global activitymap
@@ -797,12 +812,12 @@ class NepBot(NepBotClass):
                                 if isLive[channelName] and viewer not in validactivity:
                                     validactivity.append(viewer)
                     except:
-                        print("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
-                        print("Error: " + str(sys.exc_info()))
+                        logger.error("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
+                        logger.error("Error: " + str(sys.exc_info()))
 
                 
                 # process all users
-                print("Caught users, giving points and creating accounts, amount to do = %d" % len(doneusers))
+                logger.debug("Caught users, giving points and creating accounts, amount to do = %d" % len(doneusers))
                 newUsers = []
                 
                 while len(doneusers) > 0:
@@ -831,13 +846,13 @@ class NepBot(NepBotClass):
                     
                 # now deal with user names that aren't already in the DB
                 if len(newUsers) > 10000:
-                    print("DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
+                    logger.warning("DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
                     newUsers = newUsers[:10000]
                 while len(newUsers) > 0:
                     currentSlice = newUsers[:100]
                     r = requests.get("https://api.twitch.tv/helix/users", headers=headers, params={"login": currentSlice})
                     if r.status_code == 429:
-                        print("WARNING! Rate Limit Exceeded! Skipping account creation!")
+                        logger.warning("Rate Limit Exceeded! Skipping account creation!")
                         r.raise_for_status()
                     j = r.json()
                     if "data" not in j:
@@ -887,11 +902,11 @@ class NepBot(NepBotClass):
                 for user in activitymap:
                     activitymap[user] = activitymap[user] + 1
             except:
-                print("We had an error during passive point gain. skipping this cycle.")
-                print("Error: " + str(sys.exc_info()))
+                logger.warning("We had an error during passive point gain. skipping this cycle.")
+                logger.warning("Error: " + str(sys.exc_info()))
 
             if self.autoupdate:
-                print("Updating Title and Game with horaro info")
+                logger.debug("Updating Title and Game with horaro info")
                 schedule = getHoraro()
                 try:
                     data = schedule["data"]
@@ -921,8 +936,8 @@ class NepBot(NepBotClass):
                     updateBoth(str(gamesdict[str(game)]) if game in gamesdict.keys() else "Hyperdimension Neptunia", title=title)
                     setFollows(runners)
                 except:
-                    print("Error updating from Horaro. Skipping this cycle.")
-                    print("Error: " + str(sys.exc_info()))
+                    logger.warning("Error updating from Horaro. Skipping this cycle.")
+                    logger.warning("Error: " + str(sys.exc_info()))
 
             with busyLock:
                 cur = db.cursor()
@@ -935,7 +950,7 @@ class NepBot(NepBotClass):
                     cur.execute("DELETE FROM displayTokens WHERE unix_timestamp(timestamp) < {ts}".format(ts=str(beforeSeconds)))
 
                 except:
-                    print("Error deleting old tokens. skipping this cycle.")
+                    logger.warning("Error deleting old tokens. skipping this cycle.")
                 cur.close()
 
         global t
@@ -943,31 +958,31 @@ class NepBot(NepBotClass):
             timer()
 
     def on_capability_twitch_tv_membership_available(self, nothing=None):
-        print("WE HAS TWITCH MEMBERSHIP AVAILABLE! ... but we dont want it.")
+        logger.debug("WE HAS TWITCH MEMBERSHIP AVAILABLE! ... but we dont want it.")
         return False
 
     def on_capability_twitch_tv_membership_enabled(self, nothing = None):
-        print("WE HAS TWITCH MEMBERSHIP ENABLED!")
+        logger.debug("WE HAS TWITCH MEMBERSHIP ENABLED!")
         return
 
     def on_capability_twitch_tv_tags_available(self, nothing = None):
-        print("WE HAS TAGS AVAILABLE!")
+        logger.debug("WE HAS TAGS AVAILABLE!")
         return True
 
     def on_capability_twitch_tv_tags_enabled(self, nothing = None):
-        print("WE HAS TAGS ENABLED!")
+        logger.debug("WE HAS TAGS ENABLED!")
         return
 
     def on_capability_twitch_tv_commands_available(self, nothing = None):
-        print("WE HAS COMMANDS AVAILABLE!")
+        logger.debug("WE HAS COMMANDS AVAILABLE!")
         return True
 
     def on_capability_twitch_tv_commands_enabled(self, nothing = None):
-        print("WE HAS COMMANDS ENABLED!")
+        logger.debug("WE HAS COMMANDS ENABLED!")
         return
 
     def on_raw_cap_ls(self, params):
-        print("Got CAP LS")
+        logger.debug("Got CAP LS")
         # print(str(params))
         # print(str(self._capabilities))
         # for capab in params[0].split():
@@ -983,15 +998,15 @@ class NepBot(NepBotClass):
         super().on_raw_cap_ls(params)
 
     def on_disconnect(self, expected):
-        print("Disconnected, reconnecting. Was it expected? " + str(expected))
+        logger.error("Disconnected, reconnecting. Was it expected? " + str(expected))
         pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=self.pw, reconnect=True)
 
     def on_connect(self):
-        print("Connected! joining channels...")
+        logger.info("Connected! joining channels...")
         super().on_connect()
         for channel in self.mychannels:
             channel = channel.lower()
-            print("Joining " + channel + "...")
+            logger.debug("Joining " + channel + "...")
             self.join(channel)
 
     def on_raw(self, message):
@@ -1008,9 +1023,9 @@ class NepBot(NepBotClass):
 
     def on_message(self, source, target, message, tags, isWhisper=False):
         if isWhisper:
-            print("whisper: " + str(target) + ", " + message)
+            logger.debug("whisper: " + str(target) + ", " + message)
         else:
-            print("message: " + str(source) + ", " + str(target) + ", " + message)
+            logger.debug("message: " + str(source) + ", " + str(target) + ", " + message)
         # print("Tags: " + str(tags))
         
         sender = str(target).lower()
@@ -1036,9 +1051,9 @@ class NepBot(NepBotClass):
                 user = cur.fetchone()
                 if user is None:
                     cur.execute("INSERT INTO users (id, name, points) VALUE (%s, %s, %s)", [tags['user-id'], sender, 0])
-                    print("{name} didn't have an account, created it.".format(name=tags['display-name']))
+                    logger.info("{name} didn't have an account, created it.".format(name=tags['display-name']))
                 elif user[0] != sender:
-                    print("{oldname} got a new name, changing: {newname}".format(oldname=user[0], newname=sender))
+                    logger.info("{oldname} got a new name, changing: {newname}".format(oldname=user[0], newname=sender))
                     cur.execute("UPDATE users SET name = %s WHERE id = %s", [sender, tags['user-id']])
                 cur.close()
                 
@@ -1067,7 +1082,7 @@ class NepBot(NepBotClass):
         #     cur.close()
 
     def message(self, channel, message, isWhisper=False):
-        print("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
+        logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
         if isWhisper:
             super().message("#jtv", "/w " + str(channel).replace("#", "") + " " +str(message))
         else:
@@ -1075,10 +1090,10 @@ class NepBot(NepBotClass):
 
 
     def do_command(self, command, args, sender, channel, tags, isWhisper=False):
-        print("Got command: " + command + " with arguments " + str(args))
+        logger.debug("Got command: " + command + " with arguments " + str(args))
         with busyLock:
             if command == "quit" and sender in self.myadmins:
-                print("Quitting from admin command.")
+                logger.info("Quitting from admin command.")
                 pool.disconnect(client=self, expected=True)
                 # sys.exit(0)
             if command == "checkhand":
@@ -1378,7 +1393,7 @@ class NepBot(NepBotClass):
                         spent = cur.fetchone()[0]
                         if spent >= int(config["pityPullAmount"]):
                             minRarity = int(config["pityPullRarity"])
-                            print("Activated pity pull, rarity = %d" % minRarity)
+                            logger.info("Activated pity pull, rarity = %d" % minRarity)
                     
                     normalChances = packinfo[3:]
                     if minRarity == 0:
@@ -1605,7 +1620,7 @@ class NepBot(NepBotClass):
                     else:
                         paying = " with them paying you " + str(points) + " points"
                 self.message(channel, "Offered {other} to trade your {have} for their {want}{paying}".format(other=str(other), have=str(have), want=str(want), paying = paying), isWhisper=isWhisper)
-                print(repr(trades))
+                logger.debug(repr(trades))
                 return
             if command == "lookup":
                 if len(args) != 1:
@@ -1797,7 +1812,7 @@ class NepBot(NepBotClass):
                     return
                 except:
                     self.message(channel, "Tried joining, failed. Tell Marenthyu the following: " + str(sys.exc_info()), isWhisper=isWhisper)
-                    print("Error: " + str(sys.exc_info()))
+                    logger.error("Error Joining channel %s: %s", chan, str(sys.exc_info()))
                     return
             if command == "nepleave" and (sender.lower() in self.myadmins or ("#" + str(sender.lower())) == str(channel)):
                 if len(args) > 0:
@@ -1814,7 +1829,7 @@ class NepBot(NepBotClass):
                     return
                 except:
                     self.message(channel, "Tried to leave but failed D:", isWhisper=isWhisper)
-                    print("Error: " + str(sys.exc_info()))
+                    logger.error("Error leaving %s: %s", channel, str(sys.exc_info()))
                     return
             if command == "reload" and (sender.lower() in self.myadmins):
                 #print("in reload command")
@@ -1822,7 +1837,7 @@ class NepBot(NepBotClass):
                 cur.execute("SELECT * FROM config")
                 global config
                 config = {}
-                print("Importing config from database")
+                logger.info("Importing config from database")
                 for row in cur.fetchall():
                     config[row[0]] = row[1]
                 global revrarity
@@ -2340,7 +2355,7 @@ class NepBot(NepBotClass):
                         return
                 except:
                     self.message(channel, "Error loading waifu data.", isWhisper)
-                    print("Error: " + str(sys.exc_info()))
+                    logger.error("Error importing waifus: %s", str(sys.exc_info()))
                     return
             if command == "sets" or command == "set":
                 if len(args) == 0:
@@ -2477,23 +2492,23 @@ class HDNBot(pydle.Client):
     def start(self, password):
         pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
         self.pw = password
-        print("Connecting hdn...")
+        logger.info("Connecting hdn...")
 
     def on_disconnect(self, expected):
-        print("HDN Disconnected, reconnecting....")
+        logger.warning("HDN Disconnected, reconnecting....")
         pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=self.pw, reconnect=True)
 
     def on_connect(self):
         super().on_connect()
-        print("HDN Joining")
+        logger.info("HDN Joining")
         #self.join("#marenthyu")
         #self.join("#frankerfacezauthorizer")
         #self.message("#hdnmarathon", "This is a test message")
-        print("Setting up WS")
+        logger.debug("Setting up WS")
         factory = MyClientFactory(str(ffzws) + ':' + str(443))
         factory.protocol = MyClientProtocol
         hostname = str(ffzws).replace("ws://", '').replace("wss://", '')
-        print('[Websocket] Hostname: ' + hostname)
+        logger.debug('[Websocket] Hostname: ' + hostname)
         reactor.connectSSL(hostname,
                            int(443),
                            factory, contextFactory=optionsForClientTLS(hostname=hostname))
@@ -2502,7 +2517,7 @@ class HDNBot(pydle.Client):
         thread.start()
 
     def on_message(self, source, target, message):
-        print("message on #hdnmarathon: " + str(source) + ", " + str(target) + ", " + message)
+        logger.debug("message on #hdnmarathon: " + str(source) + ", " + str(target) + ", " + message)
 
 
 
@@ -2538,24 +2553,24 @@ class MyClientProtocol(WebSocketClientProtocol):
 
     def onMessage(self, payload, isBinary):
         if isBinary:
-            print("[Websocket] Binary message received: {0} bytes".format(len(payload)))
+            logger.debug("[Websocket] Binary message received: {0} bytes".format(len(payload)))
 
 
         else:
-            print("[Websocket] Text message received: {0}".format(payload.decode('utf8')))
+            logger.debug("[Websocket] Text message received: {0}".format(payload.decode('utf8')))
             parts = str(payload).split(" ")
             if len(parts) == 3 and parts[1]=="do_authorize":
-                print("[Websocket] Catched required auth, authorizing with " + "AUTH " + (parts[2].replace('"', ''))[:-1])
+                logger.info("[Websocket] Catched required auth, authorizing with " + "AUTH " + (parts[2].replace('"', ''))[:-1])
                 HDNBot.instance.message("#frankerfacezauthorizer", "AUTH " + (parts[2].replace('"', ''))[:-1])
 
 
     def onClose(self, wasClean, code, reason):
         # print('onclose')
-        print('[Websocket] Closed connection with Websocket. Reason: ' + str(reason))
+        logger.warning('[Websocket] Closed connection with Websocket. Reason: %s', str(reason))
         WebSocketClientProtocol.onClose(self, wasClean, code, reason)
 
     def sendWrap(self, msg):
-        print("[Websocket] Sending msg: " + str(str(MyClientProtocol.msgnum) + " " + msg))
+        logger.debug("[Websocket] Sending msg: " + str(str(MyClientProtocol.msgnum) + " " + msg))
         self.sendMessage(str(str(MyClientProtocol.msgnum) + " " + msg).encode('utf-8'))
         MyClientProtocol.msgnum += 1
 
@@ -2574,19 +2589,19 @@ class MyClientFactory(ReconnectingClientFactory, WebSocketClientFactory):
     protocol = MyClientProtocol
 
     def startedConnecting(self, connector):
-        print('[Websocket] Started to connect.')
+        logger.debug('[Websocket] Started to connect.')
         ReconnectingClientFactory.startedConnecting(self, connector)
 
     def clientConnectionLost(self, connector, reason):
-        print('[Websocket]  Lost connection. Reason: {}'.format(reason))
+        logger.debug('[Websocket]  Lost connection. Reason: {}'.format(reason))
         ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
 
     def clientConnectionFailed(self, connector, reason):
-        print('[Websocket]  Connection failed. Reason: {}'.format(reason))
+        logger.debug('[Websocket]  Connection failed. Reason: {}'.format(reason))
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
 
     def retry(self, connector=None):
-        print('[Websocket] Reconnecting to API Websocket in ' + str(int(self.delay)) + ' seconds...')
+        logger.debug('[Websocket] Reconnecting to API Websocket in ' + str(int(self.delay)) + ' seconds...')
         #ReconnectingClientFactory.retry(self)
 
 
@@ -2595,23 +2610,23 @@ curg = db.cursor()
 
 curg.execute("SELECT * FROM config")
 config = {}
-print("Importing config from database")
+logger.info("Importing config from database")
 for row in curg.fetchall():
     config[row[0]] = row[1]
 
-print("Config: " + str(config))
-print("Fetching channel list...")
+logger.debug("Config: " + str(config))
+logger.info("Fetching channel list...")
 curg.execute("SELECT * FROM channels")
 channels = []
 for row in curg.fetchall():
     channels.append("#" + row[0])
-print("Channels: " + str(channels))
-print("Fetching admin list...")
+logger.debug("Channels: " + str(channels))
+logger.info("Fetching admin list...")
 curg.execute("SELECT * FROM admins")
 admins = []
 for row in curg.fetchall():
     admins.append(row[0])
-print("Admins: " + str(admins))
+logger.debug("Admins: " + str(admins))
 revrarity = {}
 i = 0
 while i<=6:
@@ -2644,7 +2659,7 @@ config["twitchid"] = str(twitchid)
 b = NepBot(config, channels, admins)
 b.start(config["oauth"])
 
-print("past start")
+logger.debug("past start")
 
 if hdnoauth:
     hdnb = HDNBot()
@@ -2661,7 +2676,7 @@ def startPubSub(nepbot):
         tinstance = None
 
         def onOpen(self):
-            print("[PubSub] onOpen")
+            logger.debug("[PubSub] onOpen")
             super().onOpen()
             PubSubClientProtocol.instance = self
             def sendPing(payload=None):
@@ -2679,14 +2694,14 @@ def startPubSub(nepbot):
 
         def onMessage(self, payload, isBinary):
             if isBinary:
-                print("[PubSub] Binary message received: {0} bytes".format(len(payload)))
+                logger.debug("[PubSub] Binary message received: {0} bytes".format(len(payload)))
 
 
             else:
                 msg = payload.decode('utf8')
-                print("[PubSub] Text message received: {0}".format(str(msg).replace("\n", "")))
+                logger.debug("[PubSub] Text message received: {0}".format(str(msg).replace("\n", "")))
                 j = json.loads(msg)
-                print("Got Message Type: " + str(j["type"]).replace("\n", ""))
+                logger.debug("Got Message Type: " + str(j["type"]).replace("\n", ""))
                 if j["type"] == "MESSAGE":
                     data = j["data"]
                     message = data["message"]
@@ -2696,20 +2711,20 @@ def startPubSub(nepbot):
                         do = jmsg["data_object"]
                         body = do["body"]
                         sender = do["tags"]["login"]
-                        print("[PubSub] Got whisper from {sender}: {msg}".format(sender=sender, msg=body))
+                        logger.debug("[PubSub] Got whisper from {sender}: {msg}".format(sender=sender, msg=body))
                         if str(body).startswith("!"):
                             parts = str(body).split(" ")
                             cmd = parts[0].replace("!", "")
                             args = parts[1:]
                             PubSubClientProtocol.bot.do_command(cmd, args, "#" + sender, sender, tags=do["tags"], isWhisper=True)
                     except:
-                        print("Error converting PubSub message.")
-                        print("Error: " + str(sys.exc_info()))
+                        logger.error("Error converting PubSub message.")
+                        logger.error("Error: " + str(sys.exc_info()))
 
 
 
         def onClose(self, wasClean, code, reason):
-            print('[PubSub] Closed connection with Websocket. Reason: ' + str(reason))
+            logger.warning('[PubSub] Closed connection with Websocket. Reason: ' + str(reason))
             super().onClose(wasClean, code, reason)
 
 
@@ -2719,19 +2734,19 @@ def startPubSub(nepbot):
         protocol = PubSubClientProtocol
 
         def startedConnecting(self, connector):
-            print('[PubSub] Started to connect.')
+            logger.debug('[PubSub] Started to connect.')
             super().startedConnecting(connector)
 
         def clientConnectionLost(self, connector, reason):
-            print('[PubSub]  Lost connection. Reason: {}'.format(reason))
+            logger.debug('[PubSub]  Lost connection. Reason: {}'.format(reason))
             ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
 
         def clientConnectionFailed(self, connector, reason):
-            print('[PubSub]  Connection failed. Reason: {}'.format(reason))
+            logger.debug('[PubSub]  Connection failed. Reason: {}'.format(reason))
             ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
 
         def retry(self, connector=None):
-            print('[PubSub] Reconnecting to PubSub Websocket in ' + str(int(self.delay)) + ' seconds...')
+            logger.debug('[PubSub] Reconnecting to PubSub Websocket in ' + str(int(self.delay)) + ' seconds...')
             #ReconnectingClientFactory.retry(self)
 
     PubSubClientProtocol.bot = nepbot
@@ -2739,7 +2754,7 @@ def startPubSub(nepbot):
     factory = PubSubFactory(str(pubsubaddr))
     factory.protocol = PubSubClientProtocol
     hostname = str(pubsubaddr).replace("ws://", '').replace("wss://", '')
-    print('[PubSub] Hostname: ' + hostname)
+    logger.debug('[PubSub] Hostname: ' + hostname)
     reactor.connectSSL(hostname,
                        int(443),
                        factory, contextFactory=optionsForClientTLS(hostname=hostname))
