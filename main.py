@@ -2344,7 +2344,7 @@ class NepBot(NepBotClass):
                     return
             if command == "sets" or command == "set":
                 if len(args) == 0:
-                    self.message(channel, "Available sets: http://waifus.de/sets?user=%s. !sets rarity to check your progress on rarity sets. !sets claim to claim all sets you are eligible for." % sender.lower(), isWhisper=isWhisper)
+                    self.message(channel, "Available sets: http://waifus.de/sets?user=%s !sets rarity to check your progress on rarity sets. !sets claim to claim all sets you are eligible for." % sender.lower(), isWhisper=isWhisper)
                     return
                 subcmd = args[0].lower()
                 if subcmd == "rarity":
