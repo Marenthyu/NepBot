@@ -81,6 +81,9 @@ try:
             streamlabsclient = value
         if name == "twitchclientsecret":
             twitchclientsecret = value
+        if name == "log":
+            logger.info("Setting new console log level to %s", value)
+            ch.setLevel(logging.getLevelName(value))
     if dbpw is None:
         logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
         sys.exit(1)
