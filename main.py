@@ -15,12 +15,6 @@ import math
 import functools
 from string import ascii_letters
 
-from twisted.internet import reactor
-from autobahn.twisted.websocket import WebSocketClientProtocol
-from autobahn.twisted.websocket import WebSocketClientFactory
-from twisted.internet.protocol import ReconnectingClientFactory
-from twisted.internet.ssl import optionsForClientTLS
-
 import sys
 import re
 import logging
@@ -686,7 +680,7 @@ class NepBot(NepBotClass):
         sourcechannel = parts[2].strip("#")
         target = parts[3].strip(":")
         if target == "-":
-            logger.info("%s has stopped hosting")
+            logger.info("%s has stopped hosting", sourcechannel)
         else:
             logger.info("%s is now hosting %s", sourcechannel, target)
         return
@@ -2528,88 +2522,6 @@ class HDNBot(pydle.Client):
 
 
 
-class MyClientProtocol(WebSocketClientProtocol):
-    instance = None
-    msgnum = 1
-
-    def onOpen(self):
-        WebSocketClientProtocol.onOpen(self)
-
-        authmsg = 'hello ["NepNepBot",false]'
-        #print('[Websocket] OnOpen. Sending: ' + authmsg)
-        self.sendWrap(authmsg)
-
-        authmsg = 'setuser "hdnmarathon"'
-        #print('[Websocket] OnOpen. Sending: ' + authmsg)
-        self.sendWrap(authmsg)
-
-        authmsg = 'sub "room.hdnmarathon"'
-       #print('[Websocket] OnOpen. Sending: ' + authmsg)
-        self.sendWrap(authmsg)
-
-        authmsg = 'sub "channel.hdnmarathon"'
-        #print('[Websocket] OnOpen. Sending: ' + authmsg)
-        self.sendWrap(authmsg)
-
-        authmsg = 'ready 0'
-        #print('[Websocket] OnOpen. Sending: ' + authmsg)
-        self.sendWrap(authmsg)
-
-        MyClientProtocol.instance = self
-
-
-    def onMessage(self, payload, isBinary):
-        if isBinary:
-            logger.debug("[Websocket] Binary message received: %s bytes", str(len(payload)))
-
-
-        else:
-            logger.debug("[Websocket] Text message received: %s", payload.decode('utf8'))
-            parts = str(payload).split(" ")
-            if len(parts) == 3 and parts[1]=="do_authorize":
-                logger.info("[Websocket] Catched required auth, authorizing with AUTH %s", (parts[2].replace('"', ''))[:-1])
-                HDNBot.instance.message("#frankerfacezauthorizer", "AUTH " + (parts[2].replace('"', ''))[:-1])
-
-
-    def onClose(self, wasClean, code, reason):
-        # print('onclose')
-        logger.warning('[Websocket] Closed connection with Websocket. Reason: %s', str(reason))
-        WebSocketClientProtocol.onClose(self, wasClean, code, reason)
-
-    def sendWrap(self, msg):
-        logger.debug("[Websocket] Sending msg: %s %s", str(MyClientProtocol.msgnum), msg)
-        self.sendMessage(str(str(MyClientProtocol.msgnum) + " " + msg).encode('utf-8'))
-        MyClientProtocol.msgnum += 1
-
-    def setFollowButtons(self, users):
-        formattedusers = []
-        for user in users:
-            formattedusers.append('"{0}"'.format(str(user)))
-
-        userstring = "[" + (",".join(formattedusers)) + "]"
-        msg = 'update_follow_buttons ["{name}",{users}]'.format(name="hdnmarathon", users=userstring)
-        self.sendWrap(msg)
-
-
-
-class MyClientFactory(ReconnectingClientFactory, WebSocketClientFactory):
-    protocol = MyClientProtocol
-
-    def startedConnecting(self, connector):
-        logger.debug('[Websocket] Started to connect.')
-        ReconnectingClientFactory.startedConnecting(self, connector)
-
-    def clientConnectionLost(self, connector, reason):
-        logger.debug('[Websocket]  Lost connection. Reason: %s', reason)
-        ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
-
-    def clientConnectionFailed(self, connector, reason):
-        logger.debug('[Websocket]  Connection failed. Reason: %s', reason)
-        ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
-
-    def retry(self, connector=None):
-        logger.debug('[Websocket] Reconnecting to API Websocket in ' + str(int(self.delay)) + ' seconds...')
-        #ReconnectingClientFactory.retry(self)
 
 
 
@@ -2672,101 +2584,4 @@ if hdnoauth:
     hdnb = HDNBot()
     hdnb.start(hdnoauth)
 
-def startPubSub(nepbot):
-
-
-
-    class PubSubClientProtocol(WebSocketClientProtocol):
-        bot = None
-        instance = None
-        msgnum = 1
-        tinstance = None
-
-        def onOpen(self):
-            logger.debug("[PubSub] onOpen")
-            super().onOpen()
-            PubSubClientProtocol.instance = self
-            def sendPing(payload=None):
-                self.sendMessage(str('{"type": "PING' + (('", "nonce": ' + str(payload)) if payload is not None else '') + '"}').encode('utf-8'), False)
-                random.seed()
-                r = random.random()
-                self.tinstance = Timer(60 + r*5, sendPing)
-                self.tinstance.start()
-            self.tinstance = Timer(60, sendPing)
-            self.tinstance.start()
-            msg = str(u'{"type":"LISTEN", "data":{"topics":["whispers.100891505"], "auth_token":"' + str(config["oauth"].replace("oauth:", "")) + '"}}')
-            self.sendMessage(payload=msg.encode('utf-8'), isBinary=False)
-
-
-
-        def onMessage(self, payload, isBinary):
-            if isBinary:
-                logger.debug("[PubSub] Binary message received: %s bytes", str(len(payload)))
-
-
-            else:
-                msg = payload.decode('utf8')
-                logger.debug("[PubSub] Text message received: %s", str(msg).replace("\n", ""))
-                j = json.loads(msg)
-                logger.debug("Got Message Type: %s", str(j["type"]).replace("\n", ""))
-                if j["type"] == "MESSAGE":
-                    data = j["data"]
-                    message = data["message"]
-                    try:
-                        jmsg = json.loads(message)
-                        # print("Json message: " + str(jmsg))
-                        do = jmsg["data_object"]
-                        body = do["body"]
-                        sender = do["tags"]["login"]
-                        logger.debug("[PubSub] Got whisper from %s: %s", sender, body)
-                        if str(body).startswith("!"):
-                            parts = str(body).split(" ")
-                            cmd = parts[0].replace("!", "")
-                            args = parts[1:]
-                            PubSubClientProtocol.bot.do_command(cmd, args, "#" + sender, sender, tags=do["tags"], isWhisper=True)
-                    except:
-                        logger.error("Error converting PubSub message.")
-                        logger.error("Error: ", str(sys.exc_info()))
-
-
-
-        def onClose(self, wasClean, code, reason):
-            logger.warning('[PubSub] Closed connection with Websocket. Reason: ' + str(reason))
-            super().onClose(wasClean, code, reason)
-
-
-
-
-    class PubSubFactory(ReconnectingClientFactory, WebSocketClientFactory):
-        protocol = PubSubClientProtocol
-
-        def startedConnecting(self, connector):
-            logger.debug('[PubSub] Started to connect.')
-            super().startedConnecting(connector)
-
-        def clientConnectionLost(self, connector, reason):
-            logger.debug('[PubSub]  Lost connection. Reason: %s', reason)
-            ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
-
-        def clientConnectionFailed(self, connector, reason):
-            logger.debug('[PubSub]  Connection failed. Reason: %s', reason)
-            ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
-
-        def retry(self, connector=None):
-            logger.debug('[PubSub] Reconnecting to PubSub Websocket in ' + str(int(self.delay)) + ' seconds...')
-            #ReconnectingClientFactory.retry(self)
-
-    PubSubClientProtocol.bot = nepbot
-    pubsubaddr = "wss://pubsub-edge.twitch.tv"
-    factory = PubSubFactory(str(pubsubaddr))
-    factory.protocol = PubSubClientProtocol
-    hostname = str(pubsubaddr).replace("ws://", '').replace("wss://", '')
-    logger.debug('[PubSub] Hostname: ' + hostname)
-    reactor.connectSSL(hostname,
-                       int(443),
-                       factory, contextFactory=optionsForClientTLS(hostname=hostname))
-    thread = Thread(target=reactor.run, kwargs={'installSignalHandlers': 0})
-    thread.start()
-
-#startPubSub(b)
 pool.handle_forever()
