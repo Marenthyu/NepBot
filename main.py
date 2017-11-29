@@ -2462,6 +2462,9 @@ class NepBot(NepBotClass):
                 upgradeHand(tags["user-id"], gifted=True)
                 self.message(channel, "DEBUG: Upgraded your hand for free.", isWhisper=isWhisper)
                 return
+            if command == "nepcord":
+                self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to http://waifus.de/discord", isWhisper=isWhisper)
+                return
 
 class HDNBot(pydle.Client):
     instance = None
