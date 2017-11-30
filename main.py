@@ -1976,7 +1976,10 @@ class NepBot(NepBotClass):
                                     ( str(args[2]), str(args[1])))
 
                     cur.close()
-                    self.message(channel, "Successfully voted to '{war[name]}' Option '{option[name]}' using {amount} points!".format(war=selectedWar, option=selectedOption, amount=str(args[3])), isWhisper=isWhisper)
+                    self.message(channel, "Successfully voted to '{war[name]}' Option '{option[name]}' using {amount}"
+                                          " points!".format(war=selectedWar,
+                                                            option=selectedOption,
+                                                            amount=str(args[3])), isWhisper=isWhisper)
                     return
                 except:
                     self.message(channel, "Usage: !wars OR !wars vote <warID> <optionID> <points>", isWhisper=isWhisper)
@@ -1988,18 +1991,25 @@ class NepBot(NepBotClass):
                 purchased = paidHandUpgrades(user)
                 price = int(int(config["firstUpgradeCost"]) * math.pow(2, purchased))
                 if len(args) != 1:
-                    self.message(channel, "{user}, your current hand limit is {limit}. To add a slot for {price} points, use !upgrade buy".format(user=tags['display-name'], limit=str(limit), price=str(price)), isWhisper=isWhisper)
+                    self.message(channel, "{user}, your current hand limit is {limit}. To add a slot for {price}"
+                                          " points, use !upgrade buy".format(user=tags['display-name'],
+                                                                             limit=str(limit),
+                                                                             price=str(price)), isWhisper=isWhisper)
                     return
                 if args[0] == "buy":
                     if hasPoints(user, price):
                         addPoints(user, price * -1)
                         upgradeHand(user, gifted = False)
-                        self.message(channel, "Successfully upgraded {user}'s hand for {price} points!".format(user=tags['display-name'], price=str(price)), isWhisper=isWhisper)
+                        self.message(channel, "Successfully upgraded {user}'s hand for {price} points!".format(
+                                user=tags['display-name'], price=str(price)), isWhisper=isWhisper)
                         return
                     else:
-                        self.message(channel, "{user}, you do not have enough points to upgrade your hand - it costs {price}".format(user=tags['display-name'], price=str(price)), isWhisper=isWhisper)
+                        self.message(channel, "{user}, you do not have enough points to upgrade your hand - it costs "
+                                              "{price}".format(user=tags['display-name'], price=str(price)),
+                                     isWhisper=isWhisper)
                         return
-                self.message(channel, "Usage: !upgrade - checks your limit and the price for an upgrade; !upgrade buy - buys an additional slot for your hand", isWhisper=isWhisper)
+                self.message(channel, "Usage: !upgrade - checks your limit and the price for an upgrade; !upgrade buy "
+                                      "- buys an additional slot for your hand", isWhisper=isWhisper)
                 return
             if command == "announce":
                 if not (sender in self.myadmins):
@@ -2030,8 +2040,10 @@ class NepBot(NepBotClass):
                         return
                     if len(result) == 1:
                         self.message(channel,
-                                     "Found one waifu: [{w[id]}][{rarity}]{w[name]} from {w[series]} (use !lookup {w[id]} for more info)".format(
-                                         w=result[0], rarity=config['rarity' + str(result[0]['rarity']) + 'Name']), isWhisper=isWhisper)
+                                     "Found one waifu: [{w[id]}][{rarity}]{w[name]} from {w[series]} "
+                                     "(use !lookup {w[id]} for more info)".format(
+                                         w=result[0], rarity=config['rarity' + str(result[0]['rarity']) + 'Name']),
+                                     isWhisper=isWhisper)
                         return
                     if len(result) > 8:
                         self.message(channel, "Too many results! ({amount}) - try a longer search query.".format(
@@ -2041,12 +2053,14 @@ class NepBot(NepBotClass):
                         self.message(channel, "Multiple results (Use !lookup for more details): " + ", ".join(
                             map(lambda waifu: str(waifu['id']), result)), isWhisper=isWhisper)
                     if sender not in self.myadmins:
-                        cur.execute("UPDATE users SET lastSearch = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
+                        cur.execute("UPDATE users SET lastSearch = %s WHERE id = %s", [current_milli_time(),
+                                                                                       tags['user-id']])
                     return
                 else:
                     a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
                     datestring = "{0}".format(a).split(".")[0]
-                    self.message(channel, "Sorry, {user}, please wait {t} until you can search again.".format(user=tags['display-name'], t=datestring), isWhisper=isWhisper)
+                    self.message(channel, "Sorry, {user}, please wait {t} until you can search again.".format(
+                            user=tags['display-name'], t=datestring), isWhisper=isWhisper)
             if command == "promote":
                 if len(args) != 1:
                     self.message(channel, "Usage: !promote <id>", isWhisper)
@@ -2064,7 +2078,8 @@ class NepBot(NepBotClass):
                 w = getWaifuById(waifuid)
                 needamount = int(config["rarity" + str(w["rarity"]) + "Max"])
                 if (needamount <= 1):
-                    self.message(channel, "Sorry, you cannot upgrade " + config["rarity" + str(w["rarity"]) + "Name"] + " waifus.", isWhisper)
+                    self.message(channel, "Sorry, you cannot upgrade " + config["rarity" + str(w["rarity"]) + "Name"]
+                                 + " waifus.", isWhisper)
                     return
                 hand = getHand(tags["user-id"])
                 #print("got hand: " + str(hand))
