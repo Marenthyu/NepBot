@@ -50,14 +50,12 @@ ffzws = 'wss://andknuckles.frankerfacez.com'
 pool = pydle.ClientPool()
 current_milli_time = lambda: int(round(time.time() * 1000))
 pymysql.install_as_MySQLdb()
-global dbpw
 dbpw = None
-global hdnoauth
+
 hdnoauth = None
-global streamlabsclient
+
 streamlabsclient = None
 twitchclientsecret = None
-global t
 t = None
 # read config values from file (db login etc)
 try:
