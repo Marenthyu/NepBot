@@ -1770,7 +1770,8 @@ class NepBot(NepBotClass):
                     isWhisper=isWhisper)
                 return
             if command == "followtest" and sender.lower() in self.myadmins:
-                self.message(channel, "Attempting to set follow buttons to hdnmarathon and nepnepbot", isWhisper=isWhisper)
+                self.message(channel, "Attempting to set follow buttons to hdnmarathon and nepnepbot",
+                             isWhisper=isWhisper)
                 setFollows(["hdnmarathon", "nepnepbot"])
                 return
             # if command == "follow" and sender.lower() in self.myadmins:
@@ -1816,7 +1817,8 @@ class NepBot(NepBotClass):
                     cur = db.cursor()
                     cur.execute("SELECT COUNT(*) FROM users WHERE name=%s", [str(chan)])
                     if (cur.fetchone()[0] or 0) < 1:
-                        self.message(channel, "That user is not yet in the database! Let them talk in a channel the Bot is in to change that!", isWhisper=isWhisper)
+                        self.message(channel, "That user is not yet in the database! Let them talk in a channel the Bot"
+                                              " is in to change that!", isWhisper=isWhisper)
                         cur.close()
                         return
                     cur.execute("INSERT INTO channels(name) VALUES (%s)", [str(chan)])
@@ -1827,12 +1829,14 @@ class NepBot(NepBotClass):
                     cur.close()
                     return
                 except:
-                    self.message(channel, "Tried joining, failed. Tell Marenthyu the following: " + str(sys.exc_info()), isWhisper=isWhisper)
+                    self.message(channel, "Tried joining, failed. Tell Marenthyu the following: " + str(sys.exc_info()),
+                                 isWhisper=isWhisper)
                     logger.error("Error Joining channel %s: %s", chan, str(sys.exc_info()))
                     return
             if command == "nepleave" and (sender.lower() in self.myadmins or ("#" + str(sender.lower())) == str(channel)):
                 if len(args) > 0:
-                    self.message(channel, "nepleave doesn't take in argument. Type it in the channel to leave.", isWhisper=isWhisper)
+                    self.message(channel, "nepleave doesn't take in argument. Type it in the channel to leave.",
+                                 isWhisper=isWhisper)
                     return
                 try:
                     cur = db.cursor()
@@ -1902,7 +1906,10 @@ class NepBot(NepBotClass):
                 cur.execute("DELETE FROM waifuTokens WHERE token=%s", (str(args[0])))
                 cur.execute("DELETE FROM pointTokens WHERE token=%s", (str(args[0])))
                 cur.close()
-                self.message(channel, "Successfully redeemed token, added {points} points and these waifus to your account: {waifus}".format(points=str(givenPoints), waifus="None" if len(waifusadded) == 0 else ",".join(waifusadded)), isWhisper=isWhisper)
+                self.message(channel, "Successfully redeemed token, added {points} points and these waifus to your"
+                                      " account: {waifus}".format(
+                        points=str(givenPoints),
+                        waifus="None" if len(waifusadded) == 0 else ",".join(waifusadded)), isWhisper=isWhisper)
                 return
             if command == "wars":
                 if (len(args) != 0 and len(args) != 4) or (len(args)==4 and args[0] != "vote"):
@@ -1915,7 +1922,8 @@ class NepBot(NepBotClass):
                     warlist = []
                     for war in wars:
                         warObject = {"id": war[0], "name": war[1], "options": [], "neutral":war[2]}
-                        cur.execute("SELECT optionID, optionName, optionAmount, isWinner FROM bidWarValues WHERE warID=%s",
+                        cur.execute("SELECT optionID, optionName, optionAmount,"
+                                    " isWinner FROM bidWarValues WHERE warID=%s",
                                     (war[0]))
                         opts = cur.fetchall()
                         optArray = []
@@ -1929,7 +1937,8 @@ class NepBot(NepBotClass):
                         for war in warlist:
                             msg += "[{war[id]}]{war[name]}: [".format(war=war)
                             for opt in war["options"]:
-                                msg += "[{opt[id]}] {opt[name]}: {opt[amount]}{lead}, ".format(opt=opt, lead=" (In the lead!)" if opt["winner"] == 1 else "")
+                                msg += "[{opt[id]}] {opt[name]}: {opt[amount]}{lead}, ".format(
+                                        opt=opt, lead=" (In the lead!)" if opt["winner"] == 1 else "")
                             msg += "]; "
                         self.message(channel, msg, isWhisper=isWhisper)
                         return
@@ -1944,7 +1953,8 @@ class NepBot(NepBotClass):
                             break
 
                     if selectedWar is None:
-                        self.message(channel, "That war does not exist. Try again using a valid ID (Check !wars)", isWhisper=isWhisper)
+                        self.message(channel, "That war does not exist. Try again using a valid ID (Check !wars)",
+                                     isWhisper=isWhisper)
                         cur.close()
                         return
                     selectedOption = None
@@ -1956,20 +1966,25 @@ class NepBot(NepBotClass):
                             currentWinner = opt
 
                     if selectedOption is None:
-                        self.message(channel, "That option does not exist. Try again using a valid ID (Check !wars)", isWhisper=isWhisper)
+                        self.message(channel, "That option does not exist. Try again using a valid ID (Check !wars)",
+                                     isWhisper=isWhisper)
                         cur.close()
                         return
                     try:
                         if not hasPoints(tags['user-id'], int(args[3])):
-                            self.message(channel, "Sorry, you do not have enough points to invest " + str(args[3]), isWhisper=isWhisper)
+                            self.message(channel, "Sorry, you do not have enough points to invest " + str(args[3]),
+                                         isWhisper=isWhisper)
                             return
                     except:
                         cur.close()
-                        self.message(channel, "Sorry, but {} is not a valid number!".format(str(args[3])), isWhisper=isWhisper)
+                        self.message(channel, "Sorry, but {} is not a valid number!".format(str(args[3])),
+                                     isWhisper=isWhisper)
                         return
                     addPoints(tags['user-id'], -1 * int(args[3]))
-                    cur.execute("UPDATE bidWarValues SET optionAmount=optionAmount + %s WHERE optionID=%s AND warID=%s", (str(args[3]), str(args[2]), str(args[1])))
-                    if int(selectedOption["amount"]) + int(args[3]) > int(currentWinner["amount"]) + int(selectedWar["neutral"]):
+                    cur.execute("UPDATE bidWarValues SET optionAmount=optionAmount + %s WHERE optionID=%s AND warID=%s",
+                                (str(args[3]), str(args[2]), str(args[1])))
+                    if int(selectedOption["amount"]) + int(args[3]) > int(currentWinner["amount"]) \
+                            + int(selectedWar["neutral"]):
                         cur.execute("UPDATE bidWarValues SET isWinner='0' WHERE optionID=%s AND warID=%s",
                                     (str(currentWinner["id"]), str(args[1])))
                         cur.execute("UPDATE bidWarValues SET isWinner='1' WHERE optionID=%s AND warID=%s",
