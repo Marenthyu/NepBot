@@ -85,14 +85,14 @@ try:
     if dbpw is None:
         logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
         sys.exit(1)
-    if hdnoauth is None:
+    elif hdnoauth is None:
         logger.error("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
         sys.exit(1)
-    if twitchclientsecret is None:
+    elif twitchclientsecret is None:
         logger.error("Twitch Client Secret not set. Please add it to the conig file, with 'twitchclientsecret=<pw>'")
         sys.exit(1)
     f.close()
-except:
+except Exception:
     logger.error("Error reading config file (nepbot.cfg), aborting.")
     sys.exit(1)
 
@@ -104,14 +104,19 @@ blacklist = []
 visiblepacks = ""
 
 busyLock = threading.Lock()
-streamlabsauthurl = "https://www.streamlabs.com/api/v1.0/authorize?client_id=" + streamlabsclient + "&redirect_uri=http://marenthyu.de/cgi-bin/waifucallback.cgi&response_type=code&scope=alerts.create&state="
+streamlabsauthurl = "https://www.streamlabs.com/api/v1.0/authorize?client_id=" + streamlabsclient + \
+                    "&redirect_uri=http://marenthyu.de/cgi-bin/waifucallback.cgi" \
+                    "&response_type=code&scope=alerts.create&state="
 streamlabsalerturl = "https://streamlabs.com/api/v1.0/alerts"
-alertheaders = {"Content-Type":"application/json", "User-Agent":"Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"}
+alertheaders = {"Content-Type":"application/json", "User-Agent":"Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36"
+                                                                " (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"}
 time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-9]{2})(\.(?P<ms>[0-9]{1,3}))?')
 waifu_regex = re.compile('(\[(?P<id>[0-9]+?)])?(?P<name>.+?) *- *(?P<series>.+) *- *(?P<rarity>[0-9]) *- *(?P<link>.+?)$')
-validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound", "rarity4Length", "rarity4Sound", "rarity5Length", "rarity5Sound", "rarity6Length", "rarity6Sound"]
+validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound", "rarity4Length",
+                          "rarity4Sound", "rarity5Length", "rarity5Sound", "rarity6Length", "rarity6Sound"]
 
-def checkAndRenewAppAccessToken():
+
+def check_and_renew_app_access_token():
     krakenHeaders = {"Authorization": "OAuth %s" % config["appAccessToken"]}
     r = requests.get("https://api.twitch.tv/kraken", headers=krakenHeaders)
     resp = r.json()
@@ -762,7 +767,7 @@ class NepBot(NepBotClass):
                     logger.error("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
             logger.debug("Checking live status of channels...")
-            checkAndRenewAppAccessToken()
+            check_and_renew_app_access_token()
             
             with busyLock:
                 cur = db.cursor()
@@ -2569,7 +2574,7 @@ visiblepacks = "/".join(row[0] for row in packrows)
 curg.close()
 
 # twitch api init
-checkAndRenewAppAccessToken()
+check_and_renew_app_access_token()
 
 # get user data for the bot itself
 headers = {"Authorization": "Bearer %s" % config["appAccessToken"]}
