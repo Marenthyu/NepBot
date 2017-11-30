@@ -148,7 +148,9 @@ def place_bet(channel, userid, betms):
     if row is None:
         cur.close()
         return False
-    cur.execute("REPLACE INTO placed_bets (betid, userid, bet, updated) VALUE (%s, %s, %s, %s)", [row[0], userid, betms, current_milli_time()])
+    cur.execute("REPLACE INTO placed_bets (betid, userid, bet, updated) VALUE (%s, %s, %s, %s)", [row[0], userid,
+                                                                                                  betms,
+                                                                                                  current_milli_time()])
     cur.close()
     return True
 
@@ -168,10 +170,10 @@ def end_bet(channel):
     
     # calculate preliminary results
     cur.close()
-    return getBetResults(row[0])
+    return get_bet_results(row[0])
     
     
-def getBetResults(betid):
+def get_bet_results(betid):
     # get bet data
     cur = db.cursor()
     cur.execute("SELECT status, startTime, endTime FROM bets WHERE id = %s", [betid])
@@ -2194,7 +2196,7 @@ class NepBot(NepBotClass):
                         elif betRow[1] == 'open' or betRow[1] == 'started':
                             self.message(channel, "There is a contest currently in progress in this channel, check !bet status.", isWhisper)
                         else:
-                            resultData = getBetResults(betRow[0])
+                            resultData = get_bet_results(betRow[0])
                             if resultData is None:
                                 self.message(channel, "Error retrieving results.", isWhisper)
                                 cur.close()
@@ -2232,7 +2234,7 @@ class NepBot(NepBotClass):
                             self.message(channel, "The most recent contest in this channel was already paid out.", isWhisper)
                         else:
                             # do the thing
-                            resultData = getBetResults(betRow[0])
+                            resultData = get_bet_results(betRow[0])
                             if resultData is None:
                                 self.message(channel, "Error retrieving results.", isWhisper)
                                 cur.close()
