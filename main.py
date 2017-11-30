@@ -56,7 +56,7 @@ hdnoauth = None
 
 streamlabsclient = None
 twitchclientsecret = None
-t = None
+timer_global = None
 # read config values from file (db login etc)
 try:
     f = open("nepbot.cfg", "r")
@@ -740,9 +740,9 @@ class NepBot(NepBotClass):
         logger.info("Connecting...")
         def timer():
             with busyLock:
-                global t
-                t = Timer(int(config["cycleLength"]), timer)
-                t.start()
+                global timer_global
+                timer_global = Timer(int(config["cycleLength"]), timer)
+                timer_global.start()
                 logger.debug("Refreshing Database Connection...")
                 global db
                 try:
@@ -842,7 +842,7 @@ class NepBot(NepBotClass):
                             
                     doneusers = doneusers[100:]
                     
-                # now deal with user names that aren't already in the DB
+                # now deal with user names that aren'timer_global already in the DB
                 if len(newUsers) > 10000:
                     logger.warning("DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
                     newUsers = newUsers[:10000]
@@ -951,8 +951,8 @@ class NepBot(NepBotClass):
                     logger.warning("Error deleting old tokens. skipping this cycle.")
                 cur.close()
 
-        global t
-        if t is None:
+        global timer_global
+        if timer_global is None:
             timer()
 
     def on_capability_twitch_tv_membership_available(self, nothing=None):
