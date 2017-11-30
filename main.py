@@ -1611,16 +1611,20 @@ class NepBot(NepBotClass):
                         self.message(channel, "To trade waifus of different rarities, please append a point value the owner of the lower tier card has to pay to the command to make the trade fair. (see !help)", isWhisper=isWhisper)
                         return
                     points = int(args[3])
-                    highercost = int(config["rarity" + str(max(int(havewaifu["rarity"]), int(wantwaifu["rarity"]))) + "Value"])
-                    lowercost = int(config["rarity" + str(min(int(havewaifu["rarity"]), int(wantwaifu["rarity"]))) + "Value"])
+                    highercost = int(config["rarity" + str(max(int(havewaifu["rarity"]),
+                                                               int(wantwaifu["rarity"]))) + "Value"])
+                    lowercost = int(config["rarity" + str(min(int(havewaifu["rarity"]),
+                                                              int(wantwaifu["rarity"]))) + "Value"])
                     costdiff = highercost - lowercost
                     mini = int(costdiff/2)
                     maxi = int(costdiff)
                     if points < mini:
-                        self.message(channel, "Minimum points to trade this difference in rarity is " + str(mini), isWhisper=isWhisper)
+                        self.message(channel, "Minimum points to trade this difference in rarity is " + str(mini),
+                                     isWhisper=isWhisper)
                         return
                     if points > maxi:
-                        self.message(channel, "Maximum points to trade this difference in rarity is " + str(maxi), isWhisper=isWhisper)
+                        self.message(channel, "Maximum points to trade this difference in rarity is " + str(maxi),
+                                     isWhisper=isWhisper)
                         return
                     if int(wantwaifu["rarity"]) < int(havewaifu["rarity"]):
                         payup = otherid
@@ -1635,7 +1639,8 @@ class NepBot(NepBotClass):
                         paying = " with you paying them " + str(points) + " points"
                     else:
                         paying = " with them paying you " + str(points) + " points"
-                self.message(channel, "Offered {other} to trade your {have} for their {want}{paying}".format(other=str(other), have=str(have), want=str(want), paying = paying), isWhisper=isWhisper)
+                self.message(channel, "Offered {other} to trade your {have} for their {want}{paying}".format(
+                        other=str(other), have=str(have), want=str(want), paying = paying), isWhisper=isWhisper)
                 logger.debug(repr(trades))
                 return
             if command == "lookup":
@@ -1658,16 +1663,19 @@ class NepBot(NepBotClass):
                         waifu["rarity"] = config["rarity%dName" % waifu["rarity"]]
                         waifu["owned"] = (" - owned by " + ", ".join(owned)) if len(owned) > 0 else " (not dropped so far)"
 
-                        self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}'.format(**waifu), isWhisper=isWhisper)
+                        self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}'.format(**waifu),
+                                     isWhisper=isWhisper)
 
                         if sender not in self.myadmins:
-                            cur.execute("UPDATE users SET lastLookup = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
+                            cur.execute("UPDATE users SET lastLookup = %s WHERE id = %s", [current_milli_time(),
+                                                                                           tags['user-id']])
                     except:
                         self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
                 else:
                     a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
                     datestring = "{0}".format(a).split(".")[0]
-                    self.message(channel, "Sorry, {user}, please wait {t} until you lookup again.".format(user=str(sender), t=datestring), isWhisper=isWhisper)
+                    self.message(channel, "Sorry, {user}, please wait {t} until you lookup again.".format(
+                            user=str(sender), t=datestring), isWhisper=isWhisper)
 
                 cur.close()
                 return
@@ -1676,13 +1684,15 @@ class NepBot(NepBotClass):
                     self.message("#jtv", "/w {user} This is a test whisper.".format(user=sender), isWhisper=False)
                     self.message(channel, "Attempted to send test whisper.", isWhisper=isWhisper)
                 else:
-                    self.message(channel, "{user}, you need to be following me so i can send you whispers!".format(user=str(tags['display-name'])), isWhisper=isWhisper)
+                    self.message(channel, "{user}, you need to be following me so i can send you whispers!".format(
+                            user=str(tags['display-name'])), isWhisper=isWhisper)
                 return
             if command == "help":
                 self.message(channel, "http://waifus.de/help", isWhisper=isWhisper)
             if command == "alerts" or command=="alert":
                 if len(args) < 1:
-                    self.message(channel, "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>", isWhisper=isWhisper)
+                    self.message(channel, "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config"
+                                          " <config Name> <config Value>", isWhisper=isWhisper)
                     return
                 sender = sender.lower()
                 subcmd = str(args[0]).lower()
@@ -1694,9 +1704,11 @@ class NepBot(NepBotClass):
                         self.message("#jtv",
                                      "/w {user} Please go to the following link and allow access: {link}{user}".format(
                                          user=sender.strip(), link=str(streamlabsauthurl).strip()), isWhisper=False)
-                        self.message(channel, "Sent you a whisper with a link to set up alerts. If you didnt receive a whisper, try !whisper", isWhisper=isWhisper)
+                        self.message(channel, "Sent you a whisper with a link to set up alerts. If you didnt receive a"
+                                              " whisper, try !whisper", isWhisper=isWhisper)
                     else:
-                        self.message(channel, "Alerts seem to already be set up for your channel! Use !alerts test to test them!", isWhisper)
+                        self.message(channel, "Alerts seem to already be set up for your channel! Use !alerts test to"
+                                              " test them!", isWhisper)
                     cur.close()
                     return
                 if subcmd == "test":
@@ -1709,10 +1721,12 @@ class NepBot(NepBotClass):
                     row = cur.fetchone();
                     cur.close()
                     if row[0] is None:
-                        self.message(channel, "Alerts do not seem to be set up for your channel, please set them up using !alerts setup", isWhisper=isWhisper)
+                        self.message(channel, "Alerts do not seem to be set up for your channel, please set them up"
+                                              " using !alerts setup", isWhisper=isWhisper)
                     else:
                         threading.Thread(target=sendDrawAlert, args=(
-                        sender, {"name": "Test Alert, please ignore", "rarity": rarity, "image": "http://t.fuelr.at/k6g"},
+                        sender, {"name": "Test Alert, please ignore",
+                                 "rarity": rarity, "image": "http://t.fuelr.at/k6g"},
                         str(tags["display-name"]), False)).start()
                         self.message(channel, "Test Alert sent.", isWhisper=isWhisper)
                     return
@@ -1720,13 +1734,15 @@ class NepBot(NepBotClass):
                     try:
                         configName = args[1]
                     except:
-                        self.message(channel, "Valid alert config options: " + ", ".join(validalertconfigvalues), isWhisper=isWhisper)
+                        self.message(channel, "Valid alert config options: " + ", ".join(validalertconfigvalues),
+                                     isWhisper=isWhisper)
                         return
                     if configName == "reset":
                         cur = db.cursor()
                         cur.execute("DELETE FROM alertConfig WHERE channelName = %s", [sender])
                         cur.close()
-                        self.message(channel, "Removed all custom alert config for your channel. #NoireScremRules", isWhisper=isWhisper)
+                        self.message(channel, "Removed all custom alert config for your channel. #NoireScremRules",
+                                     isWhisper=isWhisper)
                         return
                     if configName not in validalertconfigvalues:
                         self.message(channel, "Valid alert config options: " + ", ".join(validalertconfigvalues),
@@ -1736,13 +1752,16 @@ class NepBot(NepBotClass):
                         configValue = args[2]
                     except:
                         cur = db.cursor()
-                        cur.execute("SELECT val FROM alertConfig WHERE channelName=%s AND config = %s", [sender, configName])
+                        cur.execute("SELECT val FROM alertConfig WHERE channelName=%s AND config = %s",
+                                    [sender, configName])
                         rows = cur.fetchall()
                         if len(rows) != 1:
-                            self.message(channel, 'Alert config "' + configName + '" is unset for your channel.', isWhisper=isWhisper)
+                            self.message(channel, 'Alert config "' + configName + '" is unset for your channel.',
+                                         isWhisper=isWhisper)
                         else:
                             configValue = rows[0][0]
-                            self.message(channel, 'Alert config "' + configName + '" is set to "' + configValue + '" for your channel.', isWhisper=isWhisper)
+                            self.message(channel, 'Alert config "' + configName + '" is set to "' + configValue +
+                                         '" for your channel.', isWhisper=isWhisper)
                         cur.close()
                         return
                     cur = db.cursor()
@@ -1752,10 +1771,13 @@ class NepBot(NepBotClass):
                     if configValue == "reset":
                         cur.execute("DELETE FROM alertConfig WHERE channelName=%s AND config=%s", [sender, configName])
                         cur.close()
-                        self.message(channel, 'Reset custom alert config "' + configName + '" for your channel.', isWhisper=isWhisper)
+                        self.message(channel, 'Reset custom alert config "' + configName + '" for your channel.',
+                                     isWhisper=isWhisper)
                         return
-                    if configName == "alertChannel" and configValue not in ["host", "donation", "follow", "reset", "subscription"]:
-                        self.message(channel, 'Valid options for alertChannel: "host", "donation", "follow", "subscription", "reset"')
+                    if configName == "alertChannel" and configValue not in ["host", "donation", "follow", "reset"
+                        , "subscription"]:
+                        self.message(channel, 'Valid options for alertChannel: "host", "donation", "follow",'
+                                              ' "subscription", "reset"')
                         cur.close()
                         return
                     if len(rows) == 1:
@@ -1763,11 +1785,12 @@ class NepBot(NepBotClass):
                     else:
                         cur.execute("INSERT INTO alertConfig(val, channelName, config) VALUE (%s, %s, %s)", [configValue, sender, configName])
                     cur.close()
-                    self.message(channel, 'Set alert config value "' + configName + '" to "' + configValue + '"', isWhisper=isWhisper)
+                    self.message(channel, 'Set alert config value "' + configName + '" to "' + configValue + '"',
+                                 isWhisper=isWhisper)
                     return
                 self.message(channel,
-                    "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
-                    isWhisper=isWhisper)
+                             "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
+                             isWhisper=isWhisper)
                 return
             if command == "followtest" and sender.lower() in self.myadmins:
                 self.message(channel, "Attempting to set follow buttons to hdnmarathon and nepnepbot",
