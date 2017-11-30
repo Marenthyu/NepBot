@@ -124,7 +124,8 @@ def check_and_renew_app_access_token():
     if "identified" not in resp or not resp["identified"]:
         # app access token has expired, get a new one
         logger.debug("Requesting new token")
-        url = 'https://api.twitch.tv/kraken/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (config["clientID"], twitchclientsecret)
+        url = 'https://api.twitch.tv/kraken/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' %\
+              (config["clientID"], twitchclientsecret)
         r = requests.post(url)
         try:
             jsondata = r.json()
@@ -222,7 +223,8 @@ def openBet(channel):
         
 def cancelBet(channel):
     cur = db.cursor()
-    affected = cur.execute("UPDATE bets SET status = 'cancelled' WHERE channel = %s AND status IN('open', 'started')", [channel])
+    affected = cur.execute("UPDATE bets SET status = 'cancelled' WHERE channel = %s AND status IN('open', 'started')",
+                           [channel])
     cur.close()
     return affected > 0
 
@@ -233,7 +235,8 @@ def getHand(twitchid):
         logger.error("Got non-integer id for getHand. Aborting.")
         return []
     cur = db.cursor()
-    cur.execute("SELECT amount, waifus.name, waifus.id, rarity, series, image FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < 7) DESC, waifus.id ASC", [tID])
+    cur.execute("SELECT amount, waifus.name, waifus.id, rarity, series, image FROM has_waifu JOIN waifus ON has_waifu."
+                "waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < 7) DESC, waifus.id ASC", [tID])
     rows = cur.fetchall()
     cur.close()
     return [{"name":row[1], "amount":row[0], "id":row[2], "rarity":row[3], "series":row[4], "image":row[5]} for row in rows]
@@ -252,7 +255,8 @@ def whoHas(id):
         a = int(id)
     except: return []
     cur = db.cursor()
-    cur.execute("SELECT users.name FROM has_waifu INNER JOIN users ON has_waifu.userid = users.id WHERE has_waifu.waifuid = %s", str(id))
+    cur.execute("SELECT users.name FROM has_waifu INNER JOIN users ON has_waifu.userid = users.id WHERE "
+                "has_waifu.waifuid = %s", str(id))
     rows = cur.fetchall()
     ret = []
     for row in rows:
@@ -278,7 +282,8 @@ def paidHandUpgrades(userid):
 
 def upgradeHand(userid, gifted=False):
     cur = db.cursor()
-    cur.execute("UPDATE users SET handLimit = handLimit + 1, paidHandUpgrades = paidHandUpgrades + %s WHERE id = %s", [0 if gifted else 1, userid])
+    cur.execute("UPDATE users SET handLimit = handLimit + 1, paidHandUpgrades = paidHandUpgrades + %s WHERE id = %s",
+                [0 if gifted else 1, userid])
     cur.close()
 
 def addDisplayToken(token, waifus):
@@ -294,7 +299,8 @@ def addDisplayToken(token, waifus):
 
 def getHoraro():
     "https://horaro.org/-/api/v1/schedules/3911mu51ljb1wf7a5e/ticker"
-    r = requests.get("https://horaro.org/-/api/v1/schedules/{horaroid}/ticker?hiddenkey=NepSmug".format(horaroid=config["horaroID"]))
+    r = requests.get("https://horaro.org/-/api/v1/schedules/{horaroid}/ticker?hiddenkey=NepSmug".format(
+            horaroid=config["horaroID"]))
     try:
         j = r.json()
         #("got horaro ticker: " + str(j))
@@ -414,9 +420,11 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         keys = alertconfig.keys()
         alertChannel = "donation" if "alertChannel" not in keys else alertconfig["alertChannel"]
         defaultSound = config["alertSound"] if "defaultSound" not in keys else alertconfig["defaultSound"]
-        alertSound = defaultSound if str("rarity" + str(waifu["rarity"]) + "Sound") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Sound")]
+        alertSound = defaultSound if str("rarity" + str(waifu["rarity"]) + "Sound") not in keys else \
+            alertconfig[str("rarity" + str(waifu["rarity"]) + "Sound")]
         defaultLength = config["alertDuration"] if "defaultLength" not in keys else alertconfig["defaultLength"]
-        alertLength = defaultLength if str("rarity" + str(waifu["rarity"]) + "Length") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Length")]
+        alertLength = defaultLength if str("rarity" + str(waifu["rarity"]) + "Length") not in keys else \
+            alertconfig[str("rarity" + str(waifu["rarity"]) + "Length")]
         alertColor = "default" if "color" not in keys else alertconfig["color"]
 
 
@@ -525,7 +533,8 @@ def sendPromotionAlert(channel, waifu, user):
 
 def followsme(userid):
     try:
-        r = requests.get("https://api.twitch.tv/kraken/users/{twitchid}/follows/{myid}".format(twitchid=str(userid), myid=str(config["twitchid"])), headers=headers)
+        r = requests.get("https://api.twitch.tv/kraken/users/{twitchid}/follows/{myid}".format(
+                twitchid=str(userid), myid=str(config["twitchid"])), headers=headers)
         j = r.json()
         return j["status"] != "404"
     except:
@@ -538,7 +547,9 @@ def getWaifuById(id):
             return None
     except:
         #print("Someone tried to ask for ID "+ str(id) + " - not happening.")
-        return {"name":"Mr. Astley", "series":"You know the Rules, and so do I.", "id":0, "image":"https://youtu.be/DLzxrzFCyOs", "rarity":"6"}
+        return {"name" :"Mr. Astley",
+                "series": "You know the Rules, and so do I.",
+                "id":0, "image": "https://youtu.be/DLzxrzFCyOs", "rarity":"6"}
     cur = db.cursor()
     cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [id])
     row = cur.fetchone()
@@ -561,7 +572,8 @@ def addPoints(userid, amount):
 
 def currentCards(userid):
     cur = db.cursor()
-    cur.execute("SELECT SUM(amount) AS totalCards FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s AND waifus.rarity < 7", [userid])
+    cur.execute("SELECT SUM(amount) AS totalCards FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id "
+                "WHERE has_waifu.userid = %s AND waifus.rarity < 7", [userid])
     ret = cur.fetchone()[0] or 0
     cur.close()
     return ret
@@ -618,7 +630,8 @@ def giveCard(userid, id):
 def logDrop(userid, waifuid, rarity, source, channel, isWhisper):
     trueChannel = "$$whisper$$" if isWhisper else channel
     cur = db.cursor()
-    cur.execute("INSERT INTO drops(userid, waifuid, rarity, source, channel, timestamp) VALUES(%s, %s, %s, %s, %s, %s)", (userid, waifuid, rarity, source, trueChannel, current_milli_time()))
+    cur.execute("INSERT INTO drops(userid, waifuid, rarity, source, channel, timestamp) VALUES(%s, %s, %s, %s, %s, %s)",
+                (userid, waifuid, rarity, source, trueChannel, current_milli_time()))
     cur.close()
     
 def formatRank(rankNum):
@@ -706,7 +719,8 @@ class NepBot(NepBotClass):
         tags = message.tags
         params = message.params
         # print("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
-        if tags["display-name"] == "Nepnepbot" and params[0] != "#nepnepbot" and tags["mod"] != '1' and params[0] not in self.nomodalerted:
+        if tags["display-name"] == "Nepnepbot" and params[0] != "#nepnepbot" and tags["mod"] != '1' and \
+                        params[0] not in self.nomodalerted:
             logger.info("No Mod in %s!", str(params[0]))
             self.nomodalerted.append(params[0])
             self.message(params[0], "Hey! I noticed i am not a mod here! Please do mod me to avoid any issues!")
@@ -727,7 +741,8 @@ class NepBot(NepBotClass):
         nick, metadata = self._parse_user(message.source)
         tags = message.tags
         params = message.params
-        # print("WHISPER received: nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
+        # print("WHISPER received: nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick,
+        #  metadata=metadata, params=params, tags=tags))
         self.on_message("#" + str(nick), str(nick), str(params[1]), tags, isWhisper=True)
 
     def on_unknown(self, message):
@@ -1103,7 +1118,6 @@ class NepBot(NepBotClass):
         else:
             super().message(channel, message)
 
-
     def do_command(self, command, args, sender, channel, tags, isWhisper=False):
         logger.debug("Got command: %s with arguments %s", command, str(args))
         with busyLock:
@@ -1115,7 +1129,8 @@ class NepBot(NepBotClass):
                 #print("Checking hand for " + sender)
                 cards = getHand(tags['user-id'])
                 if len(cards) == 0:
-                    self.message(channel, "%s, you don't currently have any waifus! Get your first one with !freewaifu" % tags['display-name'], isWhisper=isWhisper)
+                    self.message(channel, "%s, you don't currently have any waifus! Get your first one with !freewaifu"
+                                 % tags['display-name'], isWhisper=isWhisper)
                     return
 
                 # message or link?
@@ -1136,17 +1151,23 @@ class NepBot(NepBotClass):
                         self.message("#jtv", "/w %s %s" % (sender, message))
                 else:
                     limit = handLimit(tags['user-id'])
-                    self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(user=tags['display-name'], limit=limit, link=dropLink, curr=currentCards(tags['user-id'])), isWhisper=isWhisper)
+                    self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr}) and your"
+                                          " current hand is: {link}".format(user=tags['display-name'],
+                                                                            limit=limit,
+                                                                            link=dropLink,
+                                                                            curr=currentCards(tags['user-id'])),
+                                 isWhisper=isWhisper)
                 return
             if command == "points":
                 #print("Checking points for " + sender)
                 cur = db.cursor()
                 cur.execute("SELECT points FROM users WHERE id = %s", [tags['user-id']])
-                self.message(channel, str(tags['display-name']) + ", you have " + str(cur.fetchone()[0]) + " points!", isWhisper=isWhisper)
+                self.message(channel, str(tags['display-name']) + ", you have " + str(cur.fetchone()[0]) + " points!",
+                             isWhisper=isWhisper)
                 cur.close()
                 return
             if command == "freewaifu":
-                #print("Checking free waifu egliability for " + str(sender))
+                # print("Checking free waifu egliability for " + str(sender))
                 cur = db.cursor()
                 cur.execute("SELECT lastFree, handLimit FROM users WHERE id = %s", [tags['user-id']])
                 res = cur.fetchone()
@@ -1154,12 +1175,14 @@ class NepBot(NepBotClass):
                 limit = int(res[1])
                 freeAvailable = nextFree < current_milli_time()
                 if freeAvailable and currentCards(tags['user-id']) < limit:
-                    #print("egliable, dropping card.")
+                    # print("egliable, dropping card.")
                     cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [dropCard()])
                     row = cur.fetchone()
                     if int(row[3]) >= int(config["drawAlertMinimumRarity"]):
-                        threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2], "id": row[0]}, str(tags["display-name"]))).start()
-                    self.message(channel, tags['display-name'] + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
+                        threading.Thread(target=sendDrawAlert, args=(channel, {"name": row[1], "rarity": row[3], "image":
+                            row[2], "id": row[0]}, str(tags["display-name"]))).start()
+                    self.message(channel, tags['display-name'] + ', you dropped a new Waifu: [{id}][{rarity}] {name}'
+                                                                 ' from {series} - {link}'.format(
                         id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
                         link=row[2]), isWhisper=isWhisper)
                     giveCard(tags['user-id'], row[0])
@@ -1167,13 +1190,15 @@ class NepBot(NepBotClass):
                     cur.execute("UPDATE users SET lastFree = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
                     logDrop(str(tags['user-id']), id, row[3], "freewaifu", channel, isWhisper)
                 elif freeAvailable:
-                    #print("too many cards")
-                    self.message(channel, str(tags['display-name']) + ", your hand is full! !disenchant something or upgrade your hand!", isWhisper=isWhisper)
+                    # print("too many cards")
+                    self.message(channel, str(tags['display-name']) + ", your hand is full! !disenchant something or"
+                                                                      " upgrade your hand!", isWhisper=isWhisper)
                 else:
                     a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
                     datestring = "{0}".format(a).split(".")[0]
                     self.message(channel,
-                                 str(tags['display-name']) + ", you need to wait {0} for your next free drop!".format(datestring), isWhisper=isWhisper)
+                                 str(tags['display-name']) + ", you need to wait {0} for your next free drop!".format(
+                                         datestring), isWhisper=isWhisper)
                 cur.close()
                 return
             if command == "disenchant":
@@ -1185,14 +1210,17 @@ class NepBot(NepBotClass):
                     for arg in args:
                         ids.append(int(arg))
                 except:
-                    self.message(channel, "Could not decipher one or more of the waifu IDs you provided.", isWhisper=isWhisper)
+                    self.message(channel, "Could not decipher one or more of the waifu IDs you provided.",
+                                 isWhisper=isWhisper)
                     return
 
                 try:
                     inStrings = ",".join(["%s"] * len(ids))
                     cur = db.cursor()
                     # FIXME Combined format and %s? Unsure how to properly use only %s here.
-                    cur.execute("SELECT has_waifu.waifuid, has_waifu.amount, waifus.rarity, waifus.name, waifus.image FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s AND waifuid IN({0})".format(inStrings), [tags['user-id']] + ids)
+                    cur.execute("SELECT has_waifu.waifuid, has_waifu.amount, waifus.rarity, waifus.name, waifus.image "
+                                "FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE "
+                                "has_waifu.userid = %s AND waifuid IN({0})".format(inStrings), [tags['user-id']] + ids)
                     hasInfo = cur.fetchall()
 
                     # work out if any waifu is actually missing from their hand.
@@ -1204,7 +1232,8 @@ class NepBot(NepBotClass):
                         if len(missing) == 1:
                             self.message(channel, "You don't own waifu %d." % missing[0], isWhisper=isWhisper)
                         else:
-                            self.message(channel, "You don't own the following waifus: %s" % ", ".join([str(id) for id in missing]), isWhisper=isWhisper)
+                            self.message(channel, "You don't own the following waifus: %s" %
+                                         ", ".join([str(id) for id in missing]), isWhisper=isWhisper)
                         return
 
                     # handle disenchants appropriately
@@ -1213,10 +1242,14 @@ class NepBot(NepBotClass):
                         pointsGain += int(config["rarity" + str(row[2]) + "Value"])
                         if row[2] >= int(config["disenchantAlertMinimumRarity"]):
                             # valuable waifu disenchanted
-                            threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":row[3], "rarity":row[2], "image":row[4]}, str(tags["display-name"]))).start()
+                            threading.Thread(target=sendDisenchantAlert, args=(channel, {"name": row[3],
+                                                                                         "rarity": row[2],
+                                                                                         "image": row[4]},
+                                                                               str(tags["display-name"]))).start()
                         if row[1] == 1:
                             # delet this
-                            cur.execute("DELETE FROM has_waifu WHERE waifuid = %s AND userid = %s", (row[0], tags['user-id']))
+                            cur.execute("DELETE FROM has_waifu WHERE waifuid = %s AND userid = %s", (row[0],
+                                                                                                     tags['user-id']))
                         else:
                             cur.execute("UPDATE has_waifu SET amount = amount - 1 WHERE waifuid = %s AND userid = %s",
                                         (row[0], tags['user-id']))
