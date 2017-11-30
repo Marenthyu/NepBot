@@ -2505,17 +2505,7 @@ class HDNBot(pydle.Client):
         #self.join("#marenthyu")
         #self.join("#frankerfacezauthorizer")
         #self.message("#hdnmarathon", "This is a test message")
-        logger.debug("Setting up WS")
-        factory = MyClientFactory(str(ffzws) + ':' + str(443))
-        factory.protocol = MyClientProtocol
-        hostname = str(ffzws).replace("ws://", '').replace("wss://", '')
-        logger.debug('[Websocket] Hostname: ' + hostname)
-        reactor.connectSSL(hostname,
-                           int(443),
-                           factory, contextFactory=optionsForClientTLS(hostname=hostname))
-        thread = Thread(target=reactor.run, kwargs={'installSignalHandlers': 0})
 
-        thread.start()
 
     def on_message(self, source, target, message):
         logger.debug("message on #hdnmarathon: %s, %s, %s", str(source), str(target), message)
