@@ -2077,18 +2077,21 @@ class NepBot(NepBotClass):
                             hasall = True
                         break
                 if not hasall:
-                    self.message(channel, "Sorry, {user}, you only have {have}/{need} copies of that waifu.".format(user=tags["display-name"], have=str(haveamount), need=str(needamount)), isWhisper)
+                    self.message(channel, "Sorry, {user}, you only have {have}/{need} copies of that waifu.".format(
+                            user=tags["display-name"], have=str(haveamount), need=str(needamount)), isWhisper)
                     return
                 cur = db.cursor()
                 cur.execute("UPDATE waifus SET rarity = '6' WHERE id = %s", [str(waifuid)])
                 cur.execute("UPDATE has_waifu SET amount = '1' WHERE waifuid = %s", [str(waifuid)])
                 cur.close()
-                self.message(channel, "Successfully promoted " + w["name"] + " to god rarity! May Miku have mercy on their soul...", isWhisper)
+                self.message(channel, "Successfully promoted " + w["name"] + " to god rarity! May Miku have mercy on"
+                                                                             " their soul...", isWhisper)
                 threading.Thread(target=sendPromotionAlert, args=(channel, w, str(tags["display-name"]))).start()
                 return
             if command == "bet":
                 if len(args) < 1:
-                    self.message(channel, "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results", isWhisper)
+                    self.message(channel, "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet"
+                                          " start OR !bet end OR !bet cancel OR !bet results", isWhisper)
                     return
                 canManageBets = str(tags["badges"]).find("broadcaster") > -1 or sender in self.myadmins
                 match = time_regex.fullmatch(args[0])
@@ -2107,11 +2110,12 @@ class NepBot(NepBotClass):
                     open = place_bet(channel, tags["user-id"], betms)
                     if open:
                         self.message(channel,
-                                     "Successfully entered {name}'s bet: {h}h {min}min {s}s {ms}ms".format(h=bet["hours"],
-                                                                                                 min=bet["minutes"],
-                                                                                                 s=bet["seconds"],
-                                                                                                 ms=str(betms%1000),
-                                                                                                 name=tags['display-name']),
+                                     "Successfully entered {name}'s bet: {h}h {min}min {s}s {ms}ms".format(
+                                             h=bet["hours"],
+                                             min=bet["minutes"],
+                                             s=bet["seconds"],
+                                             ms=str(betms%1000),
+                                             name=tags['display-name']),
                                      isWhisper)
                     else:
                         self.message(channel, "The bets aren't open right now, sorry!", isWhisper)
@@ -2122,80 +2126,106 @@ class NepBot(NepBotClass):
                         if openBet(channel):
                             self.message(channel, "Bets are now open! Use !bet HH:MM:SS(.ms) to submit your bet!")
                         else:
-                            self.message(channel, "There is already a prediction contest in progress in your channel! Use !bet status to check what to do next!")
+                            self.message(channel, "There is already a prediction contest in progress in your channel! "
+                                                  "Use !bet status to check what to do next!")
                         return
                     elif canManageBets and subcmd == "start":
                         if startBet(channel):
                             self.message(channel, "Taking current time as start time! Good Luck! Bets are now closed.")
                         else:
-                            self.message(channel, "There wasn't an open prediction contest in your channel! Use !bet status to check current contest status.")
+                            self.message(channel, "There wasn't an open prediction contest in your channel! Use !bet"
+                                                  " status to check current contest status.")
                         return
                     elif canManageBets and subcmd == "end":
                         resultData = end_bet(str(channel).lower())
                         if resultData is None:
-                            self.message(channel, "There wasn't a prediction contest in progress in your channel! Use !bet status to check current contest status.")
+                            self.message(channel, "There wasn't a prediction contest in progress in your channel!"
+                                                  " Use !bet status to check current contest status.")
                         else:
                             formattedTime = formatTimeDelta(resultData["result"])
                             winners = resultData["winners"]
                             winnerNames = []
                             for n in range(3):
                                 winnerNames.append(winners[n]["name"] if len(winners) > n else "No-one")
-                            self.message(channel, "Contest has ended in {time}! The top 3 closest were: {first}, {second}, {third}".format(time=formattedTime, first=winnerNames[0], second=winnerNames[1], third=winnerNames[2]))
+                            self.message(channel, "Contest has ended in {time}! The top 3 closest were: {first},"
+                                                  " {second}, {third}".format(time=formattedTime,
+                                                                              first=winnerNames[0],
+                                                                              second=winnerNames[1],
+                                                                              third=winnerNames[2]))
                         return
                     elif canManageBets and subcmd == "cancel":
                         if cancelBet(channel):
-                            self.message(channel, "Cancelled the current prediction contest! Start a new one with !bet open.")
+                            self.message(channel, "Cancelled the current prediction contest! Start a new one with !bet"
+                                                  " open.")
                         else:
-                            self.message(channel, "There was no open or in-progress prediction contest in your channel! Start a new one with !bet open.")
+                            self.message(channel, "There was no open or in-progress prediction contest in your channel!"
+                                                  " Start a new one with !bet open.")
                         return
                     elif subcmd == "status":
                         # check for most recent betting
                         cur = db.cursor()
-                        cur.execute("SELECT id, status, startTime, endTime FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1", [channel])
+                        cur.execute("SELECT id, status, startTime, endTime FROM bets WHERE channel = %s ORDER BY id"
+                                    " DESC LIMIT 1", [channel])
                         betRow = cur.fetchone()
                         if betRow is None:
                             if canManageBets:
-                                self.message(channel, "No time prediction contests have been done in this channel yet. Use !bet open to open one.")
+                                self.message(channel, "No time prediction contests have been done in this channel yet."
+                                                      " Use !bet open to open one.")
                             else:
                                 self.message(channel, "No time prediction contests have been done in this channel yet.")
                         elif betRow[1] == 'cancelled':
                             if canManageBets:
-                                self.message(channel, "No time prediction contest in progress. The most recent contest was cancelled. Use !bet open to open a new one.")
+                                self.message(channel, "No time prediction contest in progress. The most recent contest"
+                                                      " was cancelled. Use !bet open to open a new one.")
                             else:
-                                self.message(channel, "No time prediction contest in progress. The most recent contest was cancelled.")
+                                self.message(channel, "No time prediction contest in progress. The most recent contest"
+                                                      " was cancelled.")
                         else:
                             cur.execute("SELECT COUNT(*) FROM placed_bets WHERE betid = %s", [betRow[0]])
                             numBets = cur.fetchone()[0] or 0
                             if betRow[1] == 'open':
                                 if canManageBets:
-                                    self.message(channel, "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer." % numBets)
+                                    self.message(channel, "Bets are currently open for a new contest. %d bets have been"
+                                                          " placed so far. !bet start to close bets and start the run"
+                                                          " timer." % numBets)
                                 else:
-                                    self.message(channel, "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
+                                    self.message(channel, "Bets are currently open for a new contest. %d bets have "
+                                                          "been placed so far." % numBets)
                             elif betRow[1] == 'started':
                                 elapsed = current_milli_time() - betRow[2]
                                 formattedTime = formatTimeDelta(elapsed)
                                 if canManageBets:
-                                    self.message(channel, "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results." % (formattedTime, numBets))
+                                    self.message(channel, "Run in progress - elapsed time %s. %d bets were placed. "
+                                                          "!bet end to end the run timer and determine results." % (
+                                        formattedTime, numBets))
                                 else:
                                     self.message(channel, "Run in progress - elapsed time %s. %d bets were placed." % (formattedTime, numBets))
                             else:
                                 formattedTime = formatTimeDelta(betRow[3] - betRow[2])
                                 if canManageBets:
-                                    self.message(channel, "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed. Use !bet results to see full results or !bet open to open a new one." % (formattedTime, numBets))
+                                    self.message(channel, "No time prediction contest in progress. The most recent c"
+                                                          "ontest ended in %s with %d bets placed. Use !bet results to"
+                                                          " see full results or !bet open to open a new one." % (
+                                        formattedTime, numBets))
                                 else:
-                                    self.message(channel, "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed." % (formattedTime, numBets))
+                                    self.message(channel, "No time prediction contest in progress. The most recent "
+                                                          "contest ended in %s with %d bets placed." % (formattedTime,
+                                                                                                        numBets))
                         cur.close()
                         return
                     elif canManageBets and subcmd == "results":
                         cur = db.cursor()
-                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1", [channel])
+                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                                    [channel])
                         betRow = cur.fetchone()
                         if betRow is None:
-                            self.message(channel, "No time prediction contests have been done in this channel yet.", isWhisper)
+                            self.message(channel, "No time prediction contests have been done in this channel yet.",
+                                         isWhisper)
                         elif betRow[1] == 'cancelled':
                             self.message(channel, "The most recent contest in this channel was cancelled.", isWhisper)
                         elif betRow[1] == 'open' or betRow[1] == 'started':
-                            self.message(channel, "There is a contest currently in progress in this channel, check !bet status.", isWhisper)
+                            self.message(channel, "There is a contest currently in progress in this channel,"
+                                                  " check !bet status.", isWhisper)
                         else:
                             resultData = get_bet_results(betRow[0])
                             if resultData is None:
@@ -2212,9 +2242,11 @@ class NepBot(NepBotClass):
                                 place = 0
                                 for row in resultData["winners"]:
                                     place += 1
-                                    formattedDelta = ("-" if row["timedelta"] < 0 else "+") + formatTimeDelta(abs(row["timedelta"]))
+                                    formattedDelta = ("-" if row["timedelta"] < 0 else "+") + formatTimeDelta(
+                                            abs(row["timedelta"]))
                                     formattedBet = formatTimeDelta(row["bet"])
-                                    entry = "({place}) {name} - {time} ({delta}); ".format(place=place, name=row["name"], time=formattedBet, delta=formattedDelta)
+                                    entry = "({place}) {name} - {time} ({delta}); ".format(place=place,
+                                                                                           name=row["name"], time=formattedBet, delta=formattedDelta)
                                     if len(entry) + len(messages[-1]) > 400:
                                         messages.append(entry)
                                     else:
@@ -2227,12 +2259,15 @@ class NepBot(NepBotClass):
                     elif sender in self.myadmins and subcmd == "payout":
                         # pay out most recent bet in this channel
                         cur = db.cursor()
-                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1", [channel])
+                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                                    [channel])
                         betRow = cur.fetchone()
                         if betRow is None or (betRow[1] != 'paid' and betRow[1] != 'completed'):
-                            self.message(channel, "There is no pending time prediction contest to be paid out for this channel.", isWhisper)
+                            self.message(channel, "There is no pending time prediction contest to be paid out for this "
+                                                  "channel.", isWhisper)
                         elif betRow[1] == 'paid':
-                            self.message(channel, "The most recent contest in this channel was already paid out.", isWhisper)
+                            self.message(channel, "The most recent contest in this channel was already paid out.",
+                                         isWhisper)
                         else:
                             # do the thing
                             resultData = get_bet_results(betRow[0])
@@ -2289,7 +2324,8 @@ class NepBot(NepBotClass):
 
                                 prizes.append(prize)
                                 addPoints(winner["id"], prize)
-                                cur.execute("UPDATE placed_bets SET prize = %s WHERE betid = %s AND userid = %s", [prize, betRow[0], winner["id"]])
+                                cur.execute("UPDATE placed_bets SET prize = %s WHERE betid = %s AND userid = %s",
+                                            [prize, betRow[0], winner["id"]])
 
                             paidOut = sum(prizes)
 
@@ -2300,19 +2336,23 @@ class NepBot(NepBotClass):
                                 bcPrize = min(max(resultData["result"] / 3600.0, max(prizes) / 3.0, 50), max(prizes))
                                 bcPrize = int(round(bcPrize / 50.0) * 50)
 
-                                cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
+                                cur.execute("UPDATE users SET points = points + %s WHERE name = %s",
+                                            [bcPrize, channel[1:]])
                                 paidOut += bcPrize
                             else:
                                 bcPrize = 0
 
-                            cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s WHERE id = %s", [paidOut, bcPrize, betRow[0]])
+                            cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s"
+                                        " WHERE id = %s", [paidOut, bcPrize, betRow[0]])
 
                             # take away points from the bot account
-                            cur.execute("UPDATE users SET points = points - %s WHERE name = %s", [paidOut, config["username"]])
+                            cur.execute("UPDATE users SET points = points - %s WHERE name = %s", [paidOut,
+                                                                                                  config["username"]])
 
                             messages = ["Paid out %d total points in prizes. Payouts: " % paidOut]
                             for i in range(numEntries):
-                                msg = "{name} ({place}) - {points} points; ".format(name=resultData["winners"][i]["name"], place=formatRank(i+1), points=prizes[i])
+                                msg = "{name} ({place}) - {points} points; ".format(
+                                        name=resultData["winners"][i]["name"], place=formatRank(i+1), points=prizes[i])
                                 if len(messages[-1] + msg) > 400:
                                     messages.append(msg)
                                 else:
@@ -2332,7 +2372,8 @@ class NepBot(NepBotClass):
                         return
                     else:
                         self.message(channel,
-                                     "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
+                                     "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start "
+                                     "OR !bet end OR !bet cancel OR !bet results",
                                      isWhisper)
                     return
             if command == "import" and sender in self.myadmins:
@@ -2361,13 +2402,16 @@ class NepBot(NepBotClass):
                             errorlines.append(lineno)
 
                     if len(errorlines) > 0:
-                        self.message(channel, "Error processing waifu data from lines: %s. Please fix formatting and try again." % ", ".join(str(lineno) for lineno in errorlines), isWhisper)
+                        self.message(channel, "Error processing waifu data from lines: %s. Please fix formatting and "
+                                              "try again." % ", ".join(str(lineno) for lineno in errorlines), isWhisper)
                         return
                     else:
                         cur = db.cursor()
-                        cur.executemany("INSERT INTO waifus (Name, image, rarity, series) VALUES(%s, %s, %s, %s)", [(waifu["name"], waifu["link"], int(waifu["rarity"]), waifu["series"].strip()) for waifu in addwaifus])
+                        cur.executemany("INSERT INTO waifus (Name, image, rarity, series) VALUES(%s, %s, %s, %s)",
+                                        [(waifu["name"], waifu["link"], int(waifu["rarity"]), waifu["series"].strip()) for waifu in addwaifus])
                         cur.close()
-                        self.message(channel, "Successfully added %d waifus to the database." % len(addwaifus), isWhisper)
+                        self.message(channel, "Successfully added %d waifus to the database." % len(addwaifus),
+                                     isWhisper)
                         return
                 except:
                     self.message(channel, "Error loading waifu data.", isWhisper)
@@ -2375,29 +2419,35 @@ class NepBot(NepBotClass):
                     return
             if command == "sets" or command == "set":
                 if len(args) == 0:
-                    self.message(channel, "Available sets: http://waifus.de/sets?user=%s !sets rarity to check your progress on rarity sets. !sets claim to claim all sets you are eligible for." % sender.lower(), isWhisper=isWhisper)
+                    self.message(channel, "Available sets: http://waifus.de/sets?user=%s !sets rarity to check your"
+                                          " progress on rarity sets. !sets claim to claim all sets you are eligible "
+                                          "for." % sender.lower(), isWhisper=isWhisper)
                     return
                 subcmd = args[0].lower()
                 if subcmd == "rarity":
                     cur = db.cursor()
-                    cur.execute("SELECT id, name, rarity, amount, reward, grouping FROM rarity_sets WHERE claimed_by IS NULL AND claimable = 1")
+                    cur.execute("SELECT id, name, rarity, amount, reward, grouping FROM rarity_sets WHERE claimed_by "
+                                "IS NULL AND claimable = 1")
                     sets = cur.fetchall()
 
                     if len(sets) == 0:
                         cur.close()
-                        self.message(channel, "There are no rarity sets available to claim right now. New ones are added each month.", isWhisper=isWhisper)
+                        self.message(channel, "There are no rarity sets available to claim right now. New ones are added"
+                                              " each month.", isWhisper=isWhisper)
                         return
 
                     # get eligibility info
                     currentGrouping = sets[0][5]
-                    cur.execute("SELECT rarity, grouping FROM rarity_sets WHERE claimed_by = %s AND grouping IN(%s, %s)", [tags['user-id'], currentGrouping, currentGrouping - 1])
+                    cur.execute("SELECT rarity, grouping FROM rarity_sets WHERE claimed_by = %s AND grouping IN(%s, %s)",
+                                [tags['user-id'], currentGrouping, currentGrouping - 1])
                     ineligibleData = cur.fetchall()
                     ineligibleRarities = []
 
                     for row in ineligibleData:
                         if row[1] == currentGrouping:
                             cur.close()
-                            self.message(channel, "You have already claimed a rarity set this month. You'll be eligible again next month.", isWhisper=isWhisper)
+                            self.message(channel, "You have already claimed a rarity set this month. You'll be eligible"
+                                                  " again next month.", isWhisper=isWhisper)
                             return
                         else:
                             ineligibleRarities.append(row[0])
@@ -2448,16 +2498,27 @@ class NepBot(NepBotClass):
                     claimed = 0
 
                     # normal sets
-                    cur.execute("SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets WHERE sets.claimed_by IS NULL AND sets.id NOT IN (SELECT DISTINCT setID FROM set_cards LEFT OUTER JOIN (SELECT * FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.id = %s) as a ON waifuid = cardID JOIN sets ON set_cards.setID = sets.id JOIN waifus ON cardID = waifus.id WHERE a.name IS NULL)", [tags["user-id"]])
+                    cur.execute("SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets WHERE sets.claimed_by IS NULL"
+                                " AND sets.id NOT IN (SELECT DISTINCT setID FROM set_cards LEFT OUTER JOIN (SELECT * "
+                                "FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.id = %s) as a ON"
+                                " waifuid = cardID JOIN sets ON set_cards.setID = sets.id JOIN waifus ON cardID = "
+                                "waifus.id WHERE a.name IS NULL)", [tags["user-id"]])
                     rows = cur.fetchall()
                     for row in rows:
                         claimed += 1
-                        cur.execute("UPDATE sets SET claimed_by = %s, claimed_at = %s WHERE sets.id = %s", [tags["user-id"], current_milli_time(), row[0]])
+                        cur.execute("UPDATE sets SET claimed_by = %s, claimed_at = %s WHERE sets.id = %s",
+                                    [tags["user-id"], current_milli_time(), row[0]])
                         addPoints(tags["user-id"], int(row[2]))
-                        self.message(channel, "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(set=row[1], user=tags["display-name"], reward=row[2]), isWhisper)
+                        self.message(channel, "Successfully claimed the Set {set} and rewarded {user} with {reward} "
+                                              "points!".format(set=row[1], user=tags["display-name"], reward=row[2]),
+                                     isWhisper)
 
                     # rarity sets
-                    cur.execute("SELECT id, name, rarity, amount, reward FROM rarity_sets rs WHERE claimable = 1 AND claimed_by IS NULL AND (SELECT COUNT(*) FROM rarity_sets rs2 WHERE rs2.claimed_by = %s AND rs2.grouping = rs.grouping) = 0 AND (SELECT COUNT(*) FROM rarity_sets rs3 WHERE rs3.grouping = rs.grouping - 1 AND rs3.claimed_by = %s AND rs3.rarity = rs.rarity) = 0 ORDER BY rs.reward DESC", [tags['user-id']] * 2)
+                    cur.execute("SELECT id, name, rarity, amount, reward FROM rarity_sets rs WHERE claimable = 1 AND "
+                                "claimed_by IS NULL AND (SELECT COUNT(*) FROM rarity_sets rs2 WHERE rs2.claimed_by"
+                                " = %s AND rs2.grouping = rs.grouping) = 0 AND (SELECT COUNT(*) FROM rarity_sets rs3 "
+                                "WHERE rs3.grouping = rs.grouping - 1 AND rs3.claimed_by = %s AND rs3.rarity = "
+                                "rs.rarity) = 0 ORDER BY rs.reward DESC", [tags['user-id']] * 2)
                     sets = cur.fetchall()
                     if len(sets) != 0:
                         # get cards
@@ -2470,18 +2531,28 @@ class NepBot(NepBotClass):
                             ineligibleCards = [row[0] for row in cardIneligibleData]
 
                             for set in sets:
-                                eligibleCards = [card["id"] for card in hand if (card["id"] not in ineligibleCards and card["rarity"] == set[2])]
+                                eligibleCards = [card["id"] for card in hand if (card["id"] not in ineligibleCards and
+                                                                                 card["rarity"] == set[2])]
                                 if len(eligibleCards) >= set[3]:
                                     # can claim
                                     claimed += 1
-                                    cur.execute("UPDATE rarity_sets SET claimed_by = %s, claimed_at = %s WHERE id = %s", [tags["user-id"], current_milli_time(), set[0]])
+                                    cur.execute("UPDATE rarity_sets SET claimed_by = %s, claimed_at = %s WHERE id = %s",
+                                                [tags["user-id"], current_milli_time(), set[0]])
                                     addPoints(tags['user-id'], set[4])
-                                    cur.executemany("INSERT INTO rarity_sets_cards (setID, cardID) VALUES(%s, %s)", [(set[0], card) for card in eligibleCards[:set[3]]])
-                                    self.message(channel, "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(set=set[1], user=tags["display-name"], reward=set[4]), isWhisper)
+                                    cur.executemany("INSERT INTO rarity_sets_cards (setID, cardID) VALUES(%s, %s)",
+                                                    [(set[0], card) for card in eligibleCards[:set[3]]])
+                                    self.message(channel,
+                                                 "Successfully claimed the Set {set} and rewarded {user} with {reward} "
+                                                 "points!".format(
+                                                         set=set[1],
+                                                         user=tags["display-name"],
+                                                         reward=set[4]),
+                                                 isWhisper)
                                     break
 
                     if claimed == 0:
-                        self.message(channel, "You do not have any completed sets that are available to be claimed. !sets and/or !sets rarity to check progress.", isWhisper=isWhisper)
+                        self.message(channel, "You do not have any completed sets that are available to be claimed."
+                                              " !sets and/or !sets rarity to check progress.", isWhisper=isWhisper)
                         return
 
                     cur.close()
@@ -2494,8 +2565,10 @@ class NepBot(NepBotClass):
                 self.message(channel, "DEBUG: Upgraded your hand for free.", isWhisper=isWhisper)
                 return
             if command == "nepcord":
-                self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to http://waifus.de/discord", isWhisper=isWhisper)
+                self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, "
+                                      "go to http://waifus.de/discord", isWhisper=isWhisper)
                 return
+
 
 class HDNBot(pydle.Client):
     instance = None
