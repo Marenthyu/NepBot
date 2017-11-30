@@ -140,7 +140,8 @@ def check_and_renew_app_access_token():
             logger.error("Access Token renew/get request was not successful")
             raise error
 
-def placeBet(channel, userid, betms):
+
+def place_bet(channel, userid, betms):
     cur = db.cursor()
     cur.execute("SELECT id FROM bets WHERE channel = %s AND status = 'open' LIMIT 1", [channel])
     row = cur.fetchone()
@@ -151,7 +152,8 @@ def placeBet(channel, userid, betms):
     cur.close()
     return True
 
-def endBet(channel):
+
+def end_bet(channel):
     # find started bet data
     cur = db.cursor()
     cur.execute("SELECT id FROM bets WHERE channel = %s AND status = 'started' LIMIT 1", [channel])
@@ -2099,7 +2101,7 @@ class NepBot(NepBotClass):
                     if sender == channel[1:]:
                         self.message(channel, "You can't bet in your own channel, sorry!", isWhisper)
                         return
-                    open = placeBet(channel, tags["user-id"], betms)
+                    open = place_bet(channel, tags["user-id"], betms)
                     if open:
                         self.message(channel,
                                      "Successfully entered {name}'s bet: {h}h {min}min {s}s {ms}ms".format(h=bet["hours"],
@@ -2126,7 +2128,7 @@ class NepBot(NepBotClass):
                             self.message(channel, "There wasn't an open prediction contest in your channel! Use !bet status to check current contest status.")
                         return
                     elif canManageBets and subcmd == "end":
-                        resultData = endBet(str(channel).lower())
+                        resultData = end_bet(str(channel).lower())
                         if resultData is None:
                             self.message(channel, "There wasn't a prediction contest in progress in your channel! Use !bet status to check current contest status.")
                         else:
