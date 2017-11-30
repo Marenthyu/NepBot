@@ -187,7 +187,8 @@ def get_bet_results(betid):
         return None
         
     timeresult = betrow[2] - betrow[1]
-    cur.execute("SELECT bet, userid, users.name FROM placed_bets INNER JOIN users ON placed_bets.userid = users.id WHERE betid = %s ORDER BY updated ASC", [betid])
+    cur.execute("SELECT bet, userid, users.name FROM placed_bets INNER JOIN users ON placed_bets.userid = users.id"
+                " WHERE betid = %s ORDER BY updated ASC", [betid])
     rows = cur.fetchall()
     placements = sorted(rows, key=lambda row: abs(int(row[0]) - timeresult))
     actualwinners = [{"id": row[1], "name": row[2], "bet": row[0], "timedelta": row[0] - timeresult} for row in placements]
@@ -2535,67 +2536,68 @@ class HDNBot(pydle.Client):
         logger.debug("message on #hdnmarathon: %s, %s, %s", str(source), str(target), message)
 
 
+def init():
+    curg = db.cursor()
+
+    curg.execute("SELECT * FROM config")
+    config = {}
+    logger.info("Importing config from database")
+    for row in curg.fetchall():
+        config[row[0]] = row[1]
+
+    logger.debug("Config: %s", str(config))
+    logger.info("Fetching channel list...")
+    curg.execute("SELECT * FROM channels")
+    channels = []
+    for row in curg.fetchall():
+        channels.append("#" + row[0])
+    logger.debug("Channels: %s", str(channels))
+    logger.info("Fetching admin list...")
+    curg.execute("SELECT * FROM admins")
+    admins = []
+    for row in curg.fetchall():
+        admins.append(row[0])
+    logger.debug("Admins: %s", str(admins))
+    revrarity = {}
+    i = 0
+    while i <= 6:
+        n = config["rarity" + str(i) + "Name"]
+        revrarity[n] = i
+        i += 1
+    curg.execute("SELECT name FROM blacklist")
+    rows = curg.fetchall()
+    for row in rows:
+        blacklist.append(row[0])
+
+    # visible packs
+    curg.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
+    packrows = curg.fetchall()
+    visiblepacks = "/".join(row[0] for row in packrows)
+    curg.close()
+
+    # twitch api init
+    check_and_renew_app_access_token()
+
+    # get user data for the bot itself
+    headers = {"Authorization": "Bearer %s" % config["appAccessToken"]}
+    r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
+                     params={"login": str(config["username"]).lower()})
+    j = r.json()
+    try:
+        twitchid = j["data"][0]["id"]
+    except:
+        twitchid = 0
+    config["twitchid"] = str(twitchid)
+    b = NepBot(config, channels, admins)
+    b.start(config["oauth"])
+
+    logger.debug("past start")
+
+    if hdnoauth:
+        hdnb = HDNBot()
+        hdnb.start(hdnoauth)
+
+    pool.handle_forever()
 
 
-
-
-curg = db.cursor()
-
-curg.execute("SELECT * FROM config")
-config = {}
-logger.info("Importing config from database")
-for row in curg.fetchall():
-    config[row[0]] = row[1]
-
-logger.debug("Config: %s", str(config))
-logger.info("Fetching channel list...")
-curg.execute("SELECT * FROM channels")
-channels = []
-for row in curg.fetchall():
-    channels.append("#" + row[0])
-logger.debug("Channels: %s", str(channels))
-logger.info("Fetching admin list...")
-curg.execute("SELECT * FROM admins")
-admins = []
-for row in curg.fetchall():
-    admins.append(row[0])
-logger.debug("Admins: %s", str(admins))
-revrarity = {}
-i = 0
-while i<=6:
-    n = config["rarity" + str(i) + "Name"]
-    revrarity[n] = i
-    i += 1
-curg.execute("SELECT name FROM blacklist")
-rows = curg.fetchall()
-for row in rows:
-    blacklist.append(row[0])
-
-# visible packs
-curg.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
-packrows = curg.fetchall()
-visiblepacks = "/".join(row[0] for row in packrows)
-curg.close()
-
-# twitch api init
-check_and_renew_app_access_token()
-
-# get user data for the bot itself
-headers = {"Authorization": "Bearer %s" % config["appAccessToken"]}
-r = requests.get("https://api.twitch.tv/helix/users", headers=headers, params={"login":str(config["username"]).lower()})
-j = r.json()
-try:
-    twitchid = j["data"][0]["id"]
-except:
-    twitchid = 0
-config["twitchid"] = str(twitchid)
-b = NepBot(config, channels, admins)
-b.start(config["oauth"])
-
-logger.debug("past start")
-
-if hdnoauth:
-    hdnb = HDNBot()
-    hdnb.start(hdnoauth)
-
-pool.handle_forever()
+init()
