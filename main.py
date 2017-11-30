@@ -48,7 +48,13 @@ gamesdict = {"Opening SetUp":games[11], "Hyperdimension Neptunia Rebirth 1":game
              "MegaTagmension Blanc + Neptune VS Zombies":games[10]}
 ffzws = 'wss://andknuckles.frankerfacez.com'
 pool = pydle.ClientPool()
-current_milli_time = lambda: int(round(time.time() * 1000))
+
+
+def current_milli_time()->int:
+    return int(round(time.time() * 1000))
+
+
+# current_milli_time = lambda: int(round(time.time() * 1000))
 pymysql.install_as_MySQLdb()
 dbpw = None
 
@@ -636,8 +642,11 @@ class PrivMessageTagSupport(pydle.features.ircv3.TaggedMessageSupport):
     else:
         self.on_private_message(nick, message, tags)
 
+
 # End Github code
 NepBotClass = pydle.featurize(pydle.Client, PrivMessageTagSupport)
+
+
 class NepBot(NepBotClass):
     # config = {}
     # mychannels = []
