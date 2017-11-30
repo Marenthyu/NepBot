@@ -639,9 +639,9 @@ class PrivMessageTagSupport(pydle.features.ircv3.TaggedMessageSupport):
 # End Github code
 NepBotClass = pydle.featurize(pydle.Client, PrivMessageTagSupport)
 class NepBot(NepBotClass):
-    config = {}
-    mychannels = []
-    myadmins = []
+    # config = {}
+    # mychannels = []
+    # myadmins = []
     autoupdate = False
     pw = None
     nomodalerted = []
