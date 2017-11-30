@@ -642,7 +642,6 @@ class NepBot(NepBotClass):
     config = {}
     mychannels = []
     myadmins = []
-    instance = None
     autoupdate = False
     pw = None
     nomodalerted = []
@@ -654,7 +653,6 @@ class NepBot(NepBotClass):
         self.config = config
         self.myadmins = admins
         self.mychannels = channels
-        NepBot.instance = self
 
     def on_clearchat(self, message):
         # print("Got clear chat message: " + str(message))
