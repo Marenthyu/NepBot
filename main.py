@@ -82,7 +82,6 @@ except:
 
 
 db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
-trades = {}
 activitymap = {}
 blacklist = []
 visiblepacks = ""
@@ -1438,61 +1437,73 @@ class NepBot(NepBotClass):
                     return
             if command == "trade":
                 ourid = int(tags['user-id'])
+                cur = db.cursor()
+                # expire old trades
+                currTime = current_milli_time()
+                cur.execute("UPDATE trades SET status = 'expired', updated = %s WHERE status = 'open' AND created <= %s", [currTime, currTime - 86400000])
                 if len(args) < 2:
                     self.message(channel, "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want> [points]", isWhisper=isWhisper)
+                    cur.close()
                     return
                 subarg = args[0].lower()
                 if subarg in ["check", "accept", "decline"]:
                     otherparty = str(args[1]).lower()
-                    cur = db.cursor()
+                    
                     cur.execute("SELECT id FROM users WHERE name = %s", [otherparty])
                     otheridrow = cur.fetchone()
-                    cur.close()
                     if otheridrow is None:
                         self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
+                        cur.close()
                         return
                     otherid = int(otheridrow[0])
                     
-                    if otherid not in trades or ourid not in trades[otherid]:
+                    # look for trade row
+                    cur.execute("SELECT id, want, have, points, payup FROM trades WHERE fromid = %s AND toid = %s AND status = 'open' LIMIT 1", [otherid, ourid])
+                    trade = cur.fetchone()
+                    
+                    if trade is None:
                         self.message(channel, otherparty + " did not send you a trade. Send one with !trade " + otherparty + " <have> <want> [points]", isWhisper=isWhisper)
+                        cur.close()
                         return
                         
-                    trade = trades[otherid][ourid]
-                    want = trade["want"]
-                    have = trade["have"]
-                    tradepoints = int(trade["points"])
+                    want = trade[1]
+                    have = trade[2]
+                    tradepoints = int(trade[3])
+                    payup = int(trade[4])
                     
                     if subarg == "check":
                         wantwaifu = getWaifuById(want)
                         havewaifu = getWaifuById(have)
                         wantname = wantwaifu["name"]
                         havename = havewaifu["name"]
-                        payer = "they will pay you" if otherid == trade["payup"] else "you will pay them"
-                        if trade["points"] > 0:
+                        payer = "they will pay you" if otherid == payup else "you will pay them"
+                        if tradepoints > 0:
                             self.message(channel, "{other} wants to trade their ({have}) {havename} for your ({want}) {wantname} and {payer} {points} points. Accept it with !trade accept {other}".format(other=otherparty, have=str(have), havename=havename, want=str(want), wantname=wantname, payer=payer, points=tradepoints), isWhisper=isWhisper)
                         else:
                             self.message(channel, "{other} wants to trade their ({have}) {havename} for your ({want}) {wantname}. Accept it with !trade accept {other}".format(other=str(args[1]).lower(), have=str(have), havename=havename, want=str(want), wantname=wantname, payer=payer), isWhisper=isWhisper)
+                        cur.close()
                         return
                     elif subarg == "decline":
-                        trades[otherid].pop(ourid)
+                        cur.execute("UPDATE trades SET status = 'declined', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                         self.message(channel, "Trade declined.", isWhisper=isWhisper)
+                        cur.close()
                         return
                     else:
                         # accept
                         cost = int(config["tradingFee"])
                         
-                        payup = trade["payup"]
-                        nonpayer = ourid if trade["payup"] == otherid else otherid
+                        nonpayer = ourid if payup == otherid else otherid
                         
                         if not hasPoints(payup, cost + tradepoints):
                             self.message(channel, "Sorry, but %s cannot cover the fair trading fee." % ("you" if payup == ourid else otherparty), isWhisper=isWhisper)
+                            cur.close()
                             return
                             
                         if not hasPoints(nonpayer, cost - tradepoints):
                             self.message(channel, "Sorry, but %s cannot cover the base trading fee." % ("you" if nonpayer == ourid else otherparty), isWhisper=isWhisper)
+                            cur.close()
                             return
                         
-                        cur = db.cursor()
                         cur.execute("SELECT SUM(amount) FROM has_waifu WHERE waifuid = %s AND userid = %s", [want, ourid])
                         wantamount = cur.fetchone()[0] or 0
                         cur.execute("SELECT SUM(amount) FROM has_waifu WHERE waifuid = %s AND userid = %s", [have, otherid])
@@ -1501,13 +1512,13 @@ class NepBot(NepBotClass):
 
                         if wantamount == 0:
                             self.message(channel, "{sender}, you don't have waifu {waifu}, so you can not accept this trade. Deleting it.".format(sender=tags['display-name'], waifu=str(want)), isWhisper=isWhisper)
-                            trades[otherid].pop(ourid)
+                            cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                             cur.close()
                             return
                         
                         if haveamount == 0:
                             self.message(channel, "{sender}, {other} doesn't have waifu {waifu}, so you can not accept this trade. Deleting it.".format(sender=tags['display-name'], waifu=str(have), other=otherparty), isWhisper=isWhisper)
-                            trades[otherid].pop(ourid)
+                            cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                             cur.close()
                             return
                             
@@ -1530,7 +1541,7 @@ class NepBot(NepBotClass):
                         addPoints(nonpayer, tradepoints - cost)
                         
                         # done
-                        trades[otherid].pop(ourid)
+                        cur.execute("UPDATE trades SET status = 'accepted', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                         
                         self.message(channel, "Trade executed!", isWhisper=isWhisper)
                         cur.close()
@@ -1538,16 +1549,16 @@ class NepBot(NepBotClass):
                 
                 if len(args) != 3 and len(args) != 4:
                     self.message(channel, "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want> [points]", isWhisper=isWhisper)
+                    cur.close()
                     return
 
                 other = args[0]
                 
-                cur = db.cursor()
                 cur.execute("SELECT id FROM users WHERE name = %s", [other])
                 otheridrow = cur.fetchone()
-                cur.close()
                 if otheridrow is None:
                     self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
+                    cur.close()
                     return
                 otherid = int(otheridrow[0])
                     
@@ -1560,10 +1571,12 @@ class NepBot(NepBotClass):
                         int(args[3])
                 except:
                     self.message(channel, "Only whole numbers/IDs please.", isWhisper=isWhisper)
+                    cur.close()
                     return
                 maxi = maxWaifuID()
                 if int(have) <= 0 or int(want) <= 0 or int(have) > int(maxi) or int(want) > int(maxi):
                     self.message(channel, "Invalid ID. Must be a number from 1 to " + str(maxi), isWhisper=isWhisper)
+                    cur.close()
                     return
 
                 havewaifu = getWaifuById(have)
@@ -1575,9 +1588,11 @@ class NepBot(NepBotClass):
                 if havewaifu["rarity"] != wantwaifu["rarity"]:
                     if int(havewaifu["rarity"]) == 7 or int(wantwaifu["rarity"]) == 7:
                         self.message(channel, "Sorry, special-rarity cards can only be traded for other special-rarity cards.", isWhisper=isWhisper)
+                        cur.close()
                         return
                     if len(args) != 4:
                         self.message(channel, "To trade waifus of different rarities, please append a point value the owner of the lower tier card has to pay to the command to make the trade fair. (see !help)", isWhisper=isWhisper)
+                        cur.close()
                         return
                     points = int(args[3])
                     highercost = int(config["rarity" + str(max(int(havewaifu["rarity"]), int(wantwaifu["rarity"]))) + "Value"])
@@ -1587,16 +1602,21 @@ class NepBot(NepBotClass):
                     maxi = int(costdiff)
                     if points < mini:
                         self.message(channel, "Minimum points to trade this difference in rarity is " + str(mini), isWhisper=isWhisper)
+                        cur.close()
                         return
                     if points > maxi:
                         self.message(channel, "Maximum points to trade this difference in rarity is " + str(maxi), isWhisper=isWhisper)
+                        cur.close()
                         return
                     if int(wantwaifu["rarity"]) < int(havewaifu["rarity"]):
                         payup = otherid
                         
-                if ourid not in trades:
-                    trades[ourid] = {}
-                trades[ourid][otherid] = {"have":have, "want":want, "points":points, "payup":payup}
+                # cancel any old trades with this pairing
+                cur.execute("UPDATE trades SET status = 'cancelled', updated = %s WHERE fromid = %s AND toid = %s AND status = 'open'", [current_milli_time(), ourid, otherid])
+                
+                # insert new trade
+                tradeData = [ourid, otherid, want, have, points, payup, current_milli_time(), "$$whisper$$" if isWhisper else channel]
+                cur.execute("INSERT INTO trades (fromid, toid, want, have, points, payup, status, created, originChannel) VALUES(%s, %s, %s, %s, %s, %s, 'open', %s, %s)", tradeData)
                 
                 paying = ""
                 if points > 0:
@@ -1605,7 +1625,6 @@ class NepBot(NepBotClass):
                     else:
                         paying = " with them paying you " + str(points) + " points"
                 self.message(channel, "Offered {other} to trade your {have} for their {want}{paying}".format(other=str(other), have=str(have), want=str(want), paying = paying), isWhisper=isWhisper)
-                print(repr(trades))
                 return
             if command == "lookup":
                 if len(args) != 1:
@@ -2262,17 +2281,14 @@ class NepBot(NepBotClass):
                                 
                             paidOut = sum(prizes)
                                 
-                            # broadcaster prize for runs > 1h
+                            # broadcaster prize
                             # run length in hours * 1000, capped to match first place prize
-                            # minimum = 1/3rd of first place prize
-                            if resultData["result"] >= 3600000:
-                                bcPrize = min(max(resultData["result"] / 3600.0, max(prizes) / 3.0, 50), max(prizes))
-                                bcPrize = int(round(bcPrize / 50.0) * 50)
-                                
-                                cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
-                                paidOut += bcPrize
-                            else:
-                                bcPrize = 0
+                            # minimum = 1/2 of first place prize
+                            bcPrize = min(max(resultData["result"] / 3600.0, max(prizes) / 2.0, 50), max(prizes))
+                            bcPrize = int(round(bcPrize / 50.0) * 50)
+                            
+                            cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
+                            paidOut += bcPrize
                                 
                             cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s WHERE id = %s", [paidOut, bcPrize, betRow[0]])
                             
