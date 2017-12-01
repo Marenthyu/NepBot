@@ -2305,7 +2305,7 @@ class NepBot(NepBotClass):
                             
                             cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
                             paidOut += bcPrize
-                                
+                            
                             cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s WHERE id = %s", [paidOut, bcPrize, betRow[0]])
 
                             # take away points from the bot account
