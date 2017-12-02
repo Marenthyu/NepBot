@@ -86,7 +86,7 @@ try:
         logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
         sys.exit(1)
     if dbname is None:
-        logger.error("Database name not set. Please add it to the config file, with 'password=<pw>'")
+        logger.error("Database name not set. Please add it to the config file, with 'database=<name>'")
         sys.exit(1)
     if hdnoauth is None:
         logger.error("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
