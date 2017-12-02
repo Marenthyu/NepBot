@@ -690,7 +690,7 @@ class NepBot(NepBotClass):
         tags = message.tags
         params = message.params
         # print("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
-        if tags["display-name"] == "Nepnepbot" and params[0] != "#nepnepbot" and tags["mod"] != '1' and params[0] not in self.nomodalerted:
+        if config["username"].lower() == "nepnepbot" and config["username".lower()] == nick.lower() and params[0] != "#nepnepbot" and tags["mod"] != '1' and params[0] not in self.nomodalerted:
             logger.info("No Mod in %s!", str(params[0]))
             self.nomodalerted.append(params[0])
             self.message(params[0], "Hey! I noticed i am not a mod here! Please do mod me to avoid any issues!")
