@@ -54,6 +54,8 @@ global dbpw
 dbpw = None
 global dbname
 dbname = None
+global silence
+silence = False
 global hdnoauth
 hdnoauth = None
 global streamlabsclient
@@ -82,6 +84,9 @@ try:
         if name == "log":
             logger.info("Setting new console log level to %s", value)
             ch.setLevel(logging.getLevelName(value))
+        if name == "silent" and value == "True":
+            logger.warning("Silent mode enabled")
+            silence = True
     if dbpw is None:
         logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
         sys.exit(1)
@@ -696,7 +701,7 @@ class NepBot(NepBotClass):
         nick, metadata = self._parse_user(message.source)
         tags = message.tags
         params = message.params
-        # print("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
+        logger.debug("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
         if config["username"].lower() == "nepnepbot" and tags["display-name"] == "Nepnepbot" and params[0] != "#nepnepbot" and tags["mod"] != '1' and params[0] not in self.nomodalerted:
             logger.info("No Mod in %s!", str(params[0]))
             self.nomodalerted.append(params[0])
@@ -964,8 +969,8 @@ class NepBot(NepBotClass):
             timer()
 
     def on_capability_twitch_tv_membership_available(self, nothing=None):
-        logger.debug("WE HAS TWITCH MEMBERSHIP AVAILABLE! ... but we dont want it.")
-        return False
+        logger.debug("WE HAS TWITCH MEMBERSHIP AVAILABLE!")
+        return True
 
     def on_capability_twitch_tv_membership_enabled(self, nothing = None):
         logger.debug("WE HAS TWITCH MEMBERSHIP ENABLED!")
@@ -1091,8 +1096,10 @@ class NepBot(NepBotClass):
         logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
         if isWhisper:
             super().message("#jtv", "/w " + str(channel).replace("#", "") + " " +str(message))
-        else:
+        elif not silence:
             super().message(channel, message)
+        else:
+            logger.debug("Message not sent as not Whisper and Silent Mode enabled")
 
 
     def do_command(self, command, args, sender, channel, tags, isWhisper=False):
@@ -2498,8 +2505,14 @@ class NepBot(NepBotClass):
                     self.message(channel, "Usage: !sets OR !sets rarity OR !sets claim", isWhisper=isWhisper)
                     return
             if command == "debug" and sender in self.myadmins:
-                upgradeHand(tags["user-id"], gifted=True)
-                self.message(channel, "DEBUG: Upgraded your hand for free.", isWhisper=isWhisper)
+                v = []
+                for chan in self.channels:
+                    channelName = str(chan).replace("#", "")
+                    for viewer in self.channels[chan]['users']:
+                        v.append(viewer)
+                logger.debug(v)
+
+                self.message(channel, "Printed debug message", isWhisper=isWhisper)
                 return
             if command == "nepcord":
                 self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to http://waifus.de/discord", isWhisper=isWhisper)
