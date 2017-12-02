@@ -52,6 +52,8 @@ current_milli_time = lambda: int(round(time.time() * 1000))
 pymysql.install_as_MySQLdb()
 global dbpw
 dbpw = None
+global dbname
+dbname = None
 global hdnoauth
 hdnoauth = None
 global streamlabsclient
@@ -69,6 +71,8 @@ try:
         logger.info("Reading config value '%s' = '<redacted>'", name)
         if name == "password":
             dbpw = value
+        if name == "database":
+            dbname = value
         if name == "hdnoauth":
             hdnoauth = value
         if name == "streamlabsclient":
@@ -80,6 +84,9 @@ try:
             ch.setLevel(logging.getLevelName(value))
     if dbpw is None:
         logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
+        sys.exit(1)
+    if dbname is None:
+        logger.error("Database name not set. Please add it to the config file, with 'password=<pw>'")
         sys.exit(1)
     if hdnoauth is None:
         logger.error("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
@@ -93,7 +100,7 @@ except:
     sys.exit(1)
 
 
-db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
+db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
 activitymap = {}
 blacklist = []
 visiblepacks = ""
@@ -751,7 +758,7 @@ class NepBot(NepBotClass):
                 except:
                     logger.warning("Error closing db connection cleanly, ignoring.")
                 try:
-                    db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
+                    db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
                 except:
                     logger.error("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
