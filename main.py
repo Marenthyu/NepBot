@@ -779,6 +779,7 @@ class NepBot(NepBotClass):
             channelids = []
             idtoname = {}
             isLive = {}
+            viewerCount = {}
             for row in rows:
                 channelids.append(str(row[1]))
                 idtoname[str(row[1])] = row[0]
@@ -789,8 +790,10 @@ class NepBot(NepBotClass):
                 with requests.get("https://api.twitch.tv/helix/streams", headers=headers, params={"type": "live", "user_id": currentSlice}) as response:
                     data = response.json()["data"]
                     for element in data:
-                        isLive[idtoname[str(element["user_id"])]] = True
+                        chanName = idtoname[str(element["user_id"])]
+                        isLive[chanName] = True
                         logger.debug("%s is live!", idtoname[str(element["user_id"])])
+                        viewerCount[chanName] = element["viewer_count"]
                 channelids = channelids[100:]
 
             logger.debug("Catching all viewers...")
@@ -812,12 +815,19 @@ class NepBot(NepBotClass):
                     #print("Fetching for channel " + str(channel))
                     channelName = str(channel).replace("#", "")
                     try:
-                        with urllib.request.urlopen('https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
-                            data = json.loads(response.read().decode())
-                            chatters = data["chatters"]
-                            a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters["global_mods"] + chatters["viewers"]
-
-                            for viewer in a:
+                        a = []
+                        if channelName in viewerCount and viewerCount[channelName] >= 800:
+                            logger.debug("%s had more than 800 viewers, catching from chatters endpoint", channelName)
+                            with urllib.request.urlopen(
+                                    'https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
+                                data = json.loads(response.read().decode())
+                                chatters = data["chatters"]
+                                a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters[
+                                    "global_mods"] + chatters["viewers"]
+                        else:
+                            for viewer in self.channels[channel]['users']:
+                                    a.append(viewer)
+                        for viewer in a:
                                 if viewer not in doneusers:
                                     doneusers.append(viewer)
                                 if isLive[channelName] and viewer not in validactivity:
