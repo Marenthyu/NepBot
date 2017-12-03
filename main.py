@@ -57,7 +57,6 @@ def current_milli_time()->int:
 # current_milli_time = lambda: int(round(time.time() * 1000))
 pymysql.install_as_MySQLdb()
 dbpw = None
-
 hdnoauth = None
 
 streamlabsclient = None
@@ -73,6 +72,8 @@ try:
         logger.info("Reading config value '%s' = '<redacted>'", name)
         if name == "password":
             dbpw = value
+        if name == "database":
+            dbname = value
         if name == "hdnoauth":
             hdnoauth = value
         if name == "streamlabsclient":
@@ -82,8 +83,14 @@ try:
         if name == "log":
             logger.info("Setting new console log level to %s", value)
             ch.setLevel(logging.getLevelName(value))
+        if name == "silent" and value == "True":
+            logger.warning("Silent mode enabled")
+            silence = True
     if dbpw is None:
         logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
+        sys.exit(1)
+    elif dbname is None:
+        logger.error("Database name not set. Please add it to the config file, with 'database=<name>'")
         sys.exit(1)
     elif hdnoauth is None:
         logger.error("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
@@ -97,8 +104,7 @@ except Exception:
     sys.exit(1)
 
 
-db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
-trades = {}
+db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
 activitymap = {}
 blacklist = []
 visiblepacks = ""
@@ -718,7 +724,7 @@ class NepBot(NepBotClass):
         nick, metadata = self._parse_user(message.source)
         tags = message.tags
         params = message.params
-        # print("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
+        logger.debug("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
         if tags["display-name"] == "Nepnepbot" and params[0] != "#nepnepbot" and tags["mod"] != '1' and \
                         params[0] not in self.nomodalerted:
             logger.info("No Mod in %s!", str(params[0]))
@@ -782,7 +788,7 @@ class NepBot(NepBotClass):
                 except:
                     logger.warning("Error closing db connection cleanly, ignoring.")
                 try:
-                    db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
+                    db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
                 except:
                     logger.error("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
@@ -798,6 +804,7 @@ class NepBot(NepBotClass):
             channelids = []
             idtoname = {}
             isLive = {}
+            viewerCount = {}
             for row in rows:
                 channelids.append(str(row[1]))
                 idtoname[str(row[1])] = row[0]
@@ -808,8 +815,10 @@ class NepBot(NepBotClass):
                 with requests.get("https://api.twitch.tv/helix/streams", headers=headers, params={"type": "live", "user_id": currentSlice}) as response:
                     data = response.json()["data"]
                     for element in data:
-                        isLive[idtoname[str(element["user_id"])]] = True
+                        chanName = idtoname[str(element["user_id"])]
+                        isLive[chanName] = True
                         logger.debug("%s is live!", idtoname[str(element["user_id"])])
+                        viewerCount[chanName] = element["viewer_count"]
                 channelids = channelids[100:]
 
             logger.debug("Catching all viewers...")
@@ -831,12 +840,19 @@ class NepBot(NepBotClass):
                     #print("Fetching for channel " + str(channel))
                     channelName = str(channel).replace("#", "")
                     try:
-                        with urllib.request.urlopen('https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
-                            data = json.loads(response.read().decode())
-                            chatters = data["chatters"]
-                            a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters["global_mods"] + chatters["viewers"]
-
-                            for viewer in a:
+                        a = []
+                        if channelName in viewerCount and viewerCount[channelName] >= 800:
+                            logger.debug("%s had more than 800 viewers, catching from chatters endpoint", channelName)
+                            with urllib.request.urlopen(
+                                    'https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
+                                data = json.loads(response.read().decode())
+                                chatters = data["chatters"]
+                                a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters[
+                                    "global_mods"] + chatters["viewers"]
+                        else:
+                            for viewer in self.channels[channel]['users']:
+                                    a.append(viewer)
+                        for viewer in a:
                                 if viewer not in doneusers:
                                     doneusers.append(viewer)
                                 if isLive[channelName] and viewer not in validactivity:
@@ -988,8 +1004,8 @@ class NepBot(NepBotClass):
             timer()
 
     def on_capability_twitch_tv_membership_available(self, nothing=None):
-        logger.debug("WE HAS TWITCH MEMBERSHIP AVAILABLE! ... but we dont want it.")
-        return False
+        logger.debug("WE HAS TWITCH MEMBERSHIP AVAILABLE!")
+        return True
 
     def on_capability_twitch_tv_membership_enabled(self, nothing = None):
         logger.debug("WE HAS TWITCH MEMBERSHIP ENABLED!")
@@ -1115,8 +1131,10 @@ class NepBot(NepBotClass):
         logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
         if isWhisper:
             super().message("#jtv", "/w " + str(channel).replace("#", "") + " " +str(message))
-        else:
+        elif not silence:
             super().message(channel, message)
+        else:
+            logger.debug("Message not sent as not Whisper and Silent Mode enabled")
 
     def do_command(self, command, args, sender, channel, tags, isWhisper=False):
         logger.debug("Got command: %s with arguments %s", command, str(args))
@@ -1541,80 +1559,79 @@ class NepBot(NepBotClass):
                     return
             if command == "trade":
                 ourid = int(tags['user-id'])
+                cur = db.cursor()
+                # expire old trades
+                currTime = current_milli_time()
+                cur.execute("UPDATE trades SET status = 'expired', updated = %s WHERE status = 'open' AND created <= %s", [currTime, currTime - 86400000])
                 if len(args) < 2:
-                    self.message(channel, "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want>"
-                                          " [points]", isWhisper=isWhisper)
+                    self.message(channel, "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want> [points]", isWhisper=isWhisper)
+                    cur.close()
+
                     return
                 subarg = args[0].lower()
                 if subarg in ["check", "accept", "decline"]:
                     otherparty = str(args[1]).lower()
-                    cur = db.cursor()
+                    
                     cur.execute("SELECT id FROM users WHERE name = %s", [otherparty])
                     otheridrow = cur.fetchone()
-                    cur.close()
                     if otheridrow is None:
                         self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
+                        cur.close()
                         return
                     otherid = int(otheridrow[0])
 
-                    if otherid not in trades or ourid not in trades[otherid]:
-                        self.message(channel, otherparty + " did not send you a trade. Send one with !trade " +
-                                     otherparty + " <have> <want> [points]", isWhisper=isWhisper)
+                    
+                    # look for trade row
+                    cur.execute("SELECT id, want, have, points, payup FROM trades WHERE fromid = %s AND toid = %s AND status = 'open' LIMIT 1", [otherid, ourid])
+                    trade = cur.fetchone()
+                    
+                    if trade is None:
+                        self.message(channel, otherparty + " did not send you a trade. Send one with !trade " + otherparty + " <have> <want> [points]", isWhisper=isWhisper)
+                        cur.close()
                         return
-
-                    trade = trades[otherid][ourid]
-                    want = trade["want"]
-                    have = trade["have"]
-                    tradepoints = int(trade["points"])
-
+                        
+                    want = trade[1]
+                    have = trade[2]
+                    tradepoints = int(trade[3])
+                    payup = int(trade[4])
+                    
                     if subarg == "check":
                         wantwaifu = getWaifuById(want)
                         havewaifu = getWaifuById(have)
                         wantname = wantwaifu["name"]
                         havename = havewaifu["name"]
-                        payer = "they will pay you" if otherid == trade["payup"] else "you will pay them"
-                        if trade["points"] > 0:
-                            self.message(channel, "{other} wants to trade their ({have}) {havename} for your ({want}) "
-                                                  "{wantname} and {payer} {points} points. Accept it with !trade"
-                                                  " accept {other}".format(
-                                    other=otherparty,
-                                    have=str(have),
-                                    havename=havename,
-                                    want=str(want),
-                                    wantname=wantname,
-                                    payer=payer, points=tradepoints), isWhisper=isWhisper)
+
+                        payer = "they will pay you" if otherid == payup else "you will pay them"
+                        if tradepoints > 0:
+                            self.message(channel, "{other} wants to trade their ({have}) {havename} for your ({want}) {wantname} and {payer} {points} points. Accept it with !trade accept {other}".format(other=otherparty, have=str(have), havename=havename, want=str(want), wantname=wantname, payer=payer, points=tradepoints), isWhisper=isWhisper)
                         else:
-                            self.message(channel, "{other} wants to trade their ({have}) {havename} for your ({want})"
-                                                  " {wantname}. Accept it with !trade accept {other}".format(
-                                    other=str(args[1]).lower(),
-                                    have=str(have),
-                                    havename=havename,
-                                    want=str(want), wantname=wantname, payer=payer), isWhisper=isWhisper)
+                            self.message(channel, "{other} wants to trade their ({have}) {havename} for your ({want}) {wantname}. Accept it with !trade accept {other}".format(other=str(args[1]).lower(), have=str(have), havename=havename, want=str(want), wantname=wantname, payer=payer), isWhisper=isWhisper)
+                        cur.close()
+
                         return
                     elif subarg == "decline":
-                        trades[otherid].pop(ourid)
+                        cur.execute("UPDATE trades SET status = 'declined', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                         self.message(channel, "Trade declined.", isWhisper=isWhisper)
+                        cur.close()
                         return
                     else:
                         # accept
                         cost = int(config["tradingFee"])
-
-                        payup = trade["payup"]
-                        nonpayer = ourid if trade["payup"] == otherid else otherid
-
+                        
+                        nonpayer = ourid if payup == otherid else otherid
+                        
                         if not hasPoints(payup, cost + tradepoints):
-                            self.message(channel, "Sorry, but %s cannot cover the fair trading fee." % (
-                                "you" if payup == ourid else otherparty), isWhisper=isWhisper)
+
+                            self.message(channel, "Sorry, but %s cannot cover the fair trading fee." % ("you" if payup == ourid else otherparty), isWhisper=isWhisper)
+                            cur.close()
                             return
 
                         if not hasPoints(nonpayer, cost - tradepoints):
-                            self.message(channel, "Sorry, but %s cannot cover the base trading fee." % (
-                                "you" if nonpayer == ourid else otherparty), isWhisper=isWhisper)
+                            self.message(channel, "Sorry, but %s cannot cover the base trading fee." % ("you" if nonpayer == ourid else otherparty), isWhisper=isWhisper)
+                            cur.close()
                             return
-
-                        cur = db.cursor()
-                        cur.execute("SELECT SUM(amount) FROM has_waifu WHERE waifuid = %s AND userid = %s",
-                                    [want, ourid])
+                        
+                        cur.execute("SELECT SUM(amount) FROM has_waifu WHERE waifuid = %s AND userid = %s", [want, ourid])
                         wantamount = cur.fetchone()[0] or 0
                         cur.execute("SELECT SUM(amount) FROM has_waifu WHERE waifuid = %s AND userid = %s",
                                     [have, otherid])
@@ -1622,19 +1639,17 @@ class NepBot(NepBotClass):
 
 
                         if wantamount == 0:
-                            self.message(channel, "{sender}, you don't have waifu {waifu}, so you can not accept"
-                                                  " this trade. Deleting it.".format(
-                                    sender=tags['display-name'], waifu=str(want)), isWhisper=isWhisper)
-                            trades[otherid].pop(ourid)
+
+                            self.message(channel, "{sender}, you don't have waifu {waifu}, so you can not accept this trade. Deleting it.".format(sender=tags['display-name'], waifu=str(want)), isWhisper=isWhisper)
+                            cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+
                             cur.close()
                             return
 
                         if haveamount == 0:
-                            self.message(channel, "{sender}, {other} doesn't have waifu {waifu}, so you can not accept"
-                                                  " this trade. Deleting it.".format(
-                                    sender=tags['display-name'], waifu=str(have), other=otherparty), isWhisper=isWhisper
-                                         )
-                            trades[otherid].pop(ourid)
+
+                            self.message(channel, "{sender}, {other} doesn't have waifu {waifu}, so you can not accept this trade. Deleting it.".format(sender=tags['display-name'], waifu=str(have), other=otherparty), isWhisper=isWhisper)
+                            cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                             cur.close()
                             return
 
@@ -1659,25 +1674,25 @@ class NepBot(NepBotClass):
                         addPoints(nonpayer, tradepoints - cost)
 
                         # done
-                        trades[otherid].pop(ourid)
-
+                        cur.execute("UPDATE trades SET status = 'accepted', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                        
                         self.message(channel, "Trade executed!", isWhisper=isWhisper)
                         cur.close()
                         return
 
                 if len(args) != 3 and len(args) != 4:
-                    self.message(channel, "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want> "
-                                          "[points]", isWhisper=isWhisper)
+
+                    self.message(channel, "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want> [points]", isWhisper=isWhisper)
+                    cur.close()
                     return
 
                 other = args[0]
-
-                cur = db.cursor()
+                
                 cur.execute("SELECT id FROM users WHERE name = %s", [other])
                 otheridrow = cur.fetchone()
-                cur.close()
                 if otheridrow is None:
                     self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
+                    cur.close()
                     return
                 otherid = int(otheridrow[0])
 
@@ -1690,10 +1705,12 @@ class NepBot(NepBotClass):
                         int(args[3])
                 except:
                     self.message(channel, "Only whole numbers/IDs please.", isWhisper=isWhisper)
+                    cur.close()
                     return
                 maxi = maxWaifuID()
                 if int(have) <= 0 or int(want) <= 0 or int(have) > int(maxi) or int(want) > int(maxi):
                     self.message(channel, "Invalid ID. Must be a number from 1 to " + str(maxi), isWhisper=isWhisper)
+                    cur.close()
                     return
 
                 havewaifu = getWaifuById(have)
@@ -1704,13 +1721,14 @@ class NepBot(NepBotClass):
                 payup = ourid
                 if havewaifu["rarity"] != wantwaifu["rarity"]:
                     if int(havewaifu["rarity"]) == 7 or int(wantwaifu["rarity"]) == 7:
-                        self.message(channel, "Sorry, special-rarity cards can only be traded for other "
-                                              "special-rarity cards.", isWhisper=isWhisper)
+
+                        self.message(channel, "Sorry, special-rarity cards can only be traded for other special-rarity cards.", isWhisper=isWhisper)
+                        cur.close()
                         return
                     if len(args) != 4:
-                        self.message(channel, "To trade waifus of different rarities, please append a point value "
-                                              "the owner of the lower tier card has to pay to the command to make "
-                                              "the trade fair. (see !help)", isWhisper=isWhisper)
+                        self.message(channel, "To trade waifus of different rarities, please append a point value the owner of the lower tier card has to pay to the command to make the trade fair. (see !help)", isWhisper=isWhisper)
+                        cur.close()
+
                         return
                     points = int(args[3])
                     highercost = int(config["rarity" + str(max(int(havewaifu["rarity"]),
@@ -1721,29 +1739,32 @@ class NepBot(NepBotClass):
                     mini = int(costdiff/2)
                     maxi = int(costdiff)
                     if points < mini:
-                        self.message(channel, "Minimum points to trade this difference in rarity is " + str(mini),
-                                     isWhisper=isWhisper)
+
+                        self.message(channel, "Minimum points to trade this difference in rarity is " + str(mini), isWhisper=isWhisper)
+                        cur.close()
                         return
                     if points > maxi:
-                        self.message(channel, "Maximum points to trade this difference in rarity is " + str(maxi),
-                                     isWhisper=isWhisper)
+                        self.message(channel, "Maximum points to trade this difference in rarity is " + str(maxi), isWhisper=isWhisper)
+                        cur.close()
                         return
                     if int(wantwaifu["rarity"]) < int(havewaifu["rarity"]):
                         payup = otherid
-
-                if ourid not in trades:
-                    trades[ourid] = {}
-                trades[ourid][otherid] = {"have":have, "want":want, "points":points, "payup":payup}
-
+                        
+                # cancel any old trades with this pairing
+                cur.execute("UPDATE trades SET status = 'cancelled', updated = %s WHERE fromid = %s AND toid = %s AND status = 'open'", [current_milli_time(), ourid, otherid])
+                
+                # insert new trade
+                tradeData = [ourid, otherid, want, have, points, payup, current_milli_time(), "$$whisper$$" if isWhisper else channel]
+                cur.execute("INSERT INTO trades (fromid, toid, want, have, points, payup, status, created, originChannel) VALUES(%s, %s, %s, %s, %s, %s, 'open', %s, %s)", tradeData)
+                
                 paying = ""
                 if points > 0:
                     if payup == ourid:
                         paying = " with you paying them " + str(points) + " points"
                     else:
                         paying = " with them paying you " + str(points) + " points"
-                self.message(channel, "Offered {other} to trade your {have} for their {want}{paying}".format(
-                        other=str(other), have=str(have), want=str(want), paying = paying), isWhisper=isWhisper)
-                logger.debug(repr(trades))
+
+                self.message(channel, "Offered {other} to trade your {have} for their {want}{paying}".format(other=str(other), have=str(have), want=str(want), paying = paying), isWhisper=isWhisper)
                 return
             if command == "lookup":
                 if len(args) != 1:
@@ -2483,22 +2504,18 @@ class NepBot(NepBotClass):
                                             [prize, betRow[0], winner["id"]])
 
                             paidOut = sum(prizes)
-
-                            # broadcaster prize for runs > 1h
+                                
+                            # broadcaster prize
                             # run length in hours * 1000, capped to match first place prize
-                            # minimum = 1/3rd of first place prize
-                            if resultData["result"] >= 3600000:
-                                bcPrize = min(max(resultData["result"] / 3600.0, max(prizes) / 3.0, 50), max(prizes))
-                                bcPrize = int(round(bcPrize / 50.0) * 50)
 
-                                cur.execute("UPDATE users SET points = points + %s WHERE name = %s",
-                                            [bcPrize, channel[1:]])
-                                paidOut += bcPrize
-                            else:
-                                bcPrize = 0
-
-                            cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s"
-                                        " WHERE id = %s", [paidOut, bcPrize, betRow[0]])
+                            # minimum = 1/2 of first place prize
+                            bcPrize = min(max(resultData["result"] / 3600.0, max(prizes) / 2.0, 50), max(prizes))
+                            bcPrize = int(round(bcPrize / 50.0) * 50)
+                            
+                            cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
+                            paidOut += bcPrize
+                            
+                            cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s WHERE id = %s", [paidOut, bcPrize, betRow[0]])
 
                             # take away points from the bot account
                             cur.execute("UPDATE users SET points = points - %s WHERE name = %s", [paidOut,
@@ -2716,8 +2733,14 @@ class NepBot(NepBotClass):
                     self.message(channel, "Usage: !sets OR !sets rarity OR !sets claim", isWhisper=isWhisper)
                     return
             if command == "debug" and sender in self.myadmins:
-                upgradeHand(tags["user-id"], gifted=True)
-                self.message(channel, "DEBUG: Upgraded your hand for free.", isWhisper=isWhisper)
+                v = []
+                for chan in self.channels:
+                    channelName = str(chan).replace("#", "")
+                    for viewer in self.channels[chan]['users']:
+                        v.append(viewer)
+                logger.debug(v)
+
+                self.message(channel, "Printed debug message", isWhisper=isWhisper)
                 return
             if command == "nepcord":
                 self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, "
@@ -2748,17 +2771,7 @@ class HDNBot(pydle.Client):
         #self.join("#marenthyu")
         #self.join("#frankerfacezauthorizer")
         #self.message("#hdnmarathon", "This is a test message")
-        logger.debug("Setting up WS")
-        factory = MyClientFactory(str(ffzws) + ':' + str(443))
-        factory.protocol = MyClientProtocol
-        hostname = str(ffzws).replace("ws://", '').replace("wss://", '')
-        logger.debug('[Websocket] Hostname: ' + hostname)
-        reactor.connectSSL(hostname,
-                           int(443),
-                           factory, contextFactory=optionsForClientTLS(hostname=hostname))
-        thread = Thread(target=reactor.run, kwargs={'installSignalHandlers': 0})
 
-        thread.start()
 
     def on_message(self, source, target, message):
         logger.debug("message on #hdnmarathon: %s, %s, %s", str(source), str(target), message)
@@ -2826,6 +2839,7 @@ def init():
         hdnb.start(hdnoauth)
 
     pool.handle_forever()
+
 
 
 init()
