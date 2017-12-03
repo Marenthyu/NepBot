@@ -1333,7 +1333,7 @@ class NepBot(NepBotClass):
                         selectArgs = args[1:]
 
                     if len(selectArgs) != len(cards):
-                        self.message(channel, "You did not specify the correct amount of keep/disenchant. Please provide " + str(len(openbooster[sender])), isWhisper=isWhisper)
+                        self.message(channel, "You did not specify the correct amount of keep/disenchant.", isWhisper=isWhisper)
                         cur.close()
                         return
                     keeping = 0
