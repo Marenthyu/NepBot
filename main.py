@@ -52,6 +52,10 @@ current_milli_time = lambda: int(round(time.time() * 1000))
 pymysql.install_as_MySQLdb()
 global dbpw
 dbpw = None
+global dbname
+dbname = None
+global silence
+silence = False
 global hdnoauth
 hdnoauth = None
 global streamlabsclient
@@ -69,6 +73,8 @@ try:
         logger.info("Reading config value '%s' = '<redacted>'", name)
         if name == "password":
             dbpw = value
+        if name == "database":
+            dbname = value
         if name == "hdnoauth":
             hdnoauth = value
         if name == "streamlabsclient":
@@ -78,8 +84,14 @@ try:
         if name == "log":
             logger.info("Setting new console log level to %s", value)
             ch.setLevel(logging.getLevelName(value))
+        if name == "silent" and value == "True":
+            logger.warning("Silent mode enabled")
+            silence = True
     if dbpw is None:
         logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
+        sys.exit(1)
+    if dbname is None:
+        logger.error("Database name not set. Please add it to the config file, with 'database=<name>'")
         sys.exit(1)
     if hdnoauth is None:
         logger.error("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
@@ -93,7 +105,7 @@ except:
     sys.exit(1)
 
 
-db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
+db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
 activitymap = {}
 blacklist = []
 visiblepacks = ""
@@ -689,8 +701,8 @@ class NepBot(NepBotClass):
         nick, metadata = self._parse_user(message.source)
         tags = message.tags
         params = message.params
-        # print("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
-        if tags["display-name"] == "Nepnepbot" and params[0] != "#nepnepbot" and tags["mod"] != '1' and params[0] not in self.nomodalerted:
+        logger.debug("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
+        if config["username"].lower() == "nepnepbot" and tags["display-name"] == "Nepnepbot" and params[0] != "#nepnepbot" and tags["mod"] != '1' and params[0] not in self.nomodalerted:
             logger.info("No Mod in %s!", str(params[0]))
             self.nomodalerted.append(params[0])
             self.message(params[0], "Hey! I noticed i am not a mod here! Please do mod me to avoid any issues!")
@@ -751,7 +763,7 @@ class NepBot(NepBotClass):
                 except:
                     logger.warning("Error closing db connection cleanly, ignoring.")
                 try:
-                    db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db="nepbot", autocommit="True", charset="utf8mb4")
+                    db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
                 except:
                     logger.error("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
@@ -767,6 +779,7 @@ class NepBot(NepBotClass):
             channelids = []
             idtoname = {}
             isLive = {}
+            viewerCount = {}
             for row in rows:
                 channelids.append(str(row[1]))
                 idtoname[str(row[1])] = row[0]
@@ -777,8 +790,10 @@ class NepBot(NepBotClass):
                 with requests.get("https://api.twitch.tv/helix/streams", headers=headers, params={"type": "live", "user_id": currentSlice}) as response:
                     data = response.json()["data"]
                     for element in data:
-                        isLive[idtoname[str(element["user_id"])]] = True
+                        chanName = idtoname[str(element["user_id"])]
+                        isLive[chanName] = True
                         logger.debug("%s is live!", idtoname[str(element["user_id"])])
+                        viewerCount[chanName] = element["viewer_count"]
                 channelids = channelids[100:]
 
             logger.debug("Catching all viewers...")
@@ -800,12 +815,19 @@ class NepBot(NepBotClass):
                     #print("Fetching for channel " + str(channel))
                     channelName = str(channel).replace("#", "")
                     try:
-                        with urllib.request.urlopen('https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
-                            data = json.loads(response.read().decode())
-                            chatters = data["chatters"]
-                            a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters["global_mods"] + chatters["viewers"]
-
-                            for viewer in a:
+                        a = []
+                        if channelName in viewerCount and viewerCount[channelName] >= 800:
+                            logger.debug("%s had more than 800 viewers, catching from chatters endpoint", channelName)
+                            with urllib.request.urlopen(
+                                    'https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
+                                data = json.loads(response.read().decode())
+                                chatters = data["chatters"]
+                                a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters[
+                                    "global_mods"] + chatters["viewers"]
+                        else:
+                            for viewer in self.channels[channel]['users']:
+                                    a.append(viewer)
+                        for viewer in a:
                                 if viewer not in doneusers:
                                     doneusers.append(viewer)
                                 if isLive[channelName] and viewer not in validactivity:
@@ -957,8 +979,8 @@ class NepBot(NepBotClass):
             timer()
 
     def on_capability_twitch_tv_membership_available(self, nothing=None):
-        logger.debug("WE HAS TWITCH MEMBERSHIP AVAILABLE! ... but we dont want it.")
-        return False
+        logger.debug("WE HAS TWITCH MEMBERSHIP AVAILABLE!")
+        return True
 
     def on_capability_twitch_tv_membership_enabled(self, nothing = None):
         logger.debug("WE HAS TWITCH MEMBERSHIP ENABLED!")
@@ -1084,8 +1106,10 @@ class NepBot(NepBotClass):
         logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
         if isWhisper:
             super().message("#jtv", "/w " + str(channel).replace("#", "") + " " +str(message))
-        else:
+        elif not silence:
             super().message(channel, message)
+        else:
+            logger.debug("Message not sent as not Whisper and Silent Mode enabled")
 
 
     def do_command(self, command, args, sender, channel, tags, isWhisper=False):
@@ -1309,7 +1333,7 @@ class NepBot(NepBotClass):
                         selectArgs = args[1:]
 
                     if len(selectArgs) != len(cards):
-                        self.message(channel, "You did not specify the correct amount of keep/disenchant. Please provide " + str(len(openbooster[sender])), isWhisper=isWhisper)
+                        self.message(channel, "You did not specify the correct amount of keep/disenchant.", isWhisper=isWhisper)
                         cur.close()
                         return
                     keeping = 0
@@ -2491,8 +2515,14 @@ class NepBot(NepBotClass):
                     self.message(channel, "Usage: !sets OR !sets rarity OR !sets claim", isWhisper=isWhisper)
                     return
             if command == "debug" and sender in self.myadmins:
-                upgradeHand(tags["user-id"], gifted=True)
-                self.message(channel, "DEBUG: Upgraded your hand for free.", isWhisper=isWhisper)
+                v = []
+                for chan in self.channels:
+                    channelName = str(chan).replace("#", "")
+                    for viewer in self.channels[chan]['users']:
+                        v.append(viewer)
+                logger.debug(v)
+
+                self.message(channel, "Printed debug message", isWhisper=isWhisper)
                 return
             if command == "nepcord":
                 self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to http://waifus.de/discord", isWhisper=isWhisper)
