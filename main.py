@@ -2255,7 +2255,7 @@ class NepBot(NepBotClass):
                     elif sender in self.myadmins and subcmd == "payout":
                         # pay out most recent bet in this channel
                         cur = db.cursor()
-                        cur.execute("SELECT COALESCE(MAX(paidAt), 0) FROM bets WHERE channel = %s LIMIT 1")
+                        cur.execute("SELECT COALESCE(MAX(paidAt), 0) FROM bets WHERE channel = %s LIMIT 1", [channel])
                         lastPayout = cur.fetchone()[0]
                         currTime = current_milli_time()
                         if lastPayout > currTime - 86400000:
