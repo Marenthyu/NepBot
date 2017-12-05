@@ -2255,6 +2255,16 @@ class NepBot(NepBotClass):
                     elif sender in self.myadmins and subcmd == "payout":
                         # pay out most recent bet in this channel
                         cur = db.cursor()
+                        cur.execute("SELECT COALESCE(MAX(paidAt), 0) FROM bets WHERE channel = %s LIMIT 1", [channel])
+                        lastPayout = cur.fetchone()[0]
+                        currTime = current_milli_time()
+                        if lastPayout > currTime - 86400000:
+                            a = datetime.timedelta(milliseconds=lastPayout + 86400000 - currTime, microseconds=0)
+                            datestring = "{0}".format(a).split(".")[0]
+                            self.message(channel, "Bet payout may be used again in this channel in %s." % datestring, isWhisper)
+                            cur.close()
+                            return
+                        
                         cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1", [channel])
                         betRow = cur.fetchone()
                         if betRow is None or (betRow[1] != 'paid' and betRow[1] != 'completed'):
@@ -2279,15 +2289,16 @@ class NepBot(NepBotClass):
                             # calculate prize multiplier based on run length
                             # uses varying log depending on > or < 2h
                             if resultData["result"] < 7200000:
-                                prizeMultiplier = 1 / (math.log(7200000.0 / resultData["result"], 5) + 1)
+                                prizeMultiplier = 1 / (math.log(7200000.0 / resultData["result"], 3) + 1)
                             else:
-                                prizeMultiplier = math.log(resultData["result"] / 7200000.0, 5) + 1
+                                prizeMultiplier = math.log(resultData["result"] / 7200000.0, 4) + 1
 
                             # cutoff for half prize is delta of 1/15th of run length
                             halfCutoff = resultData["result"] / 15
 
                             # pick prize pool based on number of entrants, max 12 different prizes
                             prizePool = [10000, 9000, 8000, 7000, 6000, 5000, 4000, 3000, 2000, 1000, 750, 500][-min(numEntries, 12):]
+                            halfProtection = min(max(round(numEntries / 4.0), 1), 3)
 
                             # calculate first run of prizes
                             prizes = []
@@ -2299,7 +2310,7 @@ class NepBot(NepBotClass):
                                 # apply multipliers
                                 prize *= prizeMultiplier
 
-                                if abs(winner["timedelta"]) > halfCutoff:
+                                if abs(winner["timedelta"]) > halfCutoff and place > halfProtection:
                                     prize *= 0.5
                                 elif abs(winner["timedelta"]) < 10:
                                     # what a lucky SoB
@@ -2307,9 +2318,9 @@ class NepBot(NepBotClass):
                                 elif abs(winner["timedelta"]) < 1000:
                                     # 3x multiplier for within a second
                                     prize *= 3
-                                elif int(winner["bet"] / 60000.0) == int(resultData["result"] / 60000.0) and resultData["result"] > 3600000:
-                                    # 2x multiplier if hour and minute match, only if run was longer than 1hr
-                                    prize *= 2
+                                elif abs(winner["timedelta"]) < 60000 and resultData["result"] > 3600000:
+                                    # 1.5x multiplier if within 1 minute, only if run was longer than 1hr
+                                    prize *= 1.5
 
                                 # make our prizes nice, also set a minimum prize of 50 per place
                                 roundNum = 100.0 if prize > 5000 else 50.0
@@ -2324,13 +2335,13 @@ class NepBot(NepBotClass):
                             # broadcaster prize
                             # run length in hours * 1000, capped to match first place prize
                             # minimum = 1/2 of first place prize
-                            bcPrize = min(max(resultData["result"] / 3600.0, max(prizes) / 2.0, 50), max(prizes))
+                            bcPrize = min(max(resultData["result"] / 3600.0, max(prizes) / 2.0, 50), max(prizes), resultData["result"] / 1200.0)
                             bcPrize = int(round(bcPrize / 50.0) * 50)
                             
                             cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
                             paidOut += bcPrize
                             
-                            cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s WHERE id = %s", [paidOut, bcPrize, betRow[0]])
+                            cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s, paidAt = %s WHERE id = %s", [paidOut, bcPrize, current_milli_time(), betRow[0]])
 
                             # take away points from the bot account
                             cur.execute("UPDATE users SET points = points - %s WHERE name = %s", [paidOut, config["username"]])
