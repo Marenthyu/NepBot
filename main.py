@@ -119,6 +119,7 @@ waifu_regex = re.compile('(\[(?P<id>[0-9]+?)])?(?P<name>.+?) *- *(?P<series>.+) 
 validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound", "rarity4Length", "rarity4Sound", "rarity5Length", "rarity5Sound", "rarity6Length", "rarity6Sound"]
 
 def checkAndRenewAppAccessToken():
+    global config
     krakenHeaders = {"Authorization": "OAuth %s" % config["appAccessToken"]}
     r = requests.get("https://api.twitch.tv/kraken", headers=krakenHeaders)
     resp = r.json()
@@ -132,7 +133,6 @@ def checkAndRenewAppAccessToken():
             jsondata = r.json()
             if 'access_token' not in jsondata or 'expires_in' not in jsondata:
                 raise ValueError("Invalid Twitch API response, can't get an app access token.")
-            global config
             config["appAccessToken"] = jsondata['access_token']
             logger.debug("request done")
             cur = db.cursor()
@@ -1114,6 +1114,10 @@ class NepBot(NepBotClass):
 
     def do_command(self, command, args, sender, channel, tags, isWhisper=False):
         logger.debug("Got command: %s with arguments %s", command, str(args))
+        global config
+        global visiblepacks
+        global revrarity
+        global blacklist
         with busyLock:
             if command == "quit" and sender in self.myadmins:
                 logger.info("Quitting from admin command.")
@@ -1879,24 +1883,23 @@ class NepBot(NepBotClass):
                 #print("in reload command")
                 cur = db.cursor()
                 cur.execute("SELECT * FROM config")
-                global config
                 config = {}
                 logger.info("Importing config from database")
                 for row in cur.fetchall():
                     config[row[0]] = row[1]
-                global revrarity
+                
                 revrarity = {}
                 i = 0
                 while i <= 6:
                     n = config["rarity" + str(i) + "Name"]
                     revrarity[n] = i
                     i += 1
-                global blacklist
+                
                 cur.execute("SELECT name FROM blacklist")
                 blacklist = []
                 for row in cur.fetchall():
                     blacklist.append(row[0])
-                global visiblepacks
+                
                 # visible packs
                 cur.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
                 packrows = cur.fetchall()
