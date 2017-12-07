@@ -2292,30 +2292,21 @@ class NepBot(NepBotClass):
                             # calculate prize multiplier based on run length
                             # uses varying log depending on > or < 2h
                             if resultData["result"] < 7200000:
-                                prizeMultiplier = 1 / (math.log(7200000.0 / resultData["result"], 3) + 1)
+                                prizeMultiplier = 1 / (math.log(7200000.0 / resultData["result"], 4) + 1)
                             else:
                                 prizeMultiplier = math.log(resultData["result"] / 7200000.0, 4) + 1
-
-                            # cutoff for half prize is delta of 1/15th of run length
-                            halfCutoff = resultData["result"] / 15
-
-                            # pick prize pool based on number of entrants, max 12 different prizes
-                            prizePool = [10000, 9000, 8000, 7000, 6000, 5000, 4000, 3000, 2000, 1000, 750, 500][-min(numEntries, 12):]
-                            halfProtection = min(max(round(numEntries / 4.0), 1), 3)
 
                             # calculate first run of prizes
                             prizes = []
                             place = 0
                             for winner in resultData["winners"]:
                                 place += 1
-                                prize = prizePool[min(place - 1, 11)]
+                                prize = 120 * (numEntries + 1 - place) + 40 * numEntries
 
                                 # apply multipliers
                                 prize *= prizeMultiplier
 
-                                if abs(winner["timedelta"]) > halfCutoff and place > halfProtection:
-                                    prize *= 0.5
-                                elif abs(winner["timedelta"]) < 10:
+                                if abs(winner["timedelta"]) < 10:
                                     # what a lucky SoB
                                     prize *= 10
                                 elif abs(winner["timedelta"]) < 1000:
@@ -2336,9 +2327,9 @@ class NepBot(NepBotClass):
                             paidOut = sum(prizes)
                                 
                             # broadcaster prize
-                            # run length in hours * 1000, capped to match first place prize
+                            # run length in hours * 500, capped to match first place prize
                             # minimum = 1/2 of first place prize
-                            bcPrize = min(max(resultData["result"] / 3600.0, max(prizes) / 2.0, 50), max(prizes), resultData["result"] / 1200.0)
+                            bcPrize = min(max(resultData["result"] / 7200.0, max(prizes) / 2.0, 50), max(prizes), resultData["result"] / 2400.0)
                             bcPrize = int(round(bcPrize / 50.0) * 50)
                             
                             cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
