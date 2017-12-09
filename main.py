@@ -33,6 +33,9 @@ ch.setFormatter(formatter)
 logger.addHandler(fh)
 logger.addHandler(ch)
 
+logging.getLogger('tornado.application').addHandler(fh)
+logging.getLogger('tornado.application').addHandler(ch)
+
 games = ['Hyperdimension Neptunia Re;Birth1', 'Hyperdimension Neptunia Re;Birth2: Sisters Generation',
          'Four Goddesses Online: Cyber Dimension Neptune', 'Hyperdimension Neptunia mk2',
          'Hyperdimension Neptunia Victory', 'Megadimension Neptunia VII', 'Superdimension Neptune vs Sega Hard Girls',
@@ -674,13 +677,16 @@ class NepBot(NepBotClass):
         nick, metadata = self._parse_user(message.source)
         tags = message.tags
         params = message.params
-        # print("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
+        logger.debug("nick: {nick}; metadata: {metadata}; params: {params}; tags: {tags}".format(nick=nick, metadata=metadata, params=params, tags=tags))
+        if len(params) == 1:
+            logger.info("Chat in %s has been cleared by a moderator.", params[0])
+            return
         u = params[1]
         chan = params[0]
-        reason = str(tags["ban-reason"]).replace("\\s", " ")
+        reason = "" if "ban-reason" not in tags else str(tags["ban-reason"]).replace("\\s", " ")
         if "ban-duration" in tags.keys():
             duration = tags["ban-duration"]
-            logger.info("%s got timed out for %s seconds in %s for: %s", u, chan, reason, duration)
+            logger.info("%s got timed out for %s seconds in %s for: %s", u, duration, chan, reason)
         else:
             logger.info("%s got permanently banned from %s. Reason: %s", u, chan, reason)
         return
