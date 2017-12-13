@@ -2538,6 +2538,93 @@ class NepBot(NepBotClass):
             if command == "nepcord":
                 self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to http://waifus.de/discord", isWhisper=isWhisper)
                 return
+            if command == "giveaway":
+                cur = db.cursor()
+                if len(args) == 0 or args[0].lower() == 'enter':
+                    # check for a giveaway to enter
+                    cur.execute("SELECT id, status FROM giveaways ORDER BY id DESC LIMIT 1")
+                    giveaway_info = cur.fetchone()
+                    if giveaway_info is None or giveaway_info[1] == 'closed':
+                        self.message(channel, "There is not an open giveaway right now.", isWhisper)
+                        cur.close()
+                        return
+                    
+                    # look for our own entry already existing
+                    cur.execute("SELECT COUNT(*) FROM giveaway_entries WHERE giveawayid = %s AND userid = %s", [giveaway_info[0], tags['user-id']])
+                    entry_count = cur.fetchone()[0] or 0
+                    if entry_count != 0:
+                        self.message(channel, "%s -> You have already entered the current giveaway." % tags["display-name"], isWhisper)
+                        cur.close()
+                        return
+                    
+                    # add an entry
+                    cur.execute("INSERT INTO giveaway_entries (giveawayid, userid, timestamp) VALUES(%s, %s, %s)", [giveaway_info[0], tags['user-id'], current_milli_time()])
+                    self.message(channel, "%s -> You have been entered into the current giveaway." % tags["display-name"], isWhisper)
+                    cur.close()
+                    return
+                
+                if sender not in self.myadmins:
+                    return
+                subcmd = args[0].lower()
+                if subcmd == 'open':
+                    cur.execute("SELECT id, status FROM giveaways ORDER BY id DESC LIMIT 1")
+                    giveaway_info = cur.fetchone()
+                    if giveaway_info is not None and giveaway_info[1] != 'closed':
+                        self.message(channel, "There is already an open giveaway right now.", isWhisper)
+                        cur.close()
+                        return
+                    # create a new giveaway
+                    cur.execute("INSERT INTO giveaways (opened, creator, status) VALUES(%s, %s, 'open')", [current_milli_time(), tags['user-id']])
+                    self.message(channel, "Started a new giveaway!", isWhisper)
+                    cur.close()
+                    return
+                if subcmd == 'close':
+                    cur.execute("SELECT id, status FROM giveaways ORDER BY id DESC LIMIT 1")
+                    giveaway_info = cur.fetchone()
+                    if giveaway_info is None or giveaway_info[1] == 'closed':
+                        self.message(channel, "There is not an open giveaway right now.", isWhisper)
+                        cur.close()
+                        return
+                    cur.execute("UPDATE giveaways SET closed = %s, status = 'closed' WHERE id = %s", [current_milli_time(), giveaway_info[0]])
+                    self.message(channel, "Closed entries for the current giveaway!", isWhisper)
+                    cur.close()
+                    return
+                if subcmd == 'pick':
+                    cur.execute("SELECT id, status FROM giveaways ORDER BY id DESC LIMIT 1")
+                    giveaway_info = cur.fetchone()
+                    if giveaway_info is None or giveaway_info[1] == 'open':
+                        self.message(channel, "The most recent giveaway is still open (close it first) or there hasn't been a giveaway yet.", isWhisper)
+                        cur.close()
+                        return
+                        
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !giveaway pick <amount of winners>", isWhisper)
+                        cur.close()
+                        return
+                        
+                    try:
+                        num_winners = int(args[1])
+                    except Exception:
+                        self.message(channel, "Usage: !giveaway pick <amount of winners>", isWhisper)
+                        cur.close()
+                        return
+                        
+                    cur.execute("SELECT giveaway_entries.userid, users.name FROM giveaway_entries INNER JOIN users ON giveaway_entries.userid = users.id WHERE giveaway_entries.giveawayid = %s AND giveaway_entries.winner = 0 ORDER BY RAND() LIMIT "+str(num_winners), [giveaway_info[0]])
+                    winners = cur.fetchall()
+                    
+                    if len(winners) != num_winners:
+                        self.message(channel, "There aren't enough entrants left to pick %d more winners! Try %d or fewer." % (num_winners, len(winners)), isWhisper)
+                        cur.close()
+                        return
+                        
+                    winner_ids = [row[0] for row in winners]
+                    inTemplate = ",".join(["%s"] * len(winner_ids))
+                    winner_names = ", ".join(row[1] for row in winners)
+                    cur.execute("UPDATE giveaway_entries SET winner = 1, when_won = %s WHERE giveawayid = %s AND userid IN ("+inTemplate+")", [current_milli_time(), giveaway_info[0]] + winner_ids)
+                    self.message(channel, "Picked %d winners for the giveaway: %s!" % (num_winners, winner_names), isWhisper)
+                    cur.close()
+                    return
+                
 
 class HDNBot(pydle.Client):
     instance = None
