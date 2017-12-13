@@ -2592,8 +2592,8 @@ class NepBot(NepBotClass):
                 if subcmd == 'pick':
                     cur.execute("SELECT id, status FROM giveaways ORDER BY id DESC LIMIT 1")
                     giveaway_info = cur.fetchone()
-                    if giveaway_info is None or giveaway_info[1] == 'open':
-                        self.message(channel, "The most recent giveaway is still open (close it first) or there hasn't been a giveaway yet.", isWhisper)
+                    if giveaway_info[1] == 'open':
+                        self.message(channel, "There hasn't been a giveaway yet.", isWhisper)
                         cur.close()
                         return
                         
