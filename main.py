@@ -1186,6 +1186,7 @@ class NepBot(NepBotClass):
                     #print("egliable, dropping card.")
                     cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [dropCard()])
                     row = cur.fetchone()
+                    id = str(row[0])
                     logDrop(str(tags['user-id']), id, row[3], "freewaifu", channel, isWhisper)
                     if int(row[3]) >= int(config["drawAlertMinimumRarity"]):
                         threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2], "id": row[0]}, str(tags["display-name"]))).start()
@@ -1193,7 +1194,7 @@ class NepBot(NepBotClass):
                         id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
                         link=row[2]), isWhisper=isWhisper)
                     giveCard(tags['user-id'], row[0])
-                    id = str(row[0])
+                    
                     cur.execute("UPDATE users SET lastFree = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
                 elif freeAvailable:
                     #print("too many cards")
