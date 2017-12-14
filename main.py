@@ -401,7 +401,7 @@ def sendDrawAlert(channel, waifu, user, discord=True):
             pull_count = cur.fetchone()[0] or 0
             if pull_count == 1:
                 first_time = True
-        message = "*{user}* drew {first_time}[*{rarity}*] {name}{first_time}!".format(user=str(user),
+        message = "*{user}* drew {first_time}[*{rarity}*] {name}!".format(user=str(user),
                                                           rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
                                                           name=str(waifu["name"]),
                                                           first_time=("the first ever " if first_time else ""))
