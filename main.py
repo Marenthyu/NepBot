@@ -393,10 +393,19 @@ def sendDiscordAlert(data):
 def sendDrawAlert(channel, waifu, user, discord=True):
     logger.info("Alerting for waifu %s", str(waifu))
     with busyLock:
-        message = "*{user}* drew [*{rarity}*] {name}!".format(user=str(user),
-                                                          rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
-                                                          name=str(waifu["name"]))
         cur = db.cursor()
+        # check for first time drop
+        first_time = False
+        if "id" in waifu:
+            cur.execute("SELECT COUNT(*) FROM drops WHERE waifuid=%s", [waifu["id"]])
+            pull_count = cur.fetchone()[0] or 0
+            if pull_count == 1:
+                first_time = True
+        message = "*{user}* drew {first_time}[*{rarity}*] {name}!".format(user=str(user),
+                                                          rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
+                                                          name=str(waifu["name"]),
+                                                          first_time=("the first ever " if first_time else ""))
+        
         chanOwner = str(channel).replace("#", "")
         cur.execute("SELECT config, val FROM alertConfig WHERE channelName = %s", [chanOwner])
         rows = cur.fetchall()
@@ -419,15 +428,13 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         alertLength = defaultLength if str("rarity" + str(waifu["rarity"]) + "Length") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Length")]
         alertColor = "default" if "color" not in keys else alertconfig["color"]
 
-
-
-        if "id" in waifu.keys():
+        if "id" in waifu:
             cur.execute("SELECT sound, length FROM waifuAlerts WHERE waifuid=%s", [waifu["id"]])
             rows = cur.fetchall()
             if len(rows) == 1:
                 alertLength = int(rows[0][1])
                 alertSound = str(rows[0][0])
-        cur.close()
+        
         alertbody = {"type": alertChannel, "image_href": waifu["image"],
                      "sound_href": alertSound, "duration": int(alertLength), "message": message}
         if alertColor == "rarity":
@@ -435,10 +442,12 @@ def sendDrawAlert(channel, waifu, user, discord=True):
 
         sendStreamlabsAlert(channel, alertbody)
         if discord:
+            # check for first time drop
             discordbody = {"username": "Waifu TCG", "embeds": [
                 {
-                    "title": "A {rarity} waifu has been dropped!".format(
-                        rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]))
+                    "title": "A {rarity} waifu has been dropped{first_time}!".format(
+                        rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
+                        first_time=(" for the first time" if first_time else ""))
                 },
                 {
                     "type": "rich",
@@ -460,6 +469,8 @@ def sendDrawAlert(channel, waifu, user, discord=True):
                 discordbody["embeds"][0]["color"] = int(config[colorKey])
                 discordbody["embeds"][1]["color"] = int(config[colorKey])
             sendDiscordAlert(discordbody)
+        
+        cur.close()
         
 def sendDisenchantAlert(channel, waifu, user):
     with busyLock:
@@ -1175,6 +1186,7 @@ class NepBot(NepBotClass):
                     #print("egliable, dropping card.")
                     cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [dropCard()])
                     row = cur.fetchone()
+                    logDrop(str(tags['user-id']), id, row[3], "freewaifu", channel, isWhisper)
                     if int(row[3]) >= int(config["drawAlertMinimumRarity"]):
                         threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2], "id": row[0]}, str(tags["display-name"]))).start()
                     self.message(channel, tags['display-name'] + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
@@ -1183,7 +1195,6 @@ class NepBot(NepBotClass):
                     giveCard(tags['user-id'], row[0])
                     id = str(row[0])
                     cur.execute("UPDATE users SET lastFree = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
-                    logDrop(str(tags['user-id']), id, row[3], "freewaifu", channel, isWhisper)
                 elif freeAvailable:
                     #print("too many cards")
                     self.message(channel, str(tags['display-name']) + ", your hand is full! !disenchant something or upgrade your hand!", isWhisper=isWhisper)
