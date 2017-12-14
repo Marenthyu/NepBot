@@ -584,7 +584,7 @@ def maxWaifuID():
     cur.close()
     return ret
 
-def dropCard(rarity=-1, upgradeChances=None):
+def dropCard(rarity=-1, upgradeChances=None, useWeightings=False):
     random.seed()
     if rarity == -1:
         if upgradeChances is None:
@@ -598,13 +598,16 @@ def dropCard(rarity=-1, upgradeChances=None):
                 i = i + 1
                 continue
             break
-        return dropCard(rarity)
+        return dropCard(rarity, useWeightings=useWeightings)
     else:
         #print("Dropping card of rarity " + str(rarity))
         cur = db.cursor()
         raritymax = int(config["rarity" + str(rarity) + "Max"])
         while True:
-            cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY RAND() LIMIT 1", (rarity,))
+            if useWeightings:
+                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY -LOG(1-RAND())/weighting LIMIT 1", (rarity,))
+            else:
+                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY RAND() LIMIT 1", (rarity,))
             retid = cur.fetchone()[0]
             if raritymax == 0:
                 break
@@ -1413,7 +1416,7 @@ class NepBot(NepBotClass):
                         return
 
                     packname = args[1].lower()
-                    cur.execute("SELECT cost, numCards, guaranteedSCrarity, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s AND buyable = 1", [packname])
+                    cur.execute("SELECT cost, numCards, guaranteedSCrarity, useWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s AND buyable = 1", [packname])
                     packinfo = cur.fetchone()
 
                     if packinfo is None:
@@ -1441,7 +1444,7 @@ class NepBot(NepBotClass):
                             minRarity = int(config["pityPullRarity"])
                             logger.info("Activated pity pull, rarity = %d" % minRarity)
 
-                    normalChances = packinfo[3:]
+                    normalChances = packinfo[4:]
                     if minRarity == 0:
                         firstPullChances = normalChances
                     elif minRarity == 6:
@@ -1452,7 +1455,7 @@ class NepBot(NepBotClass):
                     cards = []
                     for i in range(packinfo[1]):
                         while True:
-                            ca = int(dropCard(upgradeChances=(firstPullChances if len(cards) == 0 else normalChances)))
+                            ca = int(dropCard(upgradeChances=(firstPullChances if len(cards) == 0 else normalChances), useWeightings=(packinfo[3] != 0)))
                             if ca not in cards:
                                 cards.append(ca)
                                 break
