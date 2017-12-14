@@ -393,10 +393,19 @@ def sendDiscordAlert(data):
 def sendDrawAlert(channel, waifu, user, discord=True):
     logger.info("Alerting for waifu %s", str(waifu))
     with busyLock:
-        message = "*{user}* drew [*{rarity}*] {name}!".format(user=str(user),
-                                                          rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
-                                                          name=str(waifu["name"]))
         cur = db.cursor()
+        # check for first time drop
+        first_time = False
+        if "id" in waifu:
+            cur.execute("SELECT COUNT(*) FROM drops WHERE waifuid=%s", [waifu["id"]])
+            pull_count = cur.fetchone()[0] or 0
+            if pull_count == 1:
+                first_time = True
+        message = "*{user}* drew {first_time}[*{rarity}*] {name}{first_time}!".format(user=str(user),
+                                                          rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
+                                                          name=str(waifu["name"]),
+                                                          first_time=("the first ever " if first_time else ""))
+        
         chanOwner = str(channel).replace("#", "")
         cur.execute("SELECT config, val FROM alertConfig WHERE channelName = %s", [chanOwner])
         rows = cur.fetchall()
@@ -419,9 +428,7 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         alertLength = defaultLength if str("rarity" + str(waifu["rarity"]) + "Length") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Length")]
         alertColor = "default" if "color" not in keys else alertconfig["color"]
 
-
-
-        if "id" in waifu.keys():
+        if "id" in waifu:
             cur.execute("SELECT sound, length FROM waifuAlerts WHERE waifuid=%s", [waifu["id"]])
             rows = cur.fetchall()
             if len(rows) == 1:
@@ -436,17 +443,11 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         sendStreamlabsAlert(channel, alertbody)
         if discord:
             # check for first time drop
-            cur.execute("SELECT COUNT(*) FROM drops WHERE waifuid=%s", [waifu["id"]])
-            pull_count = cur.fetchone()[0] or 0
-            first_time_msg = ""
-            if pull_count == 1:
-                first_time_msg = " for the first time!"
-            
             discordbody = {"username": "Waifu TCG", "embeds": [
                 {
                     "title": "A {rarity} waifu has been dropped{first_time}!".format(
                         rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
-                        first_time=first_time_msg)
+                        first_time=(" for the first time" if first_time else ""))
                 },
                 {
                     "type": "rich",
