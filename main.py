@@ -649,6 +649,73 @@ def formatTimeDelta(ms):
     baseRepr = str(datetime.timedelta(milliseconds=ms, microseconds=0))
     return baseRepr[:-3] if "." in baseRepr else baseRepr
     
+def openBooster(userid, username, channel, isWhisper, packname, cost, numCards, minRarity, useWeightings, normalChances):
+    pityPullActive = True
+    cur = db.cursor()
+    
+    if minRarity >= int(config["pityPullRarity"]):
+        pityPullActive = False
+    else:
+        cur.execute("SELECT spentSinceLastPull FROM users WHERE id = %s", [userid])
+        spent = cur.fetchone()[0]
+        if spent >= int(config["pityPullAmount"]):
+            minRarity = int(config["pityPullRarity"])
+            logger.info("Activated pity pull, rarity = %d" % minRarity)
+    
+    if minRarity == 0:
+        firstPullChances = normalChances
+    elif minRarity == 6:
+        firstPullChances = [1, 1, 1, 1, 1, 1]
+    else:
+        firstPullChances = ([1] * minRarity) + [functools.reduce((lambda x, y: x*y), normalChances[:minRarity+1])] + list(normalChances[minRarity+1:])
+
+    cards = []
+    for i in range(numCards):
+        while True:
+            ca = int(dropCard(upgradeChances=(firstPullChances if i == 0 else normalChances), useWeightings=useWeightings))
+            if ca not in cards:
+                cards.append(ca)
+                break
+
+    cards = sorted(cards)
+    alertwaifus = []
+    pityPullReset = False
+
+    for card in cards:
+        cur.execute("SELECT name, rarity, image FROM waifus WHERE id = %s", [card])
+        row = cur.fetchone()
+
+        if row[1] >= int(config["drawAlertMinimumRarity"]):
+            alertwaifus.append( {"name":str(row[0]), "rarity":int(row[1]), "image":str(row[2]), "id": card})
+
+        if row[1] >= int(config["pityPullRarity"]) and pityPullActive:
+            pityPullReset = True
+
+        logDrop(str(userid), str(card), row[1], "boosters.%s" % packname, channel, isWhisper)
+
+    # pity pull data update
+    if pityPullReset:
+        cur.execute("UPDATE users SET spentSinceLastPull = 0 WHERE id = %s", [userid])
+    elif pityPullActive:
+        cur.execute("UPDATE users SET spentSinceLastPull = spentSinceLastPull + %s WHERE id = %s", [cost, userid])
+
+    # insert opened booster
+    cur.execute("INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, %s, %s, %s, 'open')", [userid, packname, cost, current_milli_time()])
+    boosterid = cur.lastrowid
+    cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)", [(boosterid, card) for card in cards])
+    cur.close()
+    
+    # alerts
+    for w in alertwaifus:
+        threading.Thread(target=sendDrawAlert, args=(channel, w, str(username))).start()
+
+    # insert display token
+    token = ''.join(choice(ascii_letters) for v in range(10))
+    addDisplayToken(token, cards)
+    
+    cur.close()
+    return token
+
 
 # From https://github.com/Shizmob/pydle/issues/35
 class PrivMessageTagSupport(pydle.features.ircv3.TaggedMessageSupport):
@@ -1430,75 +1497,11 @@ class NepBot(NepBotClass):
                         return
 
                     addPoints(tags['user-id'], -packinfo[0])
-
-                    # pity pull?
-                    minRarity = packinfo[2]
-                    pityPullActive = True
-
-                    if minRarity >= int(config["pityPullRarity"]):
-                        pityPullActive = False
-                    else:
-                        cur.execute("SELECT spentSinceLastPull FROM users WHERE id = %s", [tags['user-id']])
-                        spent = cur.fetchone()[0]
-                        if spent >= int(config["pityPullAmount"]):
-                            minRarity = int(config["pityPullRarity"])
-                            logger.info("Activated pity pull, rarity = %d" % minRarity)
-
-                    normalChances = packinfo[4:]
-                    if minRarity == 0:
-                        firstPullChances = normalChances
-                    elif minRarity == 6:
-                        firstPullChances = [1, 1, 1, 1, 1, 1]
-                    else:
-                        firstPullChances = ([1] * minRarity) + [functools.reduce((lambda x, y: x*y), normalChances[:minRarity+1])] + list(normalChances[minRarity+1:])
-
-                    cards = []
-                    for i in range(packinfo[1]):
-                        while True:
-                            ca = int(dropCard(upgradeChances=(firstPullChances if len(cards) == 0 else normalChances), useWeightings=(packinfo[3] != 0)))
-                            if ca not in cards:
-                                cards.append(ca)
-                                break
-
-                    cards = sorted(cards)
-                    alertwaifus = []
-                    pityPullReset = False
-
-                    for card in cards:
-                        cur.execute("SELECT name, rarity, image FROM waifus WHERE id = %s", [card])
-                        row = cur.fetchone()
-
-                        if row[1] >= int(config["drawAlertMinimumRarity"]):
-                            alertwaifus.append( {"name":str(row[0]), "rarity":int(row[1]), "image":str(row[2]), "id": card})
-
-                        if row[1] >= int(config["pityPullRarity"]) and pityPullActive:
-                            pityPullReset = True
-
-                        logDrop(str(tags['user-id']), str(card), row[1], "boosters.%s" % packname, channel, isWhisper)
-
-                        if card == 120:
-                            self.message(channel, "I hear thou cry, so here i am...", isWhisper=isWhisper)
-
-                    # pity pull data update
-                    if pityPullReset:
-                        cur.execute("UPDATE users SET spentSinceLastPull = 0 WHERE id = %s", [tags['user-id']])
-                    elif pityPullActive:
-                        cur.execute("UPDATE users SET spentSinceLastPull = spentSinceLastPull + %s WHERE id = %s", [packinfo[0], tags['user-id']])
-
-                    # insert opened booster
-                    cur.execute("INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, %s, %s, %s, 'open')", [tags['user-id'], packname, packinfo[0], current_milli_time()])
-                    boosterid = cur.lastrowid
-                    cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)", [(boosterid, card) for card in cards])
-                    cur.close()
-
-
-
-                    token = ''.join(choice(ascii_letters) for v in range(10))
-                    addDisplayToken(token, cards)
+                    
+                    token = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, packinfo[0], packinfo[1], packinfo[2], packinfo[3] != 0, packinfo[4:])
                     droplink = "http://waifus.de/booster?token=" + token
                     self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
-                    for w in alertwaifus:
-                        threading.Thread(target=sendDrawAlert, args=(channel, w, str(tags["display-name"]))).start()
+                    cur.close()
                     return
             if command == "trade":
                 ourid = int(tags['user-id'])
@@ -1932,29 +1935,77 @@ class NepBot(NepBotClass):
                 if len(args) != 1:
                     self.message(channel, "Usage: !redeem <token>", isWhisper=isWhisper)
                     return
+                    
                 cur = db.cursor()
-                cur.execute("SELECT points FROM pointTokens WHERE token=%s", (str(args[0])))
-                pointrow = cur.fetchone()
-                cur.execute("SELECT waifuid FROM waifuTokens WHERE token=%s", (str(args[0])))
-                waifurows = cur.fetchall()
-
-                givenPoints = 0
-                if pointrow is not None:
-                    addPoints(tags['user-id'], int(pointrow[0]))
-                    givenPoints = int(pointrow[0])
-                waifusadded = []
-
-                for row in waifurows:
-                    giveCard(tags['user-id'], row[0])
-                    waifusadded.append(str(row[0]))
-                if len(waifusadded) == 0 and givenPoints == 0:
-                    self.message(channel, "Unknown token.", isWhisper=isWhisper)
+                cur.execute("SELECT id, points, waifuid, boostername, type FROM tokens WHERE token=%s AND claimable=1", [args[0]])
+                redeemablerows = cur.fetchall()
+                
+                if len(redeemablerows) == 0:
+                    self.message(channel, "Unknown token.", isWhisper)
                     cur.close()
                     return
-                cur.execute("DELETE FROM waifuTokens WHERE token=%s", (str(args[0])))
-                cur.execute("DELETE FROM pointTokens WHERE token=%s", (str(args[0])))
+                    
+                if len(redeemablerows) > 1:
+                    self.message(channel, "Go tell an admin that token %s is broken (duplicate token name)." % args[0], isWhisper)
+                    cur.close()
+                    return
+                    
+                redeemdata = redeemablerows[0]
+                
+                # already claimed by this user?
+                cur.execute("SELECT COUNT(*) FROM tokens_claimed WHERE tokenid = %s AND userid = %s", [redeemdata[0], tags['user-id']])
+                claimed = cur.fetchone()[0] or 0
+                
+                if claimed > 0:
+                    self.message(channel, "%s, you have already claimed this token!" % tags['display-name'], isWhisper)
+                    cur.close()
+                    return
+                
+                # booster?
+                packtoken = None
+                received = []
+                if redeemdata[3] is not None:
+                    # check for an open booster in their account
+                    # checked first because it's the only way a redeem can be blocked entirely
+                    cur.execute("SELECT COUNT(*) FROM boosters_opened WHERE userid = %s AND status = 'open'", [tags['user-id']])
+                    boosteropen = cur.fetchone()[0] or 0
+                    
+                    if boosteropen > 0:
+                        self.message(channel, "%s, you can't claim this token while you have an open booster! !booster show to check it." % tags['display-name'], isWhisper)
+                        cur.close()
+                        return
+                        
+                    # open the new booster
+                    cur.execute("SELECT cost, numCards, guaranteedSCrarity, useWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s", [redeemdata[3]])
+                    packinfo = cur.fetchone()
+
+                    if packinfo is None:
+                        self.message(channel, "Go tell an admin that token %s is broken (invalid booster attached)." % args[0], isWhisper)
+                        cur.close()
+                        return
+                    
+                    packtoken = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3], packinfo[0], packinfo[1], packinfo[2], packinfo[3] != 0, packinfo[4:])
+                    received.append("a free booster: http://waifus.de/booster?token=%s" % packtoken)
+                    
+                # waifu?
+                if redeemdata[2] is not None:
+                    giveCard(tags['user-id'], redeemdata[2])
+                    received.append("Waifu ID %d" % redeemdata[2])
+                    
+                # points
+                if redeemdata[1] != 0:
+                    addPoints(tags['user-id'], redeemdata[1])
+                    received.append("%d points" % redeemdata[1])
+                    
+                cur.execute("INSERT INTO tokens_claimed (tokenid, userid, points, waifuid, boostername, timestamp) VALUES(%s, %s, %s, %s, %s, %s)", [redeemdata[0], tags['user-id'], redeemdata[1], redeemdata[2], redeemdata[3], current_milli_time()])
+                
+                # single use?
+                if redeemdata[4] == 'single':
+                    cur.execute("UPDATE tokens SET claimable = 0 WHERE id = %s", [redeemdata[0]])
+                    
+                # show results
+                self.message(channel, "%s -> Successfully redeemed the token %s, added the following to your account - %s" % (tags['display-name'], args[0], " and ".join(received[::-1])), isWhisper)
                 cur.close()
-                self.message(channel, "Successfully redeemed token, added {points} points and these waifus to your account: {waifus}".format(points=str(givenPoints), waifus="None" if len(waifusadded) == 0 else ",".join(waifusadded)), isWhisper=isWhisper)
                 return
             if command == "wars":
                 if (len(args) != 0 and len(args) != 4) or (len(args)==4 and args[0] != "vote"):
