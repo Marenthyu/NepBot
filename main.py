@@ -649,9 +649,39 @@ def formatTimeDelta(ms):
     baseRepr = str(datetime.timedelta(milliseconds=ms, microseconds=0))
     return baseRepr[:-3] if "." in baseRepr else baseRepr
     
-def openBooster(userid, username, channel, isWhisper, packname, cost, numCards, minRarity, useWeightings, normalChances):
+class InvalidBoosterException(Exception):
+    pass
+    
+class CantAffordBoosterException(Exception):
+    def __init__(self, cost):
+        super(CantAffordBoosterException, self).__init__()
+        self.cost = cost
+    
+def openBooster(userid, username, channel, isWhisper, packname, buying=True):
     pityPullActive = True
     cur = db.cursor()
+    
+    if buying:
+        cur.execute("SELECT cost, numCards, guaranteedSCrarity, useWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s AND buyable = 1", [packname])
+    else:
+        cur.execute("SELECT cost, numCards, guaranteedSCrarity, useWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s", [packname])
+    
+    packinfo = cur.fetchone()
+
+    if packinfo is None:
+        raise InvalidBoosterException()
+        
+    cost = packinfo[0]
+    numCards = packinfo[1]
+    minRarity = packinfo[2]
+    useWeightings = packinfo[3] != 0
+    normalChances = packinfo[4:]
+        
+    if buying:
+        if not hasPoints(userid, cost):
+            raise CantAffordBoosterException(cost)
+            
+        addPoints(userid, -cost)
     
     if minRarity >= int(config["pityPullRarity"]):
         pityPullActive = False
@@ -700,7 +730,7 @@ def openBooster(userid, username, channel, isWhisper, packname, cost, numCards, 
         cur.execute("UPDATE users SET spentSinceLastPull = spentSinceLastPull + %s WHERE id = %s", [cost, userid])
 
     # insert opened booster
-    cur.execute("INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, %s, %s, %s, 'open')", [userid, packname, cost, current_milli_time()])
+    cur.execute("INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, %s, %s, %s, 'open')", [userid, packname, cost if buying else 0, current_milli_time()])
     boosterid = cur.lastrowid
     cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)", [(boosterid, card) for card in cards])
     cur.close()
@@ -714,7 +744,7 @@ def openBooster(userid, username, channel, isWhisper, packname, cost, numCards, 
     addDisplayToken(token, cards)
     
     cur.close()
-    return token
+    return (boosterid, token)
 
 
 # From https://github.com/Shizmob/pydle/issues/35
@@ -1481,26 +1511,17 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !booster buy <%s>" % visiblepacks, isWhisper=isWhisper)
                         cur.close()
                         return
-
+                        
                     packname = args[1].lower()
-                    cur.execute("SELECT cost, numCards, guaranteedSCrarity, useWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s AND buyable = 1", [packname])
-                    packinfo = cur.fetchone()
-
-                    if packinfo is None:
+                    try:
+                        packid, token = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, True)
+                        droplink = "http://waifus.de/booster?token=" + token
+                        self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
+                    except InvalidBoosterException:
                         self.message(channel, "Invalid booster type. Packs available right now: %s." % visiblepacks, isWhisper=isWhisper)
-                        cur.close()
-                        return
-
-                    if not hasPoints(tags['user-id'], packinfo[0]):
-                        self.message(channel, "{user}, sorry, you don't have enough points to buy a {name} booster pack. You need {points}.".format(user=tags['display-name'], name=packname, points=str(packinfo[0])), isWhisper=isWhisper)
-                        cur.close()
-                        return
-
-                    addPoints(tags['user-id'], -packinfo[0])
+                    except CantAffordBoosterException as exc:
+                        self.message(channel, "{user}, sorry, you don't have enough points to buy a {name} booster pack. You need {points}.".format(user=tags['display-name'], name=packname, points=exc.cost), isWhisper=isWhisper)
                     
-                    token = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, packinfo[0], packinfo[1], packinfo[2], packinfo[3] != 0, packinfo[4:])
-                    droplink = "http://waifus.de/booster?token=" + token
-                    self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
                     cur.close()
                     return
             if command == "trade":
@@ -1962,7 +1983,7 @@ class NepBot(NepBotClass):
                     return
                 
                 # booster?
-                packtoken = None
+                packid = None
                 received = []
                 if redeemdata[3] is not None:
                     # check for an open booster in their account
@@ -1975,17 +1996,13 @@ class NepBot(NepBotClass):
                         cur.close()
                         return
                         
-                    # open the new booster
-                    cur.execute("SELECT cost, numCards, guaranteedSCrarity, useWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s", [redeemdata[3]])
-                    packinfo = cur.fetchone()
-
-                    if packinfo is None:
+                    try:
+                        packid, packtoken = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3], False)
+                        received.append("a free booster: http://waifus.de/booster?token=%s" % packtoken)
+                    except InvalidBoosterException:
                         self.message(channel, "Go tell an admin that token %s is broken (invalid booster attached)." % args[0], isWhisper)
                         cur.close()
                         return
-                    
-                    packtoken = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3], packinfo[0], packinfo[1], packinfo[2], packinfo[3] != 0, packinfo[4:])
-                    received.append("a free booster: http://waifus.de/booster?token=%s" % packtoken)
                     
                 # waifu?
                 if redeemdata[2] is not None:
@@ -1997,7 +2014,7 @@ class NepBot(NepBotClass):
                     addPoints(tags['user-id'], redeemdata[1])
                     received.append("%d points" % redeemdata[1])
                     
-                cur.execute("INSERT INTO tokens_claimed (tokenid, userid, points, waifuid, boostername, timestamp) VALUES(%s, %s, %s, %s, %s, %s)", [redeemdata[0], tags['user-id'], redeemdata[1], redeemdata[2], redeemdata[3], current_milli_time()])
+                cur.execute("INSERT INTO tokens_claimed (tokenid, userid, points, waifuid, boostername, boosterid, timestamp) VALUES(%s, %s, %s, %s, %s, %s, %s)", [redeemdata[0], tags['user-id'], redeemdata[1], redeemdata[2], redeemdata[3], packid, current_milli_time()])
                 
                 # single use?
                 if redeemdata[4] == 'single':
