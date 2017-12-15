@@ -533,6 +533,39 @@ def sendPromotionAlert(channel, waifu, user):
             }
         ]}
         sendDiscordAlert(discordbody)
+        
+def naturalJoinNames(names):
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + " and " + names[-1]
+        
+def sendSetAlert(channel, user, name, waifus):
+    logger.info("Alerting for set claim %s", name)
+    with busyLock:
+        message = "{user} claimed the set {name}!".format(user=user, name=name)
+        alertbody = {"type": "donation", "sound_href": config["alertSound"], "duration": int(config["alertDuration"]), "message": message}
+        sendStreamlabsAlert(channel, alertbody)
+        
+        discordbody = {"username": "Waifu TCG", "embeds": [
+            {
+                "title": "A set has been completed!",
+                "color": int(config["rarity6EmbedColor"])
+            },
+            {
+                "type": "rich",
+                "title": "{user} gathered {waifus} to complete the set {name}!".format(user=str(user), waifus=naturalJoinNames(waifus), name=name),
+                "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
+                "color": int(config["rarity6EmbedColor"]),
+                "footer": {
+                    "text": "Waifu TCG by Marenthyu"
+                },
+                "provider": {
+                    "name": "Marenthyu",
+                    "url": "http://marenthyu.de"
+                }
+            }
+        ]}
+        sendDiscordAlert(discordbody)
 
 def followsme(userid):
     try:
@@ -2574,6 +2607,9 @@ class NepBot(NepBotClass):
                         cur.execute("UPDATE sets SET claimed_by = %s, claimed_at = %s WHERE sets.id = %s", [tags["user-id"], current_milli_time(), row[0]])
                         addPoints(tags["user-id"], int(row[2]))
                         self.message(channel, "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(set=row[1], user=tags["display-name"], reward=row[2]), isWhisper)
+                        cur.execute("SELECT waifus.name FROM set_cards INNER JOIN waifus ON set_cards.cardID = waifus.id WHERE setID = %s", [row[0]])
+                        cards = [sc[0] for sc in cur.fetchall()]
+                        threading.Thread(target=sendSetAlert, args=(channel, tags["display-name"], row[1], cards)).start()
 
                     # rarity sets
                     cur.execute("SELECT id, name, rarity, amount, reward FROM rarity_sets rs WHERE claimable = 1 AND claimed_by IS NULL AND (SELECT COUNT(*) FROM rarity_sets rs2 WHERE rs2.claimed_by = %s AND rs2.grouping = rs.grouping) = 0 AND (SELECT COUNT(*) FROM rarity_sets rs3 WHERE rs3.grouping = rs.grouping - 1 AND rs3.claimed_by = %s AND rs3.rarity = rs.rarity) = 0 ORDER BY rs.reward DESC", [tags['user-id']] * 2)
@@ -2583,6 +2619,7 @@ class NepBot(NepBotClass):
                         hand = getHand(tags['user-id'])
                         if len(hand) != 0:
                             handIDs = [row["id"] for row in hand]
+                            namesById = {row["id"]:row["name"] for row in hand}
                             inTemplate = ",".join(["%s"] * len(handIDs))
                             cur.execute("SELECT cardID FROM rarity_sets_cards WHERE cardID IN(%s)" % inTemplate, handIDs)
                             cardIneligibleData = cur.fetchall()
@@ -2592,11 +2629,14 @@ class NepBot(NepBotClass):
                                 eligibleCards = [card["id"] for card in hand if (card["id"] not in ineligibleCards and card["rarity"] == set[2])]
                                 if len(eligibleCards) >= set[3]:
                                     # can claim
+                                    usedCards = eligibleCards[:set[3]]
                                     claimed += 1
                                     cur.execute("UPDATE rarity_sets SET claimed_by = %s, claimed_at = %s WHERE id = %s", [tags["user-id"], current_milli_time(), set[0]])
                                     addPoints(tags['user-id'], set[4])
-                                    cur.executemany("INSERT INTO rarity_sets_cards (setID, cardID) VALUES(%s, %s)", [(set[0], card) for card in eligibleCards[:set[3]]])
+                                    cur.executemany("INSERT INTO rarity_sets_cards (setID, cardID) VALUES(%s, %s)", [(set[0], card) for card in usedCards])
                                     self.message(channel, "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(set=set[1], user=tags["display-name"], reward=set[4]), isWhisper)
+                                    usedCardNames = [namesById[id] for id in usedCards]
+                                    threading.Thread(target=sendSetAlert, args=(channel, tags["display-name"], set[1], usedCardNames)).start()
                                     break
 
                     if claimed == 0:
