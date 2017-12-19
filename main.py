@@ -644,7 +644,7 @@ def dropCard(rarity=-1, upgradeChances=None, useWeightings=False):
             retid = cur.fetchone()[0]
             if raritymax == 0:
                 break
-            cur.execute("SELECT SUM(amount) FROM has_waifu WHERE waifuid = %s", (retid,))
+            cur.execute("SELECT SUM( res ) FROM (SELECT SUM( amount ) AS res FROM has_waifu WHERE waifuid = %s UNION ALL SELECT COUNT( * ) AS res FROM boosters_cards JOIN boosters_opened ON boosterid = id WHERE boosters_opened.status !=  'closed' AND waifuid = %s ) AS s", (retid, retid))
             retcount = cur.fetchone()[0] or 0
             if raritymax > retcount:
                 break
