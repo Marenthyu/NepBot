@@ -23,7 +23,7 @@ formatter = logging.Formatter('[%(asctime)s][%(name)s][%(levelname)s] %(message)
 logger = logging.getLogger('nepbot')
 logger.setLevel(logging.DEBUG)
 logger.propagate = False
-fh = logging.FileHandler('debug.log')
+fh = logging.TimedRotatingFileHandler('debug.log', when='midnight')
 fh.setLevel(logging.DEBUG)
 
 ch = logging.StreamHandler(sys.stdout)
