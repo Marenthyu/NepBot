@@ -314,8 +314,8 @@ def attemptDisenchant(bot, waifuid, value):
         bot.message('#%s' % order[2], "Your buy order for [%d] %s for %d points has been filled and they have been added to your hand." % (waifuid, order[4], order[3]), True)
         cur.execute("UPDATE buy_orders SET status='filled' WHERE id = %s", [order[0]])
         cur.close()
-        # give the amount of the order minus 10% tax
-        return math.floor((order[3] - value)*0.9) + value
+        # give the amount of the order minus 25% tax
+        return math.floor((order[3] - value)*0.75) + value
     else:
         # no buy order, real DE
         cur.close()
