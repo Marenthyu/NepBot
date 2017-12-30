@@ -2794,9 +2794,15 @@ class NepBot(NepBotClass):
                     return
             if command == "buyorder" or command == "buyorders":
                 if len(args) == 0:
-                    self.message(channel, "Usage: !buyorder check <ID> / !buyorder list / !buyorder place <ID> <amount> / !buyorder cancel <ID>")
+                    self.message(channel, "Usage: !buyorder <ID> <amount> / !buyorder list / !buyorder check <ID> / !buyorder cancel <ID>")
                     return
                 subcmd = args[0].lower()
+                
+                # support !buyorder ID amount to place an order
+                if subcmd not in ['check', 'place', 'add', 'list', 'cancel']:
+                    args = ['place'] + args
+                    subcmd = 'place'
+                
                 if subcmd == "check":
                     if len(args) != 2:
                         self.message(channel, "Usage: !buyorder check <ID>")
@@ -2864,7 +2870,7 @@ class NepBot(NepBotClass):
                     
                 if subcmd == "place" or subcmd == "add":
                     if len(args) < 3:
-                        self.message(channel, "Usage: !buyorder place <ID> <amount>", isWhisper)
+                        self.message(channel, "Usage: !buyorder <ID> <amount>", isWhisper)
                         return
                         
                     if not followsme(tags['user-id']):
@@ -2932,9 +2938,9 @@ class NepBot(NepBotClass):
                             if higher_bids[0] > 0:
                                 msgargs = (tags['display-name'], higher_bids[1], waifu['id'], amount)
                                 if myorderinfo is None:
-                                    self.message(channel, '%s, are you sure you want to place a buy order for lower than the current highest bid (%d points)? Enter "!buyorder place %d %d yes" if you are sure.' % msgargs, isWhisper)
+                                    self.message(channel, '%s, are you sure you want to place a buy order for lower than the current highest bid (%d points)? Enter "!buyorder %d %d yes" if you are sure.' % msgargs, isWhisper)
                                 else:
-                                    self.message(channel, '%s, are you sure you want to change your buy order to a lower amount than the current highest bid (%d points)? Enter "!buyorder place %d %d yes" if you are sure.' % msgargs, isWhisper)
+                                    self.message(channel, '%s, are you sure you want to change your buy order to a lower amount than the current highest bid (%d points)? Enter "!buyorder %d %d yes" if you are sure.' % msgargs, isWhisper)
                                 cur.close()
                                 return
                                 
@@ -2950,7 +2956,7 @@ class NepBot(NepBotClass):
                         return
                         
                     except Exception:
-                        self.message(channel, "Usage: !buyorder place <ID> <amount>", isWhisper=isWhisper)
+                        self.message(channel, "Usage: !buyorder <ID> <amount>", isWhisper=isWhisper)
                         return
                         
                 if subcmd == "cancel":
