@@ -301,6 +301,25 @@ def addDisplayToken(token, waifus):
     cur = db.cursor()
     cur.execute("INSERT INTO displayTokens(token, waifuid) VALUES {valuesstring}".format(valuesstring=valuesstring))
     cur.close()
+    
+def attemptDisenchant(bot, waifuid, value):
+    # return amount of points they get back
+    cur = db.cursor()
+    cur.execute("SELECT buy_orders.id, buy_orders.userid, users.name, buy_orders.amount, waifus.name FROM buy_orders JOIN users ON buy_orders.userid = users.id JOIN waifus ON buy_orders.waifuid = waifus.id WHERE buy_orders.waifuid = %s AND buy_orders.status = 'open' ORDER BY buy_orders.amount DESC LIMIT 1", [waifuid])
+    order = cur.fetchone()
+    
+    if order is not None:
+        # fill their order instead of actually disenchanting
+        giveCard(order[1], waifuid)
+        bot.message('#%s' % order[2], "Your buy order for [%d] %s for %d points has been filled and they have been added to your hand." % (waifuid, order[4], order[3]), True)
+        cur.execute("UPDATE buy_orders SET status='filled' WHERE id = %s", [order[0]])
+        cur.close()
+        # give the amount of the order minus 10% tax
+        return math.floor((order[3] - value)*0.9) + value
+    else:
+        # no buy order, real DE
+        cur.close()
+        return value
 
 def getHoraro():
     "https://horaro.org/-/api/v1/schedules/3911mu51ljb1wf7a5e/ticker"
@@ -1374,9 +1393,14 @@ class NepBot(NepBotClass):
 
                     # handle disenchants appropriately
                     pointsGain = 0
+                    ordersFilled = 0
                     for row in hasInfo:
-                        pointsGain += int(config["rarity" + str(row[2]) + "Value"])
-                        if row[2] >= int(config["disenchantAlertMinimumRarity"]):
+                        baseValue = int(config["rarity" + str(row[2]) + "Value"])
+                        received = attemptDisenchant(self, row[0], baseValue)
+                        pointsGain += received
+                        if received != baseValue:
+                            ordersFilled += 1
+                        if row[2] >= int(config["disenchantAlertMinimumRarity"]) and received == baseValue:
                             # valuable waifu disenchanted
                             threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":row[3], "rarity":row[2], "image":row[4]}, str(tags["display-name"]))).start()
                         if row[1] == 1:
@@ -1388,13 +1412,15 @@ class NepBot(NepBotClass):
                     addPoints(tags['user-id'], pointsGain)
 
                     if len(ids) == 1:
-                        self.message(channel, "Successfully disenchanted waifu %d and added %d points to %s's account" % (ids[0], pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                        buytext = " (buy order filled)" if ordersFilled > 0 else ""
+                        self.message(channel, "Successfully disenchanted waifu %d%s and added %d points to %s's account" % (ids[0], buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
                     else:
-                        self.message(channel, "Successfully disenchanted %d waifus and added %d points to %s's account" % (len(ids), pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                        buytext = " (%d buy orders filled)" % ordersFilled if ordersFilled > 0 else ""
+                        self.message(channel, "Successfully disenchanted %d waifus%s and added %d points to %s's account" % (len(ids), buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
 
                     cur.close()
                     return
-                except:
+                except Exception as exc:
                     self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
                     return
             if command == "giveme":
@@ -1512,6 +1538,7 @@ class NepBot(NepBotClass):
                     cur = db.cursor()
                     keeps = []
                     des = []
+                    ordersFilled = 0
                     for arg in selectArgs:
                         if str(arg).lower() == "keep":
                             giveCard(tags['user-id'], cards[c-2])
@@ -1521,18 +1548,25 @@ class NepBot(NepBotClass):
                             id = cards[c-2]
                             cur.execute("SELECT rarity, name, image FROM waifus WHERE id = %s", [id])
                             waifu = cur.fetchone()
-                            if waifu[0] >= int(config["disenchantAlertMinimumRarity"]):
+                            baseValue = int(config["rarity" + str(waifu[0]) + "Value"])
+                            received = attemptDisenchant(self, id, baseValue)
+                            gottenpoints += received
+                            if received != baseValue:
+                                ordersFilled += 1
+                            if waifu[0] >= int(config["disenchantAlertMinimumRarity"]) and received == baseValue:
                                 # valuable waifu being disenchanted
                                 threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":waifu[1], "rarity":waifu[0], "image":waifu[2]}, str(tags["display-name"]))).start()
-                            value = int(config["rarity" + str(waifu[0]) + "Value"])
+                            
                             des.append(id)
-                            gottenpoints += value
                         c += 1
                     addPoints(tags['user-id'], gottenpoints)
                     if len(keeps) > 0:
                         response += " keep " + ', '.join(str(x) for x in keeps) + ";"
                     if len(des) > 0:
-                        response += " disenchant " + ', '.join(str(x) for x in des) + ";"
+                        response += " disenchant " + ', '.join(str(x) for x in des)
+                        if ordersFilled > 0:
+                            response += " (%d buy orders filled)" % ordersFilled
+                        response += ";"
                     self.message(channel, response + " netting a total of " + str(gottenpoints) + " points.", isWhisper=isWhisper)
                     cur.execute("UPDATE boosters_opened SET status = 'closed', updated = %s WHERE id = %s", [current_milli_time(), boosterinfo[0]])
                     cur.close()
