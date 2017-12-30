@@ -1300,26 +1300,35 @@ class NepBot(NepBotClass):
                 if len(cards) == 0:
                     self.message(channel, "%s, you don't currently have any waifus! Get your first one with !freewaifu" % tags['display-name'], isWhisper=isWhisper)
                     return
-
-                # message or link?
+                    
+                currentData = currentCards(tags['user-id'], True)
+                limit = handLimit(tags['user-id'])
                 dropLink = "http://waifus.de/hand?user=%s" % sender
-                if (len(args) == 0 or args[0].lower() != "public") and followsme(tags['user-id']):
-                    messages = ["%s, you have the following waifus: " % tags['display-name']]
-                    for row in cards:
-                        row['amount'] = "(x%d)" % row['amount'] if row['amount'] > 1 else ""
-                        row['rarity'] = config["rarity%sName" % row['rarity']]
-                        waifumsg = '[{id}][{rarity}] {name} from {series} - {image}{amount}; '.format(**row)
-                        if len(messages[-1]) + len(waifumsg) > 400:
-                            messages.append(waifumsg)
-                        else:
-                            messages[-1] += waifumsg
-
-                    self.message("#jtv", "/w %s %s" % (sender, dropLink))
-                    for message in messages:
-                        self.message("#jtv", "/w %s %s" % (sender, message))
+                msgArgs = {"user": tags['display-name'], "limit": limit, "curr": currentData['hand'], "orders": currentData['orders'], "link": dropLink}
+                
+                if currentData['orders'] > 0:
+                    self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr} waifus and {orders} buy orders) and your current hand is: {link}".format(**msgArgs), isWhisper)
                 else:
-                    limit = handLimit(tags['user-id'])
-                    self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(user=tags['display-name'], limit=limit, link=dropLink, curr=currentCards(tags['user-id'])), isWhisper=isWhisper)
+                    self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(**msgArgs), isWhisper)
+                    
+                # verbose mode if it's a whisper or they request it
+                if len(args) > 0 and args[0].lower() == "verbose":
+                    if isWhisper or followsme(tags['user-id']):
+                        messages = ["Your current hand is: "]
+                        for row in cards:
+                            row['amount'] = "(x%d)" % row['amount'] if row['amount'] > 1 else ""
+                            row['rarity'] = config["rarity%sName" % row['rarity']]
+                            waifumsg = '[{id}][{rarity}] {name} from {series} - {image}{amount}; '.format(**row)
+                            if len(messages[-1]) + len(waifumsg) > 400:
+                                messages.append(waifumsg)
+                            else:
+                                messages[-1] += waifumsg
+
+                        whisperChannel = "#%s" % sender
+                        for message in messages:
+                            self.message(whisperChannel, message, True)
+                    elif not isWhisper:
+                        self.message(channel, "%s, you can't use verbose checkhand because you don't follow the bot! Follow it and try again." % tags['display-name'])
                 return
             if command == "points":
                 #print("Checking points for " + sender)
