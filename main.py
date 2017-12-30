@@ -275,6 +275,16 @@ def paidHandUpgrades(userid):
     limit = int(res[0])
     cur.close()
     return limit
+    
+def currentCards(userid, verbose=False):
+    cur = db.cursor()
+    cur.execute("SELECT (SELECT COALESCE(SUM(amount), 0) FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s AND waifus.rarity < 7), (SELECT COUNT(*) FROM buy_orders WHERE userid = %s AND status = 'open')", [userid, userid])
+    result = cur.fetchone()
+    cur.close()
+    if verbose:
+        return {"hand": result[0], "orders": result[1], "total": result[0] + result[1]}
+    else:
+        return result[0] + result[1]
 
 def upgradeHand(userid, gifted=False):
     cur = db.cursor()
@@ -580,9 +590,8 @@ def getWaifuById(id):
         id = int(id)
         if id == 0:
             return None
-    except:
-        #print("Someone tried to ask for ID "+ str(id) + " - not happening.")
-        return {"name":"Mr. Astley", "series":"You know the Rules, and so do I.", "id":0, "image":"https://youtu.be/DLzxrzFCyOs", "rarity":"6"}
+    except Exception:
+        return None
     cur = db.cursor()
     cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [id])
     row = cur.fetchone()
@@ -602,13 +611,6 @@ def addPoints(userid, amount):
     cur = db.cursor()
     cur.execute("UPDATE users SET points = points + %s WHERE id = %s", [amount, userid])
     cur.close()
-
-def currentCards(userid):
-    cur = db.cursor()
-    cur.execute("SELECT SUM(amount) AS totalCards FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s AND waifus.rarity < 7", [userid])
-    ret = cur.fetchone()[0] or 0
-    cur.close()
-    return ret
 
 def maxWaifuID():
     cur = db.cursor()
@@ -2747,6 +2749,193 @@ class NepBot(NepBotClass):
                     self.message(channel, "Picked %d winners for the giveaway: %s!" % (num_winners, winner_names), isWhisper)
                     cur.close()
                     return
+            if command == "buyorder" or command == "buyorders":
+                if len(args) == 0:
+                    self.message(channel, "Usage: !buyorder check <ID> / !buyorder list / !buyorder place <ID> <amount> / !buyorder cancel <ID>")
+                    return
+                subcmd = args[0].lower()
+                if subcmd == "check":
+                    if len(args) != 2:
+                        self.message(channel, "Usage: !buyorder check <ID>")
+                        return
+                        
+                    try:
+                        waifu = getWaifuById(args[1])
+                        assert waifu is not None
+                        
+                        if waifu['rarity'] == 7:
+                            self.message(channel, "Buy orders cannot be placed on special waifus.", isWhisper)
+                            return
+                            
+                        cur = db.cursor()
+                        cur.execute("SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM buy_orders WHERE waifuid = %s AND status='open'", [waifu['id']])
+                        allordersinfo = cur.fetchone()
+                        
+                        if allordersinfo[0] == 0:
+                            self.message(channel, "[{id}] {name} has no buy orders right now.".format(id=waifu['id'], name=waifu['name']), isWhisper)
+                            cur.close()
+                            return
+                        
+                        cur.execute("SELECT amount FROM buy_orders WHERE userid = %s AND waifuid = %s AND status='open'", [tags['user-id'], waifu['id']])
+                        myorderinfo = cur.fetchone()
+                        minfo = {"count": allordersinfo[0], "id": waifu['id'], "name": waifu['name'], "highest": allordersinfo[1]}
+                        if myorderinfo is not None:
+                            minfo["mine"] = myorderinfo[0]
+                            if myorderinfo[0] == allordersinfo[1]:
+                                self.message(channel, "There are currently {count} buy orders for [{id}] {name}. You are the highest bidder at {highest} points.".format(**minfo), isWhisper)
+                            else:
+                                self.message(channel, "There are currently {count} buy orders for [{id}] {name}. Your bid of {mine} points is lower than the highest bid of {highest} points.".format(**minfo), isWhisper)
+                        else:
+                            self.message(channel, "There are currently {count} buy orders for [{id}] {name}. The highest bid is {highest} points. You don't have a buy order on this waifu right now.".format(**minfo), isWhisper)
+                        
+                        cur.close()
+                        return
+                                
+                    except Exception:
+                        self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
+                        return
+                        
+                if subcmd == "list":
+                    cur = db.cursor()
+                    cur.execute("SELECT waifuid, amount, waifus.name FROM buy_orders JOIN waifus ON buy_orders.waifuid = waifus.id WHERE userid = %s", [tags['user-id']])
+                    buyorders = cur.fetchall()
+                    cur.close()
+                    
+                    if len(buyorders) == 0:
+                        self.message(channel, "%s, you don't have any buy orders active right now!" % tags['display-name'], isWhisper)
+                        return
+                        
+                    messages = ["%s, you have %d active buy orders: " % (tags['display-name'], len(buyorders))]
+                    for order in buyorders:
+                        message = "[%d] %s for %d points; " % (order[0], order[2], order[1])
+
+                        if len(message) + len(messages[-1]) > 400:
+                            messages.append(message)
+                        else:
+                            messages[-1] += message
+
+                    for message in messages:
+                        self.message(channel, message, isWhisper)
+                    
+                    return
+                    
+                if subcmd == "place" or subcmd == "add":
+                    if len(args) < 3:
+                        self.message(channel, "Usage: !buyorder place <ID> <amount>", isWhisper)
+                        return
+                        
+                    if not followsme(tags['user-id']):
+                        self.message(channel, "%s, you must follow the bot to use buy orders so you can be sent a whisper if your order is filled." % tags['display-name'], isWhisper)
+                        return
+                    
+                    try:
+                        waifu = getWaifuById(args[1])
+                        assert waifu is not None
+                        
+                        if waifu['rarity'] == 7:
+                            self.message(channel, "Buy orders cannot be placed on special waifus.", isWhisper)
+                            return
+                        
+                        amount = int(args[2])
+                        
+                        # check for a current order
+                        cur = db.cursor()
+                        cur.execute("SELECT id, amount FROM buy_orders WHERE userid = %s AND waifuid = %s AND status='open'", [tags['user-id'], waifu['id']])
+                        myorderinfo = cur.fetchone()
+                        
+                        if myorderinfo is not None and myorderinfo[1] == amount:
+                            self.message(channel, "%s, you already have a buy order in place for that waifu for that exact amount." % tags['display-name'], isWhisper)
+                            cur.close()
+                            return
+                            
+                        # check for affordability
+                        points_delta = amount if myorderinfo is None else amount - myorderinfo[1]
+                        
+                        if points_delta > 0 and not hasPoints(tags['user-id'], points_delta):
+                            if myorderinfo is None:
+                                self.message(channel, "%s, you don't have enough points to place a buy order with that amount." % tags['display-name'], isWhisper)
+                            else:
+                                self.message(channel, "%s, you don't have enough points to increase your buy order to that amount." % tags['display-name'], isWhisper)
+                            cur.close()
+                            return
+                            
+                        # check for hand space
+                        if myorderinfo is None and currentCards(tags['user-id']) >= handLimit(tags['user-id']):
+                            self.message(channel, "%s, you don't have a free hand space to make a new buy order!" % tags['display-name'], isWhisper)
+                            cur.close()
+                            return
+                            
+                        # check the range
+                        de_value = int(config["rarity" + str(waifu['rarity']) + "Value"])
+                        min_amount = de_value + 5
+                        max_amount = [100, 250, 500, 1000, 2000, 6000, 20000][waifu['rarity']]
+                        if amount <= min_amount or amount > max_amount:
+                            self.message(channel, "%s, buy orders for this waifu's rarity (%s) must fall between %d and %d points." % (tags['display-name'], config["rarity" + str(waifu['rarity']) + "Name"], min_amount, max_amount), isWhisper)
+                            cur.close()
+                            return
+                            
+                        # check for duplicate amount
+                        cur.execute("SELECT COUNT(*) FROM buy_orders WHERE waifuid = %s AND status = 'open' AND amount = %s", [waifu['id'], amount])
+                        dupe_amt = cur.fetchone()[0]
+                        if dupe_amt > 0:
+                            self.message(channel, "%s, someone else has already placed a buy order on that waifu for %d points. Choose another amount." % (tags['display-name'], amount), isWhisper)
+                            cur.close()
+                            return
+                            
+                        # check for placing a bid that has already been outbid without confirmation
+                        if len(args) < 4 or args[3].lower() != 'yes':
+                            cur.execute("SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM buy_orders WHERE userid != %s AND waifuid = %s AND status='open' AND amount > %s", [tags['user-id'], waifu['id'], amount])
+                            higher_bids = cur.fetchone()
+                            if higher_bids[0] > 0:
+                                msgargs = (tags['display-name'], higher_bids[1], waifu['id'], amount)
+                                if myorderinfo is None:
+                                    self.message(channel, '%s, are you sure you want to place a buy order for lower than the current highest bid (%d points)? Enter "!buyorder place %d %d yes" if you are sure.' % msgargs, isWhisper)
+                                else:
+                                    self.message(channel, '%s, are you sure you want to change your buy order to a lower amount than the current highest bid (%d points)? Enter "!buyorder place %d %d yes" if you are sure.' % msgargs, isWhisper)
+                                cur.close()
+                                return
+                                
+                        # if it passed all of those checks it should be good to go.
+                        addPoints(tags['user-id'], -points_delta)
+                        if myorderinfo is None:
+                            cur.execute("INSERT INTO buy_orders (userid, waifuid, amount, status, created) VALUES(%s, %s, %s, 'open', %s)", [tags['user-id'], waifu['id'], amount, current_milli_time()])
+                            self.message(channel, "%s, you placed a new buy order on [%d] %s for %d points." % (tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
+                        else:
+                            cur.execute("UPDATE buy_orders SET amount = %s, updated = %s WHERE id = %s", [amount, current_milli_time(), myorderinfo[0]])
+                            self.message(channel, "%s, you updated your buy order on [%d] %s to %d points." % (tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
+                        cur.close()
+                        return
+                        
+                    except Exception:
+                        self.message(channel, "Usage: !buyorder place <ID> <amount>", isWhisper=isWhisper)
+                        return
+                        
+                if subcmd == "cancel":
+                    if len(args) != 2:
+                        self.message(channel, "Usage: !buyorder cancel <ID>")
+                        return
+                        
+                    try:
+                        waifu = getWaifuById(args[1])
+                        assert waifu is not None
+                        
+                        # check for a current order
+                        cur = db.cursor()
+                        cur.execute("SELECT id, amount FROM buy_orders WHERE userid = %s AND waifuid = %s AND status='open'", [tags['user-id'], waifu['id']])
+                        myorderinfo = cur.fetchone()
+                        
+                        if myorderinfo is not None:
+                            cur.execute("UPDATE buy_orders SET status='cancelled' WHERE id = %s", myorderinfo[0])
+                            addPoints(tags['user-id'], myorderinfo[1])
+                            self.message(channel, "%s, you cancelled your buy order for [%d] %s and received your %d points back." % (tags['display-name'], waifu['id'], waifu['name'], myorderinfo[1]), isWhisper)
+                        else:
+                            self.message(channel, "%s, you don't have an active buy order for that waifu!" % tags['display-name'], isWhisper)
+                        cur.close()
+                        return
+                        
+                    except Exception:
+                        self.message(channel, "Usage: !buyorder cancel <ID>", isWhisper=isWhisper)
+                        return
                 
 
 class HDNBot(pydle.Client):
