@@ -114,7 +114,7 @@ blacklist = []
 visiblepacks = ""
 
 busyLock = threading.Lock()
-streamlabsauthurl = "https://www.streamlabs.com/api/v1.0/authorize?client_id=" + streamlabsclient + "&redirect_uri=http://marenthyu.de/cgi-bin/waifucallback.cgi&response_type=code&scope=alerts.create&state="
+streamlabsauthurl = "https://www.streamlabs.com/api/v1.0/authorize?client_id=" + streamlabsclient + "&redirect_uri=https://marenthyu.de/cgi-bin/waifucallback.cgi&response_type=code&scope=alerts.create&state="
 streamlabsalerturl = "https://streamlabs.com/api/v1.0/alerts"
 alertheaders = {"Content-Type":"application/json", "User-Agent":"Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"}
 time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-9]{2})(\.(?P<ms>[0-9]{1,3}))?')
@@ -490,7 +490,7 @@ def sendDrawAlert(channel, waifu, user, discord=True):
                     },
                     "provider": {
                         "name": "Marenthyu",
-                        "url": "http://marenthyu.de"
+                        "url": "https://marenthyu.de"
                     }
                 }
             ]}
@@ -521,7 +521,7 @@ def sendDisenchantAlert(channel, waifu, user):
                 },
                 "provider": {
                     "name": "Marenthyu",
-                    "url": "http://marenthyu.de"
+                    "url": "https://marenthyu.de"
                 }
             }
         ]}
@@ -557,7 +557,7 @@ def sendPromotionAlert(channel, waifu, user):
                 },
                 "provider": {
                     "name": "Marenthyu",
-                    "url": "http://marenthyu.de"
+                    "url": "https://marenthyu.de"
                 }
             }
         ]}
@@ -590,7 +590,7 @@ def sendSetAlert(channel, user, name, waifus):
                 },
                 "provider": {
                     "name": "Marenthyu",
-                    "url": "http://marenthyu.de"
+                    "url": "https://marenthyu.de"
                 }
             }
         ]}
@@ -1303,7 +1303,7 @@ class NepBot(NepBotClass):
                     
                 currentData = currentCards(tags['user-id'], True)
                 limit = handLimit(tags['user-id'])
-                dropLink = "http://waifus.de/hand?user=%s" % sender
+                dropLink = "https://waifus.de/hand?user=%s" % sender
                 msgArgs = {"user": tags['display-name'], "limit": limit, "curr": currentData['hand'], "orders": currentData['orders'], "link": dropLink}
                 
                 if currentData['orders'] > 0:
@@ -1497,7 +1497,7 @@ class NepBot(NepBotClass):
                     cards = [row[0] for row in cardrows]
                     token = ''.join(choice(ascii_letters) for v in range(10))
                     addDisplayToken(token, cards)
-                    droplink = "http://waifus.de/booster?token=" + token
+                    droplink = "https://waifus.de/booster?token=" + token
                     self.message(channel, "{user}, your current open booster pack: {droplink}".format(user=tags['display-name'], droplink=droplink), isWhisper=isWhisper)
                     cur.close()
                     return
@@ -1593,7 +1593,7 @@ class NepBot(NepBotClass):
                     packname = args[1].lower()
                     try:
                         packid, token = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, True)
-                        droplink = "http://waifus.de/booster?token=" + token
+                        droplink = "https://waifus.de/booster?token=" + token
                         self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
                     except InvalidBoosterException:
                         self.message(channel, "Invalid booster type. Packs available right now: %s." % visiblepacks, isWhisper=isWhisper)
@@ -1834,7 +1834,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "{user}, you need to be following me so i can send you whispers!".format(user=str(tags['display-name'])), isWhisper=isWhisper)
                 return
             if command == "help":
-                self.message(channel, "http://waifus.de/help", isWhisper=isWhisper)
+                self.message(channel, "https://waifus.de/help", isWhisper=isWhisper)
             if command == "alerts" or command=="alert":
                 if len(args) < 1:
                     self.message(channel, "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>", isWhisper=isWhisper)
@@ -2076,7 +2076,7 @@ class NepBot(NepBotClass):
                         
                     try:
                         packid, packtoken = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3], False)
-                        received.append("a free booster: http://waifus.de/booster?token=%s" % packtoken)
+                        received.append("a free booster: https://waifus.de/booster?token=%s" % packtoken)
                     except InvalidBoosterException:
                         self.message(channel, "Go tell an admin that token %s is broken (invalid booster attached)." % args[0], isWhisper)
                         cur.close()
@@ -2572,7 +2572,7 @@ class NepBot(NepBotClass):
                     return
             if command == "sets" or command == "set":
                 if len(args) == 0:
-                    self.message(channel, "Available sets: http://waifus.de/sets?user=%s !sets rarity to check your progress on rarity sets. !sets claim to claim all sets you are eligible for." % sender.lower(), isWhisper=isWhisper)
+                    self.message(channel, "Available sets: https://waifus.de/sets?user=%s !sets rarity to check your progress on rarity sets. !sets claim to claim all sets you are eligible for." % sender.lower(), isWhisper=isWhisper)
                     return
                 subcmd = args[0].lower()
                 if subcmd == "rarity":
@@ -2704,7 +2704,7 @@ class NepBot(NepBotClass):
                 self.message(channel, "Printed debug message", isWhisper=isWhisper)
                 return
             if command == "nepcord":
-                self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to http://waifus.de/discord", isWhisper=isWhisper)
+                self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to https://waifus.de/discord", isWhisper=isWhisper)
                 return
             if command == "giveaway":
                 cur = db.cursor()
