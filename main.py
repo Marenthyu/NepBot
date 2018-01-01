@@ -2918,7 +2918,7 @@ class NepBot(NepBotClass):
                         de_value = int(config["rarity" + str(waifu['rarity']) + "Value"])
                         min_amount = de_value + 5
                         max_amount = [100, 250, 500, 1000, 2000, 6000, 20000][waifu['rarity']]
-                        if amount <= min_amount or amount > max_amount:
+                        if amount < min_amount or amount > max_amount:
                             self.message(channel, "%s, bounties for this waifu's rarity (%s) must fall between %d and %d points." % (tags['display-name'], config["rarity" + str(waifu['rarity']) + "Name"], min_amount, max_amount), isWhisper)
                             cur.close()
                             return
