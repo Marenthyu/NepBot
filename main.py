@@ -312,7 +312,7 @@ def attemptDisenchant(bot, waifuid, value):
         # fill their order instead of actually disenchanting
         giveCard(order[1], waifuid)
         bot.message('#%s' % order[2], "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (waifuid, order[4], order[3]), True)
-        cur.execute("UPDATE bounties SET status='filled' WHERE id = %s", [order[0]])
+        cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s", [current_milli_time(), order[0]])
         cur.close()
         # give the disenchanter 50% profit
         return math.floor((order[3] - value)*0.5) + value
@@ -2974,7 +2974,7 @@ class NepBot(NepBotClass):
                         myorderinfo = cur.fetchone()
                         
                         if myorderinfo is not None:
-                            cur.execute("UPDATE bounties SET status='cancelled' WHERE id = %s", myorderinfo[0])
+                            cur.execute("UPDATE bounties SET status = 'cancelled', updated = %s WHERE id = %s", [current_milli_time(), myorderinfo[0]])
                             addPoints(tags['user-id'], myorderinfo[1])
                             self.message(channel, "%s, you cancelled your bounty for [%d] %s and received your %d points back." % (tags['display-name'], waifu['id'], waifu['name'], myorderinfo[1]), isWhisper)
                         else:
