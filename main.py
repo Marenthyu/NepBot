@@ -2794,7 +2794,7 @@ class NepBot(NepBotClass):
                     return
             if command == "bounty":
                 if len(args) == 0:
-                    self.message(channel, "Usage: !bounty <ID> <amount> / !bounty list / !bounty check <ID> / !bounty cancel <ID>")
+                    self.message(channel, "Usage: !bounty <ID> <amount> / !bounty list / !bounty check <ID> / !bounty cancel <ID>", isWhisper=isWhisper)
                     return
                 subcmd = args[0].lower()
                 
@@ -2805,7 +2805,7 @@ class NepBot(NepBotClass):
                 
                 if subcmd == "check":
                     if len(args) != 2:
-                        self.message(channel, "Usage: !bounty check <ID>")
+                        self.message(channel, "Usage: !bounty check <ID>", isWhisper=isWhisper)
                         return
                         
                     try:
@@ -2961,7 +2961,7 @@ class NepBot(NepBotClass):
                         
                 if subcmd == "cancel":
                     if len(args) != 2:
-                        self.message(channel, "Usage: !bounty cancel <ID>")
+                        self.message(channel, "Usage: !bounty cancel <ID>", isWhisper=isWhisper)
                         return
                         
                     try:
