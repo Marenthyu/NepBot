@@ -472,11 +472,13 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         sendStreamlabsAlert(channel, alertbody)
         if discord:
             # check for first time drop
+            rarityName = str(config["rarity" + str(waifu["rarity"]) + "Name"])
             discordbody = {"username": "Waifu TCG", "embeds": [
                 {
-                    "title": "A {rarity} waifu has been dropped{first_time}!".format(
-                        rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
-                        first_time=(" for the first time" if first_time else ""))
+                    "title": "A{n} {rarity} waifu has been dropped{first_time}!".format(
+                        rarity=rarityName,
+                        first_time=(" for the first time" if first_time else ""),
+                        n='n' if str(rarityName)[0] in ('a', 'e', 'i', 'o', 'u') else '')
                 },
                 {
                     "type": "rich",
