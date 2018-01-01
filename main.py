@@ -2846,7 +2846,7 @@ class NepBot(NepBotClass):
                         
                 if subcmd == "list":
                     cur = db.cursor()
-                    cur.execute("SELECT waifuid, amount, waifus.name FROM bounties JOIN waifus ON bounties.waifuid = waifus.id WHERE userid = %s", [tags['user-id']])
+                    cur.execute("SELECT waifuid, amount, waifus.name FROM bounties JOIN waifus ON bounties.waifuid = waifus.id WHERE userid = %s AND status='open'", [tags['user-id']])
                     buyorders = cur.fetchall()
                     cur.close()
                     
