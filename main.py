@@ -685,6 +685,17 @@ def giveCard(userid, id):
         cur.execute("INSERT INTO has_waifu(userid, waifuid, amount) VALUES(%s, %s, %s)", [userid, id, 1])
     cur.close()
     
+def takeCard(userid, id):
+    with db.cursor() as cur:
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE userid = %s AND waifuid = %s", [userid, id])
+        currentAmount = cur.fetchone()[0]
+        if currentAmount > 1:
+            cur.execute("UPDATE has_waifu SET amount = amount - 1 WHERE userid = %s AND waifuid = %s", [userid, id])
+        elif currentAmount == 1:
+            cur.execute("DELETE FROM has_waifu WHERE userid = %s AND waifuid = %s", [userid, id])
+        else:
+            raise ValueError("Couldn't remove waifu %s from user %s as they don't own it!" % (str(id), str(userid)))
+    
 def logDrop(userid, waifuid, rarity, source, channel, isWhisper):
     trueChannel = "$$whisper$$" if isWhisper else channel
     cur = db.cursor()
@@ -1414,11 +1425,9 @@ class NepBot(NepBotClass):
                         if row[2] >= int(config["disenchantAlertMinimumRarity"]) and received == baseValue:
                             # valuable waifu disenchanted
                             threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":row[3], "rarity":row[2], "image":row[4]}, str(tags["display-name"]))).start()
-                        if row[1] == 1:
-                            # delet this
-                            cur.execute("DELETE FROM has_waifu WHERE waifuid = %s AND userid = %s", (row[0], tags['user-id']))
-                        else:
-                            cur.execute("UPDATE has_waifu SET amount = amount - 1 WHERE waifuid = %s AND userid = %s", (row[0], tags['user-id']))
+                            
+                        # changed implementation to avoid weirdness with bounties
+                        takeCard(tags['user-id'], row[0])
 
                     addPoints(tags['user-id'], pointsGain)
 
