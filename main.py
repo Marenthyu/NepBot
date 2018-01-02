@@ -600,10 +600,11 @@ def sendSetAlert(channel, user, name, waifus):
 
 def followsme(userid):
     try:
-        r = requests.get("https://api.twitch.tv/kraken/users/{twitchid}/follows/{myid}".format(twitchid=str(userid), myid=str(config["twitchid"])), headers=headers)
+        krakenHeaders = {"Authorization": "OAuth %s" % config["appAccessToken"], "Accept": "application/vnd.twitchtv.v5+json"}
+        r = requests.get("https://api.twitch.tv/kraken/users/{twitchid}/follows/channels/{myid}".format(twitchid=str(userid), myid=str(config["twitchid"])), headers=krakenHeaders)
         j = r.json()
-        return j["status"] != "404"
-    except:
+        return "channel" in j and "_id" in j["channel"] and int(config["twitchid"]) == int(j["channel"]["_id"])
+    except Exception:
         return False
 
 def getWaifuById(id):
@@ -1318,15 +1319,15 @@ class NepBot(NepBotClass):
                 limit = handLimit(tags['user-id'])
                 dropLink = "https://waifus.de/hand?user=%s" % sender
                 msgArgs = {"user": tags['display-name'], "limit": limit, "curr": currentData['hand'], "bounties": currentData['bounties'], "link": dropLink}
-                
-                if currentData['bounties'] > 0:
-                    self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(**msgArgs), isWhisper)
-                else:
-                    self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(**msgArgs), isWhisper)
                     
                 # verbose mode if it's a whisper or they request it
                 if len(args) > 0 and args[0].lower() == "verbose":
                     if isWhisper or followsme(tags['user-id']):
+                        whisperChannel = "#%s" % sender
+                        if currentData['bounties'] > 0:
+                            self.message(whisperChannel, "{user}, you can have {limit} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(**msgArgs), True)
+                        else:
+                            self.message(whisperChannel, "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(**msgArgs), True)
                         messages = ["Your current hand is: "]
                         for row in cards:
                             row['amount'] = "(x%d)" % row['amount'] if row['amount'] > 1 else ""
@@ -1337,11 +1338,16 @@ class NepBot(NepBotClass):
                             else:
                                 messages[-1] += waifumsg
 
-                        whisperChannel = "#%s" % sender
+                        
                         for message in messages:
                             self.message(whisperChannel, message, True)
                     elif not isWhisper:
                         self.message(channel, "%s, you can't use verbose checkhand because you don't follow the bot! Follow it and try again." % tags['display-name'])
+                else:
+                    if currentData['bounties'] > 0:
+                        self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(**msgArgs), isWhisper)
+                    else:
+                        self.message(channel, "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(**msgArgs), isWhisper)
                 return
             if command == "points":
                 #print("Checking points for " + sender)
