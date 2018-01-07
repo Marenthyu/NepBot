@@ -641,7 +641,7 @@ def maxWaifuID():
     cur.close()
     return ret
 
-def dropCard(rarity=-1, upgradeChances=None, useWeightings=False):
+def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False):
     random.seed()
     if rarity == -1:
         if upgradeChances is None:
@@ -655,16 +655,16 @@ def dropCard(rarity=-1, upgradeChances=None, useWeightings=False):
                 i = i + 1
                 continue
             break
-        return dropCard(rarity, useWeightings=useWeightings)
+        return dropCard(rarity, useEventWeightings=useEventWeightings)
     else:
         #print("Dropping card of rarity " + str(rarity))
         cur = db.cursor()
         raritymax = int(config["rarity" + str(rarity) + "Max"])
         while True:
-            if useWeightings:
-                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY -LOG(1-RAND())/weighting LIMIT 1", (rarity,))
+            if useEventWeightings:
+                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY -LOG(1-RAND())/event_weighting LIMIT 1", (rarity,))
             else:
-                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY RAND() LIMIT 1", (rarity,))
+                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY -LOG(1-RAND())/normal_weighting LIMIT 1", (rarity,))
             retid = cur.fetchone()[0]
             if raritymax == 0:
                 break
@@ -675,6 +675,11 @@ def dropCard(rarity=-1, upgradeChances=None, useWeightings=False):
         cur.close()
         #print("Dropping ID " + str(retid))
         return retid
+        
+def resetWeightings(*cards):
+    with db.cursor() as cur:
+        inString = ",".join(["%s"] * len(cards))
+        cur.execute("UPDATE waifus SET normal_weighting = 1 WHERE id IN({0})".format(inString), cards)
 
 def giveCard(userid, id):
     cur = db.cursor()
@@ -730,9 +735,9 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
     cur = db.cursor()
     
     if buying:
-        cur.execute("SELECT cost, numCards, guaranteedSCrarity, useWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s AND buyable = 1", [packname])
+        cur.execute("SELECT cost, numCards, guaranteedSCrarity, useEventWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s AND buyable = 1", [packname])
     else:
-        cur.execute("SELECT cost, numCards, guaranteedSCrarity, useWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s", [packname])
+        cur.execute("SELECT cost, numCards, guaranteedSCrarity, useEventWeightings, rarity0UpgradeChance, rarity1UpgradeChance, rarity2UpgradeChance, rarity3UpgradeChance, rarity4UpgradeChance, rarity5UpgradeChance FROM boosters WHERE name = %s", [packname])
     
     packinfo = cur.fetchone()
 
@@ -742,7 +747,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
     cost = packinfo[0]
     numCards = packinfo[1]
     minRarity = packinfo[2]
-    useWeightings = packinfo[3] != 0
+    useEventWeightings = packinfo[3] != 0
     normalChances = packinfo[4:]
         
     if buying:
@@ -770,7 +775,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
     cards = []
     for i in range(numCards):
         while True:
-            ca = int(dropCard(upgradeChances=(firstPullChances if i == 0 else normalChances), useWeightings=useWeightings))
+            ca = int(dropCard(upgradeChances=(firstPullChances if i == 0 else normalChances), useEventWeightings=useEventWeightings))
             if ca not in cards:
                 cards.append(ca)
                 break
@@ -790,6 +795,8 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             pityPullReset = True
 
         logDrop(str(userid), str(card), row[1], "boosters.%s" % packname, channel, isWhisper)
+        
+    resetWeightings(*cards)
 
     # pity pull data update
     if pityPullReset:
@@ -937,6 +944,7 @@ class NepBot(NepBotClass):
         self.pw = password
         logger.info("Connecting...")
         def timer():
+            global config
             with busyLock:
                 global t
                 t = Timer(int(config["cycleLength"]), timer)
@@ -952,6 +960,13 @@ class NepBot(NepBotClass):
                 except:
                     logger.error("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
+                if int(config["last_weighting_update"]) < current_milli_time() - int(config["weighting_increase_cycle"]):
+                    # increase weightings
+                    with db.cursor() as cur:
+                        logger.debug("Increasing card weightings...")
+                        cur.execute("UPDATE waifus SET normal_weighting = normal_weighting * %s WHERE rarity != 7", [float(config["weighting_increase_amount"])])
+                        config["last_weighting_update"] = str(current_milli_time())
+                        cur.execute("UPDATE config SET value = %s WHERE name = 'last_weighting_update'", [config["last_weighting_update"]])
             logger.debug("Checking live status of channels...")
             checkAndRenewAppAccessToken()
             
@@ -1369,6 +1384,7 @@ class NepBot(NepBotClass):
                     cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [dropCard()])
                     row = cur.fetchone()
                     id = str(row[0])
+                    resetWeightings(id)
                     logDrop(str(tags['user-id']), id, row[3], "freewaifu", channel, isWhisper)
                     if int(row[3]) >= int(config["drawAlertMinimumRarity"]):
                         threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2], "id": row[0]}, str(tags["display-name"]))).start()
@@ -1482,6 +1498,7 @@ class NepBot(NepBotClass):
                     tags['display-name']) + ', you bought a new Waifu for {price}: [{id}][{rarity}] {name} from {series} - {link}'.format(
                     id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
                     link=row[2], price=str(price)), isWhisper=isWhisper)
+                resetWeightings(row[0])
                 giveCard(tags['user-id'], str(row[0]))
                 cur.close()
                 logDrop(str(tags['user-id']), str(row[0]), rarity, "buy", channel, isWhisper)
