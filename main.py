@@ -1332,7 +1332,7 @@ class NepBot(NepBotClass):
                     
                 currentData = currentCards(tags['user-id'], True)
                 limit = handLimit(tags['user-id'])
-                dropLink = "https://waifus.de/hand?user=%s" % sender
+                dropLink = "%s/hand?user=%s" % (config["siteHost"], sender)
                 msgArgs = {"user": tags['display-name'], "limit": limit, "curr": currentData['hand'], "bounties": currentData['bounties'], "link": dropLink}
                     
                 # verbose mode if it's a whisper or they request it
@@ -1531,7 +1531,7 @@ class NepBot(NepBotClass):
                     cards = [row[0] for row in cardrows]
                     token = ''.join(choice(ascii_letters) for v in range(10))
                     addDisplayToken(token, cards)
-                    droplink = "https://waifus.de/booster?token=" + token
+                    droplink = config["siteHost"] + "/booster?token=" + token
                     self.message(channel, "{user}, your current open booster pack: {droplink}".format(user=tags['display-name'], droplink=droplink), isWhisper=isWhisper)
                     cur.close()
                     return
@@ -1627,7 +1627,7 @@ class NepBot(NepBotClass):
                     packname = args[1].lower()
                     try:
                         packid, token = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, True)
-                        droplink = "https://waifus.de/booster?token=" + token
+                        droplink = config["siteHost"] + "/booster?token=" + token
                         self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
                     except InvalidBoosterException:
                         self.message(channel, "Invalid booster type. Packs available right now: %s." % visiblepacks, isWhisper=isWhisper)
@@ -1868,7 +1868,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "{user}, you need to be following me so i can send you whispers!".format(user=str(tags['display-name'])), isWhisper=isWhisper)
                 return
             if command == "help":
-                self.message(channel, "https://waifus.de/help", isWhisper=isWhisper)
+                self.message(channel, config["siteHost"] + "/help", isWhisper=isWhisper)
             if command == "alerts" or command=="alert":
                 if len(args) < 1:
                     self.message(channel, "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>", isWhisper=isWhisper)
@@ -2110,7 +2110,7 @@ class NepBot(NepBotClass):
                         
                     try:
                         packid, packtoken = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3], False)
-                        received.append("a free booster: https://waifus.de/booster?token=%s" % packtoken)
+                        received.append("a free booster: %s/booster?token=%s" % (config["siteHost"], packtoken))
                     except InvalidBoosterException:
                         self.message(channel, "Go tell an admin that token %s is broken (invalid booster attached)." % args[0], isWhisper)
                         cur.close()
@@ -2606,7 +2606,7 @@ class NepBot(NepBotClass):
                     return
             if command == "sets" or command == "set":
                 if len(args) == 0:
-                    self.message(channel, "Available sets: https://waifus.de/sets?user=%s !sets rarity to check your progress on rarity sets. !sets claim to claim all sets you are eligible for." % sender.lower(), isWhisper=isWhisper)
+                    self.message(channel, "Available sets: %s/sets?user=%s !sets rarity to check your progress on rarity sets. !sets claim to claim all sets you are eligible for." % (config["siteHost"], sender.lower()), isWhisper=isWhisper)
                     return
                 subcmd = args[0].lower()
                 if subcmd == "rarity":
@@ -2738,7 +2738,7 @@ class NepBot(NepBotClass):
                 self.message(channel, "Printed debug message", isWhisper=isWhisper)
                 return
             if command == "nepcord":
-                self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to https://waifus.de/discord", isWhisper=isWhisper)
+                self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to %s/discord" % config["siteHost"], isWhisper=isWhisper)
                 return
             if command == "giveaway":
                 cur = db.cursor()
