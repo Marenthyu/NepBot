@@ -2907,9 +2907,9 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !bounty <ID> <amount>", isWhisper)
                         return
                         
-                    if not followsme(tags['user-id']):
-                        self.message(channel, "%s, you must follow the bot to use bounties so you can be sent a whisper if your order is filled." % tags['display-name'], isWhisper)
-                        return
+                    #if not followsme(tags['user-id']):
+                    #    self.message(channel, "%s, you must follow the bot to use bounties so you can be sent a whisper if your order is filled." % tags['display-name'], isWhisper)
+                    #    return
                     
                     try:
                         waifu = getWaifuById(args[1])
