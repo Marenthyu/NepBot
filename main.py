@@ -53,18 +53,12 @@ ffzws = 'wss://andknuckles.frankerfacez.com'
 pool = pydle.ClientPool()
 current_milli_time = lambda: int(round(time.time() * 1000))
 pymysql.install_as_MySQLdb()
-global dbpw
 dbpw = None
-global dbname
 dbname = None
-global silence
 silence = False
-global hdnoauth
 hdnoauth = None
-global streamlabsclient
 streamlabsclient = None
 twitchclientsecret = None
-global t
 t = None
 # read config values from file (db login etc)
 try:
@@ -109,8 +103,11 @@ except:
 
 
 db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
+admins = []
 activitymap = {}
 blacklist = []
+config = {}
+revrarity = {}
 visiblepacks = ""
 
 busyLock = threading.Lock()
@@ -121,8 +118,33 @@ time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-
 waifu_regex = re.compile('(\[(?P<id>[0-9]+?)])?(?P<name>.+?) *- *(?P<series>.+) *- *(?P<rarity>[0-9]) *- *(?P<link>.+?)$')
 validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound", "rarity4Length", "rarity4Sound", "rarity5Length", "rarity5Sound", "rarity6Length", "rarity6Sound"]
 
+def loadConfig():
+    global revrarity, blacklist, visiblepacks, admins
+    with db.cursor() as curg:
+        curg.execute("SELECT * FROM config")
+        logger.info("Importing config from database")
+        for row in curg.fetchall():
+            config[row[0]] = row[1]
+        logger.debug("Config: %s", str(config))
+        logger.info("Fetching admin list...")
+        curg.execute("SELECT * FROM admins")
+        admins = []
+        for row in curg.fetchall():
+            admins.append(row[0])
+        logger.debug("Admins: %s", str(admins))
+        revrarity = {config["rarity" + str(i) + "Name"]:i for i in range(7)}
+        curg.execute("SELECT name FROM blacklist")
+        rows = curg.fetchall()
+        blacklist = []
+        for row in rows:
+            blacklist.append(row[0])
+
+        # visible packs
+        curg.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
+        packrows = curg.fetchall()
+        visiblepacks = "/".join(row[0] for row in packrows)
+
 def checkAndRenewAppAccessToken():
-    global config
     krakenHeaders = {"Authorization": "OAuth %s" % config["appAccessToken"]}
     r = requests.get("https://api.twitch.tv/kraken", headers=krakenHeaders)
     resp = r.json()
@@ -944,7 +966,6 @@ class NepBot(NepBotClass):
         self.pw = password
         logger.info("Connecting...")
         def timer():
-            global config
             with busyLock:
                 global t
                 t = Timer(int(config["cycleLength"]), timer)
@@ -1007,7 +1028,6 @@ class NepBot(NepBotClass):
                     logger.warning("Couldn't remove channel %s from channels, it wasn't found. Channel list: %s", str(c), str(self.mychannels))
             self.leavechannels = []
             try:
-                global activitymap
                 #print("Activitymap: " + str(activitymap))
                 doneusers = []
                 validactivity = []
@@ -1174,7 +1194,6 @@ class NepBot(NepBotClass):
                     logger.warning("Error deleting old tokens. skipping this cycle.")
                 cur.close()
 
-        global t
         if t is None:
             timer()
 
@@ -1261,8 +1280,6 @@ class NepBot(NepBotClass):
         if 'display-name' not in tags or not tags['display-name']:
             tags['display-name'] = sender
 
-        global activitymap
-        global blacklist
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
             activitymap[channelowner] = 0
@@ -1314,10 +1331,6 @@ class NepBot(NepBotClass):
 
     def do_command(self, command, args, sender, channel, tags, isWhisper=False):
         logger.debug("Got command: %s with arguments %s", command, str(args))
-        global config
-        global visiblepacks
-        global revrarity
-        global blacklist
         with busyLock:
             if command == "quit" and sender in self.myadmins:
                 logger.info("Quitting from admin command.")
@@ -2038,30 +2051,7 @@ class NepBot(NepBotClass):
                     return
             if command == "reload" and (sender.lower() in self.myadmins):
                 #print("in reload command")
-                cur = db.cursor()
-                cur.execute("SELECT * FROM config")
-                config = {}
-                logger.info("Importing config from database")
-                for row in cur.fetchall():
-                    config[row[0]] = row[1]
-                
-                revrarity = {}
-                i = 0
-                while i <= 6:
-                    n = config["rarity" + str(i) + "Name"]
-                    revrarity[n] = i
-                    i += 1
-                
-                cur.execute("SELECT name FROM blacklist")
-                blacklist = []
-                for row in cur.fetchall():
-                    blacklist.append(row[0])
-                
-                # visible packs
-                cur.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
-                packrows = cur.fetchall()
-                visiblepacks = "/".join(row[0] for row in packrows)
-                cur.close()
+                loadConfig()
                 self.message(channel, "Config reloaded.", isWhisper=isWhisper)
                 return
             if command == "redeem":
@@ -3055,42 +3045,15 @@ class HDNBot(pydle.Client):
 
 
 curg = db.cursor()
-
-curg.execute("SELECT * FROM config")
-config = {}
-logger.info("Importing config from database")
-for row in curg.fetchall():
-    config[row[0]] = row[1]
-
-logger.debug("Config: %s", str(config))
 logger.info("Fetching channel list...")
 curg.execute("SELECT * FROM channels")
 channels = []
 for row in curg.fetchall():
     channels.append("#" + row[0])
 logger.debug("Channels: %s", str(channels))
-logger.info("Fetching admin list...")
-curg.execute("SELECT * FROM admins")
-admins = []
-for row in curg.fetchall():
-    admins.append(row[0])
-logger.debug("Admins: %s", str(admins))
-revrarity = {}
-i = 0
-while i<=6:
-    n = config["rarity" + str(i) + "Name"]
-    revrarity[n] = i
-    i += 1
-curg.execute("SELECT name FROM blacklist")
-rows = curg.fetchall()
-for row in rows:
-    blacklist.append(row[0])
-
-# visible packs
-curg.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
-packrows = curg.fetchall()
-visiblepacks = "/".join(row[0] for row in packrows)
 curg.close()
+
+loadConfig()
 
 # twitch api init
 checkAndRenewAppAccessToken()
