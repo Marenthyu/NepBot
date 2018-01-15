@@ -663,7 +663,7 @@ def maxWaifuID():
     cur.close()
     return ret
 
-def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False):
+def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDowngrades=True):
     random.seed()
     if rarity == -1:
         if upgradeChances is None:
@@ -677,26 +677,25 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False):
                 i = i + 1
                 continue
             break
-        return dropCard(rarity, useEventWeightings=useEventWeightings)
+        return dropCard(rarity, useEventWeightings=useEventWeightings, allowDowngrades=allowDowngrades)
     else:
-        #print("Dropping card of rarity " + str(rarity))
-        cur = db.cursor()
-        raritymax = int(config["rarity" + str(rarity) + "Max"])
-        while True:
-            if useEventWeightings:
-                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY -LOG(1-RAND())/event_weighting LIMIT 1", (rarity,))
+        with db.cursor() as cur:
+            raritymax = int(config["rarity" + str(rarity) + "Max"])
+            weighting_column = "event_weighting" if useEventWeightings else "normal_weighting"
+            if raritymax > 0:
+                cur.execute("SELECT id FROM waifus WHERE rarity = %s AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column), (rarity, raritymax))
             else:
-                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY -LOG(1-RAND())/normal_weighting LIMIT 1", (rarity,))
-            retid = cur.fetchone()[0]
-            if raritymax == 0:
-                break
-            cur.execute("SELECT SUM( res ) FROM (SELECT SUM( amount ) AS res FROM has_waifu WHERE waifuid = %s UNION ALL SELECT COUNT( * ) AS res FROM boosters_cards JOIN boosters_opened ON boosterid = id WHERE boosters_opened.status !=  'closed' AND waifuid = %s ) AS s", (retid, retid))
-            retcount = cur.fetchone()[0] or 0
-            if raritymax > retcount:
-                break
-        cur.close()
-        #print("Dropping ID " + str(retid))
-        return retid
+                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column), (rarity,))
+            result = cur.fetchone()
+            if result is None:
+                # no waifus left at this rarity
+                logger.info("No waifus left at rarity %d" % rarity)
+                if allowDowngrades:
+                    return dropCard(rarity - 1, useEventWeightings=useEventWeightings)
+                else:
+                    return None
+            else:
+                return result[0]
         
 def resetWeightings(*cards):
     with db.cursor() as cur:
@@ -1503,21 +1502,26 @@ class NepBot(NepBotClass):
                 if not hasPoints(tags['user-id'], price):
                     self.message(channel, "You do not have enough points to buy a " + str(config["rarity" + str(rarity) + "Name"]) + " waifu. You need " + str(price) + " points.", isWhisper=isWhisper)
                     return
-                addPoints(tags['user-id'], 0 - price)
-                cur = db.cursor()
-                cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [dropCard(rarity)])
-                row = cur.fetchone()
-                self.message(channel, str(
-                    tags['display-name']) + ', you bought a new Waifu for {price}: [{id}][{rarity}] {name} from {series} - {link}'.format(
-                    id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
-                    link=row[2], price=str(price)), isWhisper=isWhisper)
-                resetWeightings(row[0])
-                giveCard(tags['user-id'], str(row[0]))
-                cur.close()
-                logDrop(str(tags['user-id']), str(row[0]), rarity, "buy", channel, isWhisper)
-                if row[3] >= int(config["drawAlertMinimumRarity"]):
-                    threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2], "id": row[0]}, str(tags["display-name"]))).start()
-                return
+                chosenWaifu = dropCard(rarity, allowDowngrades=False)
+                if chosenWaifu is not None:
+                    addPoints(tags['user-id'], 0 - price)
+                    cur = db.cursor()
+                    cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [chosenWaifu])
+                    row = cur.fetchone()
+                    self.message(channel, str(
+                        tags['display-name']) + ', you bought a new Waifu for {price}: [{id}][{rarity}] {name} from {series} - {link}'.format(
+                        id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
+                        link=row[2], price=str(price)), isWhisper=isWhisper)
+                    resetWeightings(row[0])
+                    giveCard(tags['user-id'], str(row[0]))
+                    cur.close()
+                    logDrop(str(tags['user-id']), str(row[0]), rarity, "buy", channel, isWhisper)
+                    if row[3] >= int(config["drawAlertMinimumRarity"]):
+                        threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2], "id": row[0]}, str(tags["display-name"]))).start()
+                    return
+                else:
+                    self.message(channel, "You can't buy a %s waifu right now. Try again later." % config["rarity" + str(rarity) + "Name"], isWhisper)
+                    return
             if command == "booster":
                 if len(args) < 1:
                     self.message(channel, "Usage: !booster buy <%s> OR !booster select <take/disenchant> (for each waifu) OR !booster show" % visiblepacks, isWhisper=isWhisper)
