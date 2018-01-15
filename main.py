@@ -111,6 +111,7 @@ except:
 db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
 activitymap = {}
 blacklist = []
+config = {}
 visiblepacks = ""
 
 busyLock = threading.Lock()
@@ -2040,7 +2041,6 @@ class NepBot(NepBotClass):
                 #print("in reload command")
                 cur = db.cursor()
                 cur.execute("SELECT * FROM config")
-                config = {}
                 logger.info("Importing config from database")
                 for row in cur.fetchall():
                     config[row[0]] = row[1]
