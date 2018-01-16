@@ -1674,7 +1674,6 @@ class NepBot(NepBotClass):
                         
                         if trade is None:
                             self.message(channel, otherparty + " did not send you a trade. Send one with !trade " + otherparty + " <have> <want> [points]", isWhisper=isWhisper)
-                            cur.close()
                             return
                             
                         want = trade[1]
@@ -1733,12 +1732,10 @@ class NepBot(NepBotClass):
                             
                             if not hasPoints(payup, cost + tradepoints):
                                 self.message(channel, "Sorry, but %s cannot cover the %s trading fee." % ("you" if payup == ourid else otherparty, "fair" if tradepoints > 0 else "base"), isWhisper=isWhisper)
-                                cur.close()
                                 return
 
                             if not hasPoints(nonpayer, cost - tradepoints):
                                 self.message(channel, "Sorry, but %s cannot cover the base trading fee." % ("you" if nonpayer == ourid else otherparty), isWhisper=isWhisper)
-                                cur.close()
                                 return
 
                             # give cards
@@ -1757,7 +1754,6 @@ class NepBot(NepBotClass):
                             cur.execute("UPDATE trades SET status = 'accepted', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                             
                             self.message(channel, "Trade executed!", isWhisper=isWhisper)
-                            cur.close()
                             return
 
                     if len(args) not in [3, 4]:
