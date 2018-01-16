@@ -260,31 +260,18 @@ def getHand(twitchid):
         logger.error("Got non-integer id for getHand. Aborting.")
         return []
     cur = db.cursor()
-    cur.execute("SELECT amount, waifus.name, waifus.id, rarity, series, image FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < %s) DESC, waifus.id ASC", [tID, int(config["numNormalRarities"])])
+    cur.execute("SELECT amount, waifus.name, waifus.id, rarity, series, image, base_rarity FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < %s) DESC, waifus.id ASC", [tID, int(config["numNormalRarities"])])
     rows = cur.fetchall()
     cur.close()
-    return [{"name":row[1], "amount":row[0], "id":row[2], "rarity":row[3], "series":row[4], "image":row[5]} for row in rows]
-
+    return [{"name":row[1], "amount":row[0], "id":row[2], "rarity":row[3], "series":row[4], "image":row[5], "base_rarity": row[6]} for row in rows]
+    
 def search(query):
     cur = db.cursor()
-    cur.execute("SELECT id, name, series, rarity FROM waifus WHERE Name LIKE %s", ["%" + str(query) + "%"])
+    cur.execute("SELECT id, name, series, base_rarity FROM waifus WHERE Name LIKE %s", ["%" + str(query) + "%"])
     rows = cur.fetchall()
     ret = []
     for row in rows:
-        ret.append({'id':row[0], 'name':row[1], 'series':row[2], 'rarity':row[3]})
-    return ret
-
-def whoHas(id):
-    try:
-        a = int(id)
-    except: return []
-    cur = db.cursor()
-    cur.execute("SELECT users.name FROM has_waifu INNER JOIN users ON has_waifu.userid = users.id WHERE has_waifu.waifuid = %s", str(id))
-    rows = cur.fetchall()
-    ret = []
-    for row in rows:
-        ret.append(row[0])
-    cur.close()
+        ret.append({'id':row[0], 'name':row[1], 'series':row[2], 'base_rarity':row[3]})
     return ret
 
 def handLimit(userid):
@@ -305,7 +292,7 @@ def paidHandUpgrades(userid):
     
 def currentCards(userid, verbose=False):
     cur = db.cursor()
-    cur.execute("SELECT (SELECT COALESCE(SUM(amount), 0) FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s AND waifus.rarity < %s), (SELECT COUNT(*) FROM bounties WHERE userid = %s AND status = 'open')", [userid, int(config["numNormalRarities"]), userid])
+    cur.execute("SELECT (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE userid = %s AND rarity < %s), (SELECT COUNT(*) FROM bounties WHERE userid = %s AND status = 'open')", [userid, int(config["numNormalRarities"]), userid])
     result = cur.fetchone()
     cur.close()
     if verbose:
@@ -329,10 +316,10 @@ def addDisplayToken(token, waifus):
     cur.execute("INSERT INTO displayTokens(token, waifuid) VALUES {valuesstring}".format(valuesstring=valuesstring))
     cur.close()
     
-def attemptDisenchant(bot, waifuid, value):
-    # return amount of points they get back
+def attemptDisenchant(bot, waifuid):
+    # return profit from the bounty
     cur = db.cursor()
-    cur.execute("SELECT bounties.id, bounties.userid, users.name, bounties.amount, waifus.name FROM bounties JOIN users ON bounties.userid = users.id JOIN waifus ON bounties.waifuid = waifus.id WHERE bounties.waifuid = %s AND bounties.status = 'open' ORDER BY bounties.amount DESC LIMIT 1", [waifuid])
+    cur.execute("SELECT bounties.id, bounties.userid, users.name, bounties.amount, waifus.name, waifus.base_rarity FROM bounties JOIN users ON bounties.userid = users.id JOIN waifus ON bounties.waifuid = waifus.id WHERE bounties.waifuid = %s AND bounties.status = 'open' ORDER BY bounties.amount DESC LIMIT 1", [waifuid])
     order = cur.fetchone()
     
     if order is not None:
@@ -342,11 +329,12 @@ def attemptDisenchant(bot, waifuid, value):
         cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s", [current_milli_time(), order[0]])
         cur.close()
         # give the disenchanter 50% profit
-        return math.floor((order[3] - value)*0.5) + value
+        base_value = int(config["rarity"+str(order[5])+"Value"])
+        return math.floor((order[3] - base_value)*0.5) 
     else:
-        # no bounty, real DE
+        # no bounty
         cur.close()
-        return value
+        return 0
 
 def getHoraro():
     "https://horaro.org/-/api/v1/schedules/3911mu51ljb1wf7a5e/ticker"
@@ -458,7 +446,7 @@ def sendDrawAlert(channel, waifu, user, discord=True):
             if pull_count == 1:
                 first_time = True
         message = "*{user}* drew {first_time}[*{rarity}*] {name}!".format(user=str(user),
-                                                          rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]),
+                                                          rarity=str(config["rarity" + str(waifu["base_rarity"]) + "Name"]),
                                                           name=str(waifu["name"]),
                                                           first_time=("the first ever " if first_time else ""))
         
@@ -466,7 +454,7 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         cur.execute("SELECT config, val FROM alertConfig WHERE channelName = %s", [chanOwner])
         rows = cur.fetchall()
 
-        colorKey = "rarity" + str(waifu["rarity"]) + "EmbedColor"
+        colorKey = "rarity" + str(waifu["base_rarity"]) + "EmbedColor"
         colorInt = int(config[colorKey])
         # Convert RGB int to RGB values
         blue = colorInt & 255
@@ -479,9 +467,9 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         keys = alertconfig.keys()
         alertChannel = "donation" if "alertChannel" not in keys else alertconfig["alertChannel"]
         defaultSound = config["alertSound"] if "defaultSound" not in keys else alertconfig["defaultSound"]
-        alertSound = defaultSound if str("rarity" + str(waifu["rarity"]) + "Sound") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Sound")]
+        alertSound = defaultSound if str("rarity" + str(waifu["base_rarity"]) + "Sound") not in keys else alertconfig[str("rarity" + str(waifu["base_rarity"]) + "Sound")]
         defaultLength = config["alertDuration"] if "defaultLength" not in keys else alertconfig["defaultLength"]
-        alertLength = defaultLength if str("rarity" + str(waifu["rarity"]) + "Length") not in keys else alertconfig[str("rarity" + str(waifu["rarity"]) + "Length")]
+        alertLength = defaultLength if str("rarity" + str(waifu["base_rarity"]) + "Length") not in keys else alertconfig[str("rarity" + str(waifu["base_rarity"]) + "Length")]
         alertColor = "default" if "color" not in keys else alertconfig["color"]
 
         if "id" in waifu:
@@ -499,7 +487,7 @@ def sendDrawAlert(channel, waifu, user, discord=True):
         sendStreamlabsAlert(channel, alertbody)
         if discord:
             # check for first time drop
-            rarityName = str(config["rarity" + str(waifu["rarity"]) + "Name"])
+            rarityName = str(config["rarity" + str(waifu["base_rarity"]) + "Name"])
             discordbody = {"username": "Waifu TCG", "embeds": [
                 {
                     "title": "A{n} {rarity} waifu has been dropped{first_time}!".format(
@@ -561,36 +549,7 @@ def sendDisenchantAlert(channel, waifu, user):
         sendDiscordAlert(discordbody)
         
 def sendPromotionAlert(channel, waifu, user):
-    logger.info("Alerting for waifu upgrade %s", str(waifu))
-    with busyLock:
-        message = "{user} promoted {name} to god!".format(user=str(user),
-                                                          name=str(waifu["name"]))
-        alertbody = {"type": "donation", "image_href": waifu["image"],
-                     "sound_href": config["alertSound"], "duration": int(config["alertDuration"]), "message": message}
-        sendStreamlabsAlert(channel, alertbody)
-        discordbody = {"username": "Waifu TCG", "embeds": [
-            {
-                "title": "A waifu has been upgraded to god rarity!",
-                "color": int(config["rarity"+str(int(config["numNormalRarities"])-1)+"EmbedColor"])
-            },
-            {
-                "type": "rich",
-                "title": "{user} promoted {name} to god rarity!".format(user=str(user), name=str(waifu["name"])),
-                "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
-                "color": int(config["rarity"+str(int(config["numNormalRarities"])-1)+"EmbedColor"]),
-                "footer": {
-                    "text": "Waifu TCG by Marenthyu"
-                },
-                "image": {
-                    "url": str(waifu["image"])
-                },
-                "provider": {
-                    "name": "Marenthyu",
-                    "url": "https://marenthyu.de"
-                }
-            }
-        ]}
-        sendDiscordAlert(discordbody)
+    # TODO
         
 def naturalJoinNames(names):
     if len(names) == 1:
@@ -642,9 +601,9 @@ def getWaifuById(id):
     except Exception:
         return None
     cur = db.cursor()
-    cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [id])
+    cur.execute("SELECT id, Name, image, base_rarity, series FROM waifus WHERE id=%s", [id])
     row = cur.fetchone()
-    ret = {"id":row[0], "name":row[1], "image":row[2], "rarity":row[3], "series":row[4]}
+    ret = {"id":row[0], "name":row[1], "image":row[2], "base_rarity":row[3], "series":row[4]}
     cur.close()
     #print("Fetched Waifu from id: " + str(ret))
     return ret
@@ -691,9 +650,9 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
             raritymax = int(config["rarity" + str(rarity) + "Max"])
             weighting_column = "event_weighting" if useEventWeightings else "normal_weighting"
             if raritymax > 0:
-                cur.execute("SELECT id FROM waifus WHERE rarity = %s AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column), (rarity, raritymax))
+                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column), (rarity, raritymax))
             else:
-                cur.execute("SELECT id FROM waifus WHERE rarity = %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column), (rarity,))
+                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column), (rarity,))
             result = cur.fetchone()
             if result is None:
                 # no waifus left at this rarity
@@ -710,26 +669,25 @@ def resetWeightings(*cards):
         inString = ",".join(["%s"] * len(cards))
         cur.execute("UPDATE waifus SET normal_weighting = 1 WHERE id IN({0})".format(inString), cards)
 
-def giveCard(userid, id):
-    cur = db.cursor()
-    cur.execute("SELECT COUNT(*) FROM has_waifu WHERE userid = %s AND waifuid = %s", [userid, id])
-    hasWaifu = cur.fetchone()[0] == 1
-    if hasWaifu:
-        cur.execute("UPDATE has_waifu SET amount = amount + 1 WHERE userid = %s AND waifuid = %s", [userid, id])
-    else:
-        cur.execute("INSERT INTO has_waifu(userid, waifuid, amount) VALUES(%s, %s, %s)", [userid, id, 1])
-    cur.close()
-    
-def takeCard(userid, id):
+def giveCard(userid, id, rarity):
     with db.cursor() as cur:
-        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE userid = %s AND waifuid = %s", [userid, id])
+        cur.execute("SELECT COUNT(*) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
+        hasWaifu = cur.fetchone()[0] == 1
+        if hasWaifu:
+            cur.execute("UPDATE has_waifu SET amount = amount + 1 WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
+        else:
+            cur.execute("INSERT INTO has_waifu(userid, waifuid, rarity, amount) VALUES(%s, %s, %s, 1)", [userid, id, rarity])
+    
+def takeCard(userid, id, rarity):
+    with db.cursor() as cur:
+        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
         currentAmount = cur.fetchone()[0]
         if currentAmount > 1:
-            cur.execute("UPDATE has_waifu SET amount = amount - 1 WHERE userid = %s AND waifuid = %s", [userid, id])
+            cur.execute("UPDATE has_waifu SET amount = amount - 1 WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
         elif currentAmount == 1:
-            cur.execute("DELETE FROM has_waifu WHERE userid = %s AND waifuid = %s", [userid, id])
+            cur.execute("DELETE FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
         else:
-            raise ValueError("Couldn't remove waifu %s from user %s as they don't own it!" % (str(id), str(userid)))
+            raise ValueError("Couldn't remove waifu %s at rarity %s from user %s as they don't own it!" % (str(id), str(rarity), str(userid)))
     
 def logDrop(userid, waifuid, rarity, source, channel, isWhisper):
     trueChannel = "$$whisper$$" if isWhisper else channel
@@ -815,16 +773,15 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
     pityPullReset = False
 
     for card in cards:
-        cur.execute("SELECT name, rarity, image FROM waifus WHERE id = %s", [card])
-        row = cur.fetchone()
+        waifu = getWaifuById(card)
 
-        if row[1] >= int(config["drawAlertMinimumRarity"]):
-            alertwaifus.append( {"name":str(row[0]), "rarity":int(row[1]), "image":str(row[2]), "id": card})
+        if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
+            alertwaifus.append(waifu)
 
-        if row[1] >= int(config["pityPullRarity"]) and pityPullActive:
+        if waifu['base_rarity'] >= int(config["pityPullRarity"]) and pityPullActive:
             pityPullReset = True
 
-        logDrop(str(userid), str(card), row[1], "boosters.%s" % packname, channel, isWhisper)
+        logDrop(str(userid), str(card), waifu['base_rarity'], "boosters.%s" % packname, channel, isWhisper)
         
     resetWeightings(*cards)
 
@@ -993,7 +950,7 @@ class NepBot(NepBotClass):
                     # increase weightings
                     with db.cursor() as cur:
                         logger.debug("Increasing card weightings...")
-                        cur.execute("UPDATE waifus SET normal_weighting = normal_weighting * %s WHERE rarity < %s", [float(config["weighting_increase_amount"]), int(config["numNormalRarities"])])
+                        cur.execute("UPDATE waifus SET normal_weighting = normal_weighting * %s WHERE base_rarity < %s", [float(config["weighting_increase_amount"]), int(config["numNormalRarities"])])
                         config["last_weighting_update"] = str(current_milli_time())
                         cur.execute("UPDATE config SET value = %s WHERE name = 'last_weighting_update'", [config["last_weighting_update"]])
             logger.debug("Checking live status of channels...")
@@ -1229,22 +1186,6 @@ class NepBot(NepBotClass):
         logger.debug("WE HAS COMMANDS ENABLED!")
         return
 
-    def on_raw_cap_ls(self, params):
-        logger.debug("Got CAP LS")
-        # print(str(params))
-        # print(str(self._capabilities))
-        # for capab in params[0].split():
-        #     capab, value = self._capability_normalize(capab)
-        #     print("Capab: {capab}, value: {value}".format(capab=str(capab), value=str(value)))
-        #     attr = 'on_capability_' + pydle.protocol.identifierify(capab) + '_available'
-        #     print("attr: " + str(attr))
-        #     h = hasattr(self, attr)
-        #     print("has attr: " + str(h))
-        #     if h:
-        #         g = getattr(self, attr)(value)
-        #         print("get attr: " + str(g))
-        super().on_raw_cap_ls(params)
-
     def on_disconnect(self, expected):
         logger.error("Disconnected, reconnecting. Was it expected? %s", str(expected))
         pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=self.pw, reconnect=True)
@@ -1309,23 +1250,6 @@ class NepBot(NepBotClass):
         elif message.startswith("!"):
             self.message(source, "Bad Bot. No.")
             return
-
-        # if str(message).find("HDNVert")>=0:
-        #     cur = db.cursor()
-        #     cur.execute("UPDATE consoleWar SET count=count+1 WHERE Name='Vert'")
-        #     cur.close()
-        # if str(message).find("HDNNoire")>=0:
-        #     cur = db.cursor()
-        #     cur.execute("UPDATE consoleWar SET count=count+1 WHERE Name='Noire'")
-        #     cur.close()
-        # if str(message).find("HDNNeptune")>=0:
-        #     cur = db.cursor()
-        #     cur.execute("UPDATE consoleWar SET count=count+1 WHERE Name='Neptune'")
-        #     cur.close()
-        # if str(message).find("HDNBlanc")>=0:
-        #     cur = db.cursor()
-        #     cur.execute("UPDATE consoleWar SET count=count+1 WHERE Name='Blanc'")
-        #     cur.close()
 
     def message(self, channel, message, isWhisper=False):
         logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
@@ -1401,18 +1325,15 @@ class NepBot(NepBotClass):
                 limit = int(res[1])
                 freeAvailable = nextFree < current_milli_time()
                 if freeAvailable and currentCards(tags['user-id']) < limit:
-                    #print("egliable, dropping card.")
-                    cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [dropCard()])
-                    row = cur.fetchone()
-                    id = str(row[0])
-                    resetWeightings(id)
-                    logDrop(str(tags['user-id']), id, row[3], "freewaifu", channel, isWhisper)
-                    if int(row[3]) >= int(config["drawAlertMinimumRarity"]):
-                        threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2], "id": row[0]}, str(tags["display-name"]))).start()
+                    row = getWaifuById(dropCard())
+                    resetWeightings(row['id'])
+                    logDrop(str(tags['user-id']), id, row['base_rarity'], "freewaifu", channel, isWhisper)
+                    if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
+                        threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
                     self.message(channel, tags['display-name'] + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
-                        id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
-                        link=row[2]), isWhisper=isWhisper)
-                    giveCard(tags['user-id'], row[0])
+                        id=str(row['id']), rarity=config["rarity" + str(row['base_rarity']) + "Name"], name=row['name'], series=row['series'],
+                        link=row['image']), isWhisper=isWhisper)
+                    giveCard(tags['user-id'], row[0], row['base_rarity'])
                     
                     cur.execute("UPDATE users SET lastFree = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
                 elif freeAvailable:
@@ -1426,6 +1347,7 @@ class NepBot(NepBotClass):
                 cur.close()
                 return
             if command == "disenchant":
+                # TODO
                 if len(args) == 0 or (len(args) == 1 and len(args[0]) == 0):
                     self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
                     return
@@ -1514,19 +1436,16 @@ class NepBot(NepBotClass):
                 chosenWaifu = dropCard(rarity, allowDowngrades=False)
                 if chosenWaifu is not None:
                     addPoints(tags['user-id'], 0 - price)
-                    cur = db.cursor()
-                    cur.execute("SELECT id, Name, image, rarity, series FROM waifus WHERE id=%s", [chosenWaifu])
-                    row = cur.fetchone()
+                    row = getWaifuById(chosenWaifu)
                     self.message(channel, str(
-                        tags['display-name']) + ', you bought a new Waifu for {price}: [{id}][{rarity}] {name} from {series} - {link}'.format(
-                        id=str(row[0]), rarity=config["rarity" + str(row[3]) + "Name"], name=row[1], series=row[4],
-                        link=row[2], price=str(price)), isWhisper=isWhisper)
-                    resetWeightings(row[0])
-                    giveCard(tags['user-id'], str(row[0]))
-                    cur.close()
-                    logDrop(str(tags['user-id']), str(row[0]), rarity, "buy", channel, isWhisper)
-                    if row[3] >= int(config["drawAlertMinimumRarity"]):
-                        threading.Thread(target=sendDrawAlert, args=(channel, {"name":row[1], "rarity":row[3], "image":row[2], "id": row[0]}, str(tags["display-name"]))).start()
+                        tags['display-name']) + ', you bought a new Waifu for {price} points: [{id}][{rarity}] {name} from {series} - {link}'.format(
+                        id=str(row['id']), rarity=config["rarity" + str(row['base_rarity']) + "Name"], name=row['name'], series=row['series'],
+                        link=row['image'], price=str(price)), isWhisper=isWhisper)
+                    resetWeightings(row['id'])
+                    giveCard(tags['user-id'], row['id'], row['base_rarity'])
+                    logDrop(str(tags['user-id']), row['id'], rarity, "buy", channel, isWhisper)
+                    if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
+                        threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
                     return
                 else:
                     self.message(channel, "You can't buy a %s waifu right now. Try again later." % config["rarity" + str(rarity) + "Name"], isWhisper)
@@ -1603,31 +1522,28 @@ class NepBot(NepBotClass):
                         return
                     gottenpoints = 0
                     response = "You take your booster pack and: "
-                    c = 2
                     cur = db.cursor()
                     keeps = []
                     des = []
                     ordersFilled = 0
-                    for arg in selectArgs:
-                        if str(arg).lower() == "keep":
-                            giveCard(tags['user-id'], cards[c-2])
-                            keeps.append(cards[c-2])
+                    for i in range(len(cards)):
+                        waifu = getWaifuById(cards[i])
+                        if str(selectArgs[i+2]).lower() == "keep":
+                            giveCard(tags['user-id'], waifu['id'], waifu['base_rarity'])
+                            keeps.append(waifu['id'])
                         else:
                             # Disenchant
-                            id = cards[c-2]
-                            cur.execute("SELECT rarity, name, image FROM waifus WHERE id = %s", [id])
-                            waifu = cur.fetchone()
-                            baseValue = int(config["rarity" + str(waifu[0]) + "Value"])
-                            received = attemptDisenchant(self, id, baseValue)
-                            gottenpoints += received
-                            if received != baseValue:
+                            baseValue = int(config["rarity" + str(waifu['base_rarity']) + "Value"])
+                            profit = attemptDisenchant(self, id)
+                            gottenpoints += baseValue + profit
+                            if profit > 0:
                                 ordersFilled += 1
-                            if waifu[0] >= int(config["disenchantAlertMinimumRarity"]) and received == baseValue:
+                            elif waifu['base_rarity'] >= int(config["disenchantAlertMinimumRarity"]):
                                 # valuable waifu being disenchanted
-                                threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":waifu[1], "rarity":waifu[0], "image":waifu[2]}, str(tags["display-name"]))).start()
+                                threading.Thread(target=sendDisenchantAlert, args=(channel, waifu, str(tags["display-name"]))).start()
                             
-                            des.append(id)
-                        c += 1
+                            des.append(waifu['id'])
+                    
                     addPoints(tags['user-id'], gottenpoints)
                     if len(keeps) > 0:
                         response += " keep " + ', '.join(str(x) for x in keeps) + ";"
@@ -1663,6 +1579,7 @@ class NepBot(NepBotClass):
                     cur.close()
                     return
             if command == "trade":
+                # TODO
                 ourid = int(tags['user-id'])
                 cur = db.cursor()
                 # expire old trades
@@ -1866,12 +1783,27 @@ class NepBot(NepBotClass):
                     try:
                         waifu = getWaifuById(args[0])
                         assert waifu is not None
-                        owned = whoHas(args[0])
-                        if len(owned) > 4:
-                            owned = owned[0:3] + ["%d others" % (len(owned) - 3)]
+                        baseRarityName = config["rarity%dName" % waifu["base_rarity"]]
+                        # TODO
+                        cur.execute("SELECT users.name, has_waifu.rarity, has_waifu.amount FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE has_waifu.waifuid = %s", [waifu['id']])
+                        allOwners = cur.fetchall()
+                        # compile per-owner data
+                        ownerData = {}
+                        for row in allOwners:
+                            if row[0] not in ownerData:
+                                ownerData[row[0]] = {}
+                            ownerData[row[0]][config["rarity%dName" % row[1]]] = row[2]
+                        
+                        ownerDescriptions = []
+                        for owner in ownerData:
+                            if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner]:
+                                # verbose
+                                ownerDescriptions.append(owner + " ("+", ".join("%d %s" % (ownerData[owner][rarity], rarity) for rarity in ownerData[owner])+")")
+                            else:
+                                ownerDescriptions.append(owner)
 
-                        waifu["rarity"] = config["rarity%dName" % waifu["rarity"]]
-                        waifu["owned"] = (" - owned by " + ", ".join(owned)) if len(owned) > 0 else " (not dropped so far)"
+                        waifu["rarity"] = baseRarityName
+                        waifu["owned"] = (" - owned by " + ", ".join(ownerDescriptions)) if len(ownerDescriptions) > 0 else " (not currently owned)"
 
                         self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}'.format(**waifu), isWhisper=isWhisper)
 
@@ -1891,7 +1823,7 @@ class NepBot(NepBotClass):
                     self.message("#jtv", "/w {user} This is a test whisper.".format(user=sender), isWhisper=False)
                     self.message(channel, "Attempted to send test whisper.", isWhisper=isWhisper)
                 else:
-                    self.message(channel, "{user}, you need to be following me so i can send you whispers!".format(user=str(tags['display-name'])), isWhisper=isWhisper)
+                    self.message(channel, "{user}, you need to be following me so I can send you whispers!".format(user=str(tags['display-name'])), isWhisper=isWhisper)
                 return
             if command == "help":
                 self.message(channel, config["siteHost"] + "/help", isWhisper=isWhisper)
@@ -1927,7 +1859,7 @@ class NepBot(NepBotClass):
                         self.message(channel, "Alerts do not seem to be set up for your channel, please set them up using !alerts setup", isWhisper=isWhisper)
                     else:
                         threading.Thread(target=sendDrawAlert, args=(
-                        sender, {"name": "Test Alert, please ignore", "rarity": rarity, "image": "http://t.fuelr.at/k6g"},
+                        sender, {"name": "Test Alert, please ignore", "base_rarity": rarity, "image": "http://t.fuelr.at/k6g"},
                         str(tags["display-name"]), False)).start()
                         self.message(channel, "Test Alert sent.", isWhisper=isWhisper)
                     return
@@ -1988,18 +1920,6 @@ class NepBot(NepBotClass):
                 self.message(channel, "Attempting to set follow buttons to hdnmarathon and nepnepbot", isWhisper=isWhisper)
                 setFollows(["hdnmarathon", "nepnepbot"])
                 return
-            # if command == "follow" and sender.lower() in self.myadmins:
-            #     self.message(channel, "Setting follow Button for hdnmarathon to " + (", ".join(args)))
-            #     setFollows(args)
-            #     return
-            # if command == "title" and sender.lower() in self.myadmins:
-            #     self.message(channel, "Setting title for hdnmarathon to " + " ".join(args))
-            #     updateTitle(" ".join(args))
-            #     return
-            # if command == "game" and sender.lower() in self.myadmins:
-            #     self.message(channel, "Setting game for hdnmarathon to " + " ".join(args))
-            #     updateGame(" ".join(args))
-            #     return
             if command == "togglehoraro" and sender.lower() in self.myadmins:
                 self.autoupdate = not self.autoupdate
                 if self.autoupdate:
@@ -2045,7 +1965,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "Tried joining, failed. Tell Marenthyu the following: " + str(sys.exc_info()), isWhisper=isWhisper)
                     logger.error("Error Joining channel %s: %s", chan, str(sys.exc_info()))
                     return
-            if command == "nepleave" and (sender.lower() in self.myadmins or ("#" + str(sender.lower())) == str(channel)):
+            if command == "nepleave" and (sender in self.myadmins or ("#" + sender) == str(channel)):
                 if len(args) > 0:
                     self.message(channel, "nepleave doesn't take in argument. Type it in the channel to leave.", isWhisper=isWhisper)
                     return
@@ -2062,7 +1982,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "Tried to leave but failed D:", isWhisper=isWhisper)
                     logger.error("Error leaving %s: %s", channel, str(sys.exc_info()))
                     return
-            if command == "reload" and (sender.lower() in self.myadmins):
+            if command == "reload" and sender in self.myadmins:
                 #print("in reload command")
                 loadConfig()
                 self.message(channel, "Config reloaded.", isWhisper=isWhisper)
@@ -2121,8 +2041,10 @@ class NepBot(NepBotClass):
                     
                 # waifu?
                 if redeemdata[2] is not None:
-                    giveCard(tags['user-id'], redeemdata[2])
-                    received.append("Waifu ID %d" % redeemdata[2])
+                    waifuinfo = getWaifuById(redeemdata[2])
+                    giveCard(tags['user-id'], redeemdata[2], waifuinfo['base_rarity'])
+                    waifuinfo['rarity'] = config["rarity%dName" % waifuinfo['base_rarity']]
+                    received.append("A waifu: [{id}][{rarity}] {name} from {series}".format(**waifuinfo))
                     
                 # points
                 if redeemdata[1] != 0:
@@ -2136,7 +2058,7 @@ class NepBot(NepBotClass):
                     cur.execute("UPDATE tokens SET claimable = 0 WHERE id = %s", [redeemdata[0]])
                     
                 # show results
-                self.message(channel, "%s -> Successfully redeemed the token %s, added the following to your account - %s" % (tags['display-name'], args[0], " and ".join(received[::-1])), isWhisper)
+                self.message(channel, "%s -> Successfully redeemed the token %s, added the following to your account -> %s" % (tags['display-name'], args[0], " and ".join(received[::-1])), isWhisper)
                 cur.close()
                 return
             if command == "wars":
@@ -2266,7 +2188,7 @@ class NepBot(NepBotClass):
                     if len(result) == 1:
                         self.message(channel,
                                      "Found one waifu: [{w[id]}][{rarity}]{w[name]} from {w[series]} (use !lookup {w[id]} for more info)".format(
-                                         w=result[0], rarity=config['rarity' + str(result[0]['rarity']) + 'Name']), isWhisper=isWhisper)
+                                         w=result[0], rarity=config['rarity' + str(result[0]['base_rarity']) + 'Name']), isWhisper=isWhisper)
                         return
                     if len(result) > 8:
                         self.message(channel, "Too many results! ({amount}) - try a longer search query.".format(
@@ -2563,7 +2485,7 @@ class NepBot(NepBotClass):
                         return
                     else:
                         cur = db.cursor()
-                        cur.executemany("INSERT INTO waifus (Name, image, rarity, series) VALUES(%s, %s, %s, %s)", [(waifu["name"], waifu["link"], int(waifu["rarity"]), waifu["series"].strip()) for waifu in addwaifus])
+                        cur.executemany("INSERT INTO waifus (Name, image, base_rarity, series) VALUES(%s, %s, %s, %s)", [(waifu["name"], waifu["link"], int(waifu["rarity"]), waifu["series"].strip()) for waifu in addwaifus])
                         cur.close()
                         self.message(channel, "Successfully added %d waifus to the database." % len(addwaifus), isWhisper)
                         return
@@ -2813,7 +2735,7 @@ class NepBot(NepBotClass):
                         waifu = getWaifuById(args[1])
                         assert waifu is not None
                         
-                        if waifu['rarity'] == int(config["numNormalRarities"]) - 1:
+                        if waifu['base_rarity'] == int(config["numNormalRarities"]) - 1:
                             self.message(channel, "Bounties cannot be placed on special waifus.", isWhisper)
                             return
                             
@@ -2874,15 +2796,15 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !bounty <ID> <amount>", isWhisper)
                         return
                         
-                    #if not followsme(tags['user-id']):
-                    #    self.message(channel, "%s, you must follow the bot to use bounties so you can be sent a whisper if your order is filled." % tags['display-name'], isWhisper)
-                    #    return
+                    if not followsme(tags['user-id']):
+                        self.message(channel, "%s, you must follow the bot to use bounties so you can be sent a whisper if your order is filled." % tags['display-name'], isWhisper)
+                        return
                     
                     try:
                         waifu = getWaifuById(args[1])
                         assert waifu is not None
                         
-                        if waifu['rarity'] == int(config["numNormalRarities"]) - 1:
+                        if waifu['base_rarity'] == int(config["numNormalRarities"]) - 1:
                             self.message(channel, "Bounties cannot be placed on special waifus.", isWhisper)
                             return
                         
@@ -2916,11 +2838,11 @@ class NepBot(NepBotClass):
                             return
                             
                         # check the range
-                        de_value = int(config["rarity" + str(waifu['rarity']) + "Value"])
+                        de_value = int(config["rarity" + str(waifu['base_rarity']) + "Value"])
                         min_amount = de_value + 5
-                        max_amount = [100, 250, 500, 1000, 2000, 6000, 20000][waifu['rarity']]
+                        max_amount = [100, 250, 500, 1000, 2000, 6000, 20000][waifu['base_rarity']]
                         if amount < min_amount or amount > max_amount:
-                            self.message(channel, "%s, bounties for this waifu's rarity (%s) must fall between %d and %d points." % (tags['display-name'], config["rarity" + str(waifu['rarity']) + "Name"], min_amount, max_amount), isWhisper)
+                            self.message(channel, "%s, bounties for this waifu's base rarity (%s) must fall between %d and %d points." % (tags['display-name'], config["rarity" + str(waifu['base_rarity']) + "Name"], min_amount, max_amount), isWhisper)
                             cur.close()
                             return
                             
