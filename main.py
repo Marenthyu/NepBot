@@ -137,7 +137,7 @@ def loadConfig():
         for row in curg.fetchall():
             admins.append(row[0])
         logger.debug("Admins: %s", str(admins))
-        revrarity = {config["rarity" + str(i) + "Name"]:i for i in range(int(config["numNormalRarities"]))}
+        revrarity = {config["rarity" + str(i) + "Name"]:i for i in range(int(config["numNormalRarities"]) + 1)}
         curg.execute("SELECT name FROM blacklist")
         rows = curg.fetchall()
         blacklist = []
@@ -525,7 +525,7 @@ def sendDisenchantAlert(channel, waifu, user):
         discordbody = {"username": "Waifu TCG", "embeds": [
             {
                 "title": "A {rarity} waifu has been disenchanted!".format(
-                    rarity=str(config["rarity" + str(waifu["rarity"]) + "Name"]))
+                    rarity=str(config["rarity" + str(waifu["base_rarity"]) + "Name"]))
             },
             {
                 "type": "rich",
@@ -542,7 +542,7 @@ def sendDisenchantAlert(channel, waifu, user):
                 }
             }
         ]}
-        colorKey = "rarity" + str(waifu["rarity"]) + "EmbedColor"
+        colorKey = "rarity" + str(waifu["base_rarity"]) + "EmbedColor"
         if colorKey in config:
             discordbody["embeds"][0]["color"] = int(config[colorKey])
             discordbody["embeds"][1]["color"] = int(config[colorKey])
@@ -550,6 +550,7 @@ def sendDisenchantAlert(channel, waifu, user):
         
 def sendPromotionAlert(channel, waifu, user):
     # TODO
+    pass
         
 def naturalJoinNames(names):
     if len(names) == 1:
@@ -708,6 +709,18 @@ def formatRank(rankNum):
 def formatTimeDelta(ms):
     baseRepr = str(datetime.timedelta(milliseconds=ms, microseconds=0))
     return baseRepr[:-3] if "." in baseRepr else baseRepr
+    
+def parseRarity(input):
+    try:
+        rarity = int(input)
+    except:
+        if input.lower() in revrarity:
+            rarity = revrarity[input.lower()]
+        else:
+            raise ValueError(input)
+    if rarity < 0 or rarity > int(config["numNormalRarities"]):
+        raise ValueError(input)
+    return rarity
     
 class InvalidBoosterException(Exception):
     pass
@@ -1347,67 +1360,97 @@ class NepBot(NepBotClass):
                 cur.close()
                 return
             if command == "disenchant":
-                # TODO
                 if len(args) == 0 or (len(args) == 1 and len(args[0]) == 0):
                     self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
                     return
-                ids = []
-                try:
-                    for arg in args:
-                        ids.append(int(arg))
-                except:
-                    self.message(channel, "Could not decipher one or more of the waifu IDs you provided.", isWhisper=isWhisper)
-                    return
-
-                try:
-                    inStrings = ",".join(["%s"] * len(ids))
-                    cur = db.cursor()
-                    # FIXME Combined format and %s? Unsure how to properly use only %s here.
-                    cur.execute("SELECT has_waifu.waifuid, has_waifu.amount, waifus.rarity, waifus.name, waifus.image FROM has_waifu INNER JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s AND waifuid IN({0})".format(inStrings), [tags['user-id']] + ids)
-                    hasInfo = cur.fetchall()
-
-                    # work out if any waifu is actually missing from their hand.
-                    missing = ids[:]
-                    for row in hasInfo:
-                        missing.remove(int(row[0]))
-
-                    if len(missing) > 0:
-                        if len(missing) == 1:
-                            self.message(channel, "You don't own waifu %d." % missing[0], isWhisper=isWhisper)
-                        else:
-                            self.message(channel, "You don't own the following waifus: %s" % ", ".join([str(id) for id in missing]), isWhisper=isWhisper)
-                        return
-
-                    # handle disenchants appropriately
-                    pointsGain = 0
-                    ordersFilled = 0
-                    for row in hasInfo:
-                        baseValue = int(config["rarity" + str(row[2]) + "Value"])
-                        received = attemptDisenchant(self, row[0], baseValue)
-                        pointsGain += received
-                        if received != baseValue:
-                            ordersFilled += 1
-                        if row[2] >= int(config["disenchantAlertMinimumRarity"]) and received == baseValue:
-                            # valuable waifu disenchanted
-                            threading.Thread(target=sendDisenchantAlert, args=(channel, {"name":row[3], "rarity":row[2], "image":row[4]}, str(tags["display-name"]))).start()
+                disenchants = []
+                dontHave = []
+                hand = getHand(tags['user-id'])
+                
+                for arg in args:
+                    # handle disenchanting
+                    if "-" in arg:
+                        try:
+                            id = int(arg.split("-", 1)[0])
+                            rarity = parseRarity(arg.split("-", 1)[1])
+                            packedDeValue = {"id": id, "rarity": rarity}
+                            if packedDeValue in disenchants:
+                                self.message(channel, "You can't disenchant the same waifu twice at once!", isWhisper=isWhisper)
+                                return
                             
-                        # changed implementation to avoid weirdness with bounties
-                        takeCard(tags['user-id'], row[0])
-
-                    addPoints(tags['user-id'], pointsGain)
-
-                    if len(ids) == 1:
-                        buytext = " (bounty filled)" if ordersFilled > 0 else ""
-                        self.message(channel, "Successfully disenchanted waifu %d%s and added %d points to %s's account" % (ids[0], buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                            found = False
+                            for waifu in hand:
+                                if waifu['id'] == id and waifu['rarity'] == rarity:
+                                    # found it
+                                    disenchants.append(packedDeValue)
+                                    found = True
+                                    break
+                            
+                            if not found:
+                                dontHave.append(arg)
+                        except Exception:
+                            self.message(channel, "Could not decipher one or more of the waifu IDs you provided.", isWhisper=isWhisper)
+                            return
                     else:
-                        buytext = " (%d bounties filled)" % ordersFilled if ordersFilled > 0 else ""
-                        self.message(channel, "Successfully disenchanted %d waifus%s and added %d points to %s's account" % (len(ids), buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                        try:
+                            id = int(arg)
+                            rarity = None
+                            for waifu in hand:
+                                if waifu['id'] == id:
+                                    if rarity is None:
+                                        rarity = waifu['rarity']
+                                    else:
+                                        self.message(channel, "You have more than one rarity of waifu %d in your hand. Please specify a rarity as well by appending a hyphen and then the rarity e.g. !disenchant %d-god" % (id, id))
+                                        return
+                            
+                            if rarity is None:
+                                dontHave.append(arg)
+                            else:
+                                packedDeValue = {"id": id, "rarity": rarity}
+                                if packedDeValue in disenchants:
+                                    self.message(channel, "You can't disenchant the same waifu twice at once!", isWhisper=isWhisper)
+                                    return
+                                else:
+                                    disenchants.append(packedDeValue)
+                        except Exception:
+                            self.message(channel, "Could not decipher one or more of the waifu IDs you provided.", isWhisper=isWhisper)
+                            return
+                            
+                if len(dontHave) > 0:
+                    if len(dontHave) == 1:
+                        self.message(channel, "You don't own waifu %s." % dontHave[0], isWhisper)
+                    else:
+                        self.message(channel, "You don't own the following waifus: %s" % ", ".join([id for id in dontHave]), isWhisper)
+                    return
+                    
+                # handle disenchants appropriately
+                pointsGain = 0
+                ordersFilled = 0
+                for row in disenchants:
+                    baseValue = int(config["rarity" + str(row['rarity']) + "Value"])
+                    profit = attemptDisenchant(self, row['id'])
+                    pointsGain += baseValue + profit
+                    if profit > 0:
+                        ordersFilled += 1
+                    elif row['rarity'] >= int(config["disenchantAlertMinimumRarity"]):
+                        # valuable waifu disenchanted
+                        waifuData = getWaifuById(row['id'])
+                        waifuData['base_rarity'] = row['rarity'] # cheat to make it show any promoted rarity override
+                        threading.Thread(target=sendDisenchantAlert, args=(channel, waifuData, tags["display-name"])).start()
+                        
+                    # changed implementation to avoid weirdness with bounties
+                    takeCard(tags['user-id'], row['id'], row['rarity'])
+                    
+                addPoints(tags['user-id'], pointsGain)
 
-                    cur.close()
-                    return
-                except Exception as exc:
-                    self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
-                    return
+                if len(disenchants) == 1:
+                    buytext = " (bounty filled)" if ordersFilled > 0 else ""
+                    self.message(channel, "Successfully disenchanted waifu %d%s and added %d points to %s's account" % (disenchants[0]['id'], buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                else:
+                    buytext = " (%d bounties filled)" % ordersFilled if ordersFilled > 0 else ""
+                    self.message(channel, "Successfully disenchanted %d waifus%s and added %d points to %s's account" % (len(disenchants), buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+
+                return
             if command == "giveme":
                 self.message(channel, "No.", isWhisper=isWhisper)
                 return
@@ -1419,15 +1462,12 @@ class NepBot(NepBotClass):
                     self.message(channel, "{sender}, you have too many cards to buy one! !disenchant some or upgrade your hand!".format(sender=str(tags['display-name'])), isWhisper=isWhisper)
                     return
                 try:
-                    rarity = int(args[0])
+                    rarity = parseRarity(args[0])
                 except:
-                    if args[0] in revrarity.keys():
-                        rarity = revrarity[args[0]]
-                    else:
-                        self.message(channel, "Unknown rarity. Usage: !buy <rarity> (So !buy uncommon for an uncommon)", isWhisper=isWhisper)
-                        return
-                if rarity < 0 or rarity >= int(config["numNormalRarities"]):
-                    self.message(channel, "Usage: !buy <rarity> (So !buy uncommon for an uncommon)", isWhisper=isWhisper)
+                    self.message(channel, "Unknown rarity. Usage: !buy <rarity> (So !buy uncommon for an uncommon)", isWhisper=isWhisper)
+                    return
+                if rarity == int(config["numNormalRarities"]):
+                    self.message(channel, "You can't buy a special waifu.", isWhisper=isWhisper)
                     return
                 price = int(config["rarity" + str(rarity) + "Value"]) * 5
                 if not hasPoints(tags['user-id'], price):
@@ -1784,21 +1824,26 @@ class NepBot(NepBotClass):
                         waifu = getWaifuById(args[0])
                         assert waifu is not None
                         baseRarityName = config["rarity%dName" % waifu["base_rarity"]]
-                        # TODO
                         cur.execute("SELECT users.name, has_waifu.rarity, has_waifu.amount FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE has_waifu.waifuid = %s", [waifu['id']])
                         allOwners = cur.fetchall()
                         # compile per-owner data
                         ownerData = {}
+                        ownedByOwner = {}
                         for row in allOwners:
                             if row[0] not in ownerData:
                                 ownerData[row[0]] = {}
+                                ownedByOwner[row[0]] = 0
                             ownerData[row[0]][config["rarity%dName" % row[1]]] = row[2]
+                            ownedByOwner[row[0]] += row[2]
                         
                         ownerDescriptions = []
                         for owner in ownerData:
                             if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner]:
                                 # verbose
-                                ownerDescriptions.append(owner + " ("+", ".join("%d %s" % (ownerData[owner][rarity], rarity) for rarity in ownerData[owner])+")")
+                                if ownedByOwner[owner] > 1:
+                                    ownerDescriptions.append(owner + " ("+", ".join("%d %s" % (ownerData[owner][rarity], rarity) for rarity in ownerData[owner])+")")
+                                else:
+                                    ownerDescriptions.append(owner + " (" + "".join(rarity for rarity in ownerData[owner]) + ")")
                             else:
                                 ownerDescriptions.append(owner)
 
