@@ -56,6 +56,7 @@ pymysql.install_as_MySQLdb()
 dbpw = None
 dbname = None
 silence = False
+debugMode = False
 hdnoauth = None
 streamlabsclient = None
 twitchclientsecret = None
@@ -84,6 +85,9 @@ try:
         if name == "silent" and value == "True":
             logger.warning("Silent mode enabled")
             silence = True
+        if name == "debugMode" and value == "True":
+            logger.warning("Debug mode enabled, !as command is available")
+            debugMode = True
     if dbpw is None:
         logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
         sys.exit(1)
@@ -1320,6 +1324,20 @@ class NepBot(NepBotClass):
 
     def do_command(self, command, args, sender, channel, tags, isWhisper=False):
         logger.debug("Got command: %s with arguments %s", command, str(args))
+        if command == "as" and debugMode and sender in self.myadmins:
+            if len(args) < 2 or len(args[1]) == 0:
+                self.message(channel, "Usage: !as <user> <command>", isWhisper)
+                return
+            with busyLock:
+                with db.cursor() as cur:
+                    cur.execute("SELECT id FROM users WHERE name = %s", [args[0]])
+                    row = cur.fetchone()
+                    if row is None:
+                        self.message(channel, "User not found.")
+                        return
+                    userid = row[0]
+            self.do_command(args[1][1:].lower(), args[2:], args[0].lower(), channel, {'display-name': args[0], 'user-id': userid}, isWhisper)
+            return
         with busyLock:
             if command == "quit" and sender in self.myadmins:
                 logger.info("Quitting from admin command.")
@@ -1478,8 +1496,8 @@ class NepBot(NepBotClass):
                 except:
                     self.message(channel, "Unknown rarity. Usage: !buy <rarity> (So !buy uncommon for an uncommon)", isWhisper=isWhisper)
                     return
-                if rarity == int(config["numNormalRarities"]):
-                    self.message(channel, "You can't buy a special waifu.", isWhisper=isWhisper)
+                if rarity == int(config["numNormalRarities"]) or int(config["rarity" + str(rarity) + "Max"]) == 1:
+                    self.message(channel, "You can't buy that rarity of waifu.", isWhisper=isWhisper)
                     return
                 price = int(config["rarity" + str(rarity) + "Value"]) * 5
                 if not hasPoints(tags['user-id'], price):
@@ -1631,197 +1649,213 @@ class NepBot(NepBotClass):
                     cur.close()
                     return
             if command == "trade":
-                # TODO
                 ourid = int(tags['user-id'])
-                cur = db.cursor()
-                # expire old trades
-                currTime = current_milli_time()
-                cur.execute("UPDATE trades SET status = 'expired', updated = %s WHERE status = 'open' AND created <= %s", [currTime, currTime - 86400000])
-                if len(args) < 2:
-                    self.message(channel, "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want> [points]", isWhisper=isWhisper)
-                    cur.close()
-                    return
-                subarg = args[0].lower()
-                if subarg in ["check", "accept", "decline"]:
-                    otherparty = str(args[1]).lower()
+                with db.cursor() as cur:
+                    # expire old trades
+                    currTime = current_milli_time()
+                    cur.execute("UPDATE trades SET status = 'expired', updated = %s WHERE status = 'open' AND created <= %s", [currTime, currTime - 86400000])
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want> [points]", isWhisper=isWhisper)
+                        return
+                    subarg = args[0].lower()
+                    if subarg in ["check", "accept", "decline"]:
+                        otherparty = args[1].lower()
+                        
+                        cur.execute("SELECT id FROM users WHERE name = %s", [otherparty])
+                        otheridrow = cur.fetchone()
+                        if otheridrow is None:
+                            self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
+                            return
+                        otherid = int(otheridrow[0])
+                        
+                        # look for trade row
+                        cur.execute("SELECT id, want, have, points, payup, want_rarity, have_rarity FROM trades WHERE fromid = %s AND toid = %s AND status = 'open' LIMIT 1", [otherid, ourid])
+                        trade = cur.fetchone()
+                        
+                        if trade is None:
+                            self.message(channel, otherparty + " did not send you a trade. Send one with !trade " + otherparty + " <have> <want> [points]", isWhisper=isWhisper)
+                            cur.close()
+                            return
+                            
+                        want = trade[1]
+                        have = trade[2]
+                        tradepoints = trade[3]
+                        payup = trade[4]
+                        want_rarity = trade[5]
+                        have_rarity = trade[6]
+                        
+                        if subarg == "check":
+                            wantdata = getWaifuById(want)
+                            havedata = getWaifuById(have)
+                            haveStr = "[%d][%s] %s" % (have, config["rarity"+str(have_rarity)+"Name"], havedata['name'])
+                            wantStr = "[%d][%s] %s" % (want, config["rarity"+str(want_rarity)+"Name"], wantdata['name']) 
+                            payer = "they will pay you" if otherid == payup else "you will pay them"
+                            if tradepoints > 0:
+                                self.message(channel, "{other} wants to trade their {have} for your {want} and {payer} {points} points. Accept it with !trade accept {other}".format(other=otherparty, have=haveStr, want=wantStr, payer=payer, points=tradepoints), isWhisper=isWhisper)
+                            else:
+                                self.message(channel, "{other} wants to trade their {have} for your {want}. Accept it with !trade accept {other}".format(other=otherparty, have=haveStr, want=wantStr, payer=payer), isWhisper=isWhisper)
+                            return
+                        elif subarg == "decline":
+                            cur.execute("UPDATE trades SET status = 'declined', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                            self.message(channel, "Trade declined.", isWhisper=isWhisper)
+                            return
+                        else:
+                            # accept
+                            # check that cards are still in place
+                            ourhand = getHand(ourid)
+                            otherhand = getHand(otherid)
+                            
+                            try:
+                                parseHandCardSpecifier(ourhand, "%d-%d" % (want, want_rarity))
+                            except CardRarityNotInHandException:
+                                self.message(channel, "%s, the rarity of waifu %d in your hand has changed! Trade cancelled." % (tags['display-name'], want), isWhisper)
+                                cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                                return
+                            except CardNotInHandException:
+                                self.message(channel, "%s, you no longer own waifu %d! Trade cancelled." % (tags['display-name'], want), isWhisper)
+                                cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                                return
+                                
+                            try:
+                                parseHandCardSpecifier(otherhand, "%d-%d" % (have, have_rarity))
+                            except CardRarityNotInHandException:
+                                self.message(channel, "%s, the rarity of %s's copy of waifu %d has changed! Trade cancelled." % (tags['display-name'], otherparty, have), isWhisper)
+                                cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                                return
+                            except CardNotInHandException:
+                                self.message(channel, "%s, %s no longer owns waifu %d! Trade cancelled." % (tags['display-name'], otherparty, have), isWhisper)
+                                cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                                return
+                            
+                            cost = int(config["tradingFee"])
+                            
+                            nonpayer = ourid if payup == otherid else otherid
+                            
+                            if not hasPoints(payup, cost + tradepoints):
+                                self.message(channel, "Sorry, but %s cannot cover the %s trading fee." % ("you" if payup == ourid else otherparty, "fair" if tradepoints > 0 else "base"), isWhisper=isWhisper)
+                                cur.close()
+                                return
+
+                            if not hasPoints(nonpayer, cost - tradepoints):
+                                self.message(channel, "Sorry, but %s cannot cover the base trading fee." % ("you" if nonpayer == ourid else otherparty), isWhisper=isWhisper)
+                                cur.close()
+                                return
+
+                            # give cards
+                            giveCard(ourid, have, have_rarity)
+                            giveCard(otherid, want, want_rarity)
+
+                            # take cards
+                            takeCard(ourid, want, want_rarity)
+                            takeCard(otherid, have, have_rarity)
+
+                            # points
+                            addPoints(payup, -(tradepoints + cost))
+                            addPoints(nonpayer, tradepoints - cost)
+
+                            # done
+                            cur.execute("UPDATE trades SET status = 'accepted', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                            
+                            self.message(channel, "Trade executed!", isWhisper=isWhisper)
+                            cur.close()
+                            return
+
+                    if len(args) not in [3, 4]:
+                        self.message(channel, "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want> [points]", isWhisper=isWhisper)
+                        return
+
+                    other = args[0]
                     
-                    cur.execute("SELECT id FROM users WHERE name = %s", [otherparty])
+                    cur.execute("SELECT id FROM users WHERE name = %s", [other])
                     otheridrow = cur.fetchone()
                     if otheridrow is None:
                         self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
-                        cur.close()
                         return
+                    
                     otherid = int(otheridrow[0])
+                    ourhand = getHand(ourid)
+                    otherhand = getHand(otherid)
                     
-                    # look for trade row
-                    cur.execute("SELECT id, want, have, points, payup FROM trades WHERE fromid = %s AND toid = %s AND status = 'open' LIMIT 1", [otherid, ourid])
-                    trade = cur.fetchone()
-                    
-                    if trade is None:
-                        self.message(channel, otherparty + " did not send you a trade. Send one with !trade " + otherparty + " <have> <want> [points]", isWhisper=isWhisper)
-                        cur.close()
+                    try:
+                        have = parseHandCardSpecifier(ourhand, args[1])
+                    except CardRarityNotInHandException:
+                        self.message(channel, "%s, you don't own that waifu at that rarity!" % tags['display-name'], isWhisper)
+                        return
+                    except CardNotInHandException:
+                        self.message(channel, "%s, you don't own that waifu!" % tags['display-name'], isWhisper)
+                        return
+                    except AmbiguousRarityException:
+                        self.message(channel, "%s, you own more than one rarity of waifu %s! Please specify a rarity as well by appending a hyphen and then the rarity, e.g. %s-god" % (tags['display-name'], args[1], args[1]), isWhisper)
+                        return
+                    except ValueError:
+                        self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
                         return
                         
-                    want = trade[1]
-                    have = trade[2]
-                    tradepoints = int(trade[3])
-                    payup = int(trade[4])
-                    
-                    if subarg == "check":
-                        wantwaifu = getWaifuById(want)
-                        havewaifu = getWaifuById(have)
-                        wantname = wantwaifu["name"]
-                        havename = havewaifu["name"]
-                        payer = "they will pay you" if otherid == payup else "you will pay them"
-                        if tradepoints > 0:
-                            self.message(channel, "{other} wants to trade their ({have}) {havename} for your ({want}) {wantname} and {payer} {points} points. Accept it with !trade accept {other}".format(other=otherparty, have=str(have), havename=havename, want=str(want), wantname=wantname, payer=payer, points=tradepoints), isWhisper=isWhisper)
-                        else:
-                            self.message(channel, "{other} wants to trade their ({have}) {havename} for your ({want}) {wantname}. Accept it with !trade accept {other}".format(other=str(args[1]).lower(), have=str(have), havename=havename, want=str(want), wantname=wantname, payer=payer), isWhisper=isWhisper)
-                        cur.close()
+                    try:
+                        want = parseHandCardSpecifier(otherhand, args[2])
+                    except CardRarityNotInHandException:
+                        self.message(channel, "%s, %s doesn't own that waifu at that rarity!" % (tags['display-name'], other), isWhisper)
                         return
-                    elif subarg == "decline":
-                        cur.execute("UPDATE trades SET status = 'declined', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
-                        self.message(channel, "Trade declined.", isWhisper=isWhisper)
-                        cur.close()
+                    except CardNotInHandException:
+                        self.message(channel, "%s, %s doesn't own that waifu!" % (tags['display-name'], other), isWhisper)
                         return
-                    else:
-                        # accept
-                        cost = int(config["tradingFee"])
-                        
-                        nonpayer = ourid if payup == otherid else otherid
-                        
-                        if not hasPoints(payup, cost + tradepoints):
-                            self.message(channel, "Sorry, but %s cannot cover the fair trading fee." % ("you" if payup == ourid else otherparty), isWhisper=isWhisper)
-                            cur.close()
-                            return
-
-                        if not hasPoints(nonpayer, cost - tradepoints):
-                            self.message(channel, "Sorry, but %s cannot cover the base trading fee." % ("you" if nonpayer == ourid else otherparty), isWhisper=isWhisper)
-                            cur.close()
-                            return
-                        
-                        cur.execute("SELECT SUM(amount) FROM has_waifu WHERE waifuid = %s AND userid = %s", [want, ourid])
-                        wantamount = cur.fetchone()[0] or 0
-                        cur.execute("SELECT SUM(amount) FROM has_waifu WHERE waifuid = %s AND userid = %s", [have, otherid])
-                        haveamount = cur.fetchone()[0] or 0
-
-
-                        if wantamount == 0:
-                            self.message(channel, "{sender}, you don't have waifu {waifu}, so you can not accept this trade. Deleting it.".format(sender=tags['display-name'], waifu=str(want)), isWhisper=isWhisper)
-                            cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
-                            cur.close()
-                            return
-
-                        if haveamount == 0:
-                            self.message(channel, "{sender}, {other} doesn't have waifu {waifu}, so you can not accept this trade. Deleting it.".format(sender=tags['display-name'], waifu=str(have), other=otherparty), isWhisper=isWhisper)
-                            cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
-                            cur.close()
-                            return
-
-                        # give cards
-                        giveCard(ourid, have)
-                        giveCard(otherid, want)
-
-                        # take cards
-                        if wantamount == 1:
-                            cur.execute("DELETE FROM has_waifu WHERE waifuid = %s AND userid = %s", [want, ourid])
-                        else:
-                            cur.execute("UPDATE has_waifu SET amount = amount - 1 WHERE waifuid = %s AND userid = %s", [want, ourid])
-                        if haveamount == 1:
-                            cur.execute("DELETE FROM has_waifu WHERE waifuid = %s AND userid = %s", [have, otherid])
-                        else:
-                            cur.execute("UPDATE has_waifu SET amount = amount - 1 WHERE waifuid = %s AND userid = %s", [have, otherid])
-
-                        # points
-                        addPoints(payup, -(tradepoints + cost))
-                        addPoints(nonpayer, tradepoints - cost)
-
-                        # done
-                        cur.execute("UPDATE trades SET status = 'accepted', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
-                        
-                        self.message(channel, "Trade executed!", isWhisper=isWhisper)
-                        cur.close()
+                    except AmbiguousRarityException:
+                        self.message(channel, "%s, %s owns more than one rarity of waifu %s! Please specify a rarity as well by appending a hyphen and then the rarity, e.g. %s-god" % (tags['display-name'], other, args[2], args[2]), isWhisper)
                         return
-
-                if len(args) != 3 and len(args) != 4:
-                    self.message(channel, "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want> [points]", isWhisper=isWhisper)
-                    cur.close()
-                    return
-
-                other = args[0]
-                
-                cur.execute("SELECT id FROM users WHERE name = %s", [other])
-                otheridrow = cur.fetchone()
-                if otheridrow is None:
-                    self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
-                    cur.close()
-                    return
-                otherid = int(otheridrow[0])
-
-                have = args[1]
-                want = args[2]
-                try:
-                    int(args[1])
-                    int(args[2])
+                    except ValueError:
+                        self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
+                        return
+                        
+                    points = 0
                     if len(args) == 4:
-                        int(args[3])
-                except:
-                    self.message(channel, "Only whole numbers/IDs please.", isWhisper=isWhisper)
-                    cur.close()
+                        try:
+                            points = int(args[3])
+                        except ValueError:
+                            self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
+                            return
+
+                    payup = ourid
+                    if have["rarity"] != want["rarity"]:
+                        if have["rarity"] >= int(config["numNormalRarities"]) or want["rarity"] >= int(config["numNormalRarities"]):
+                            self.message(channel, "Sorry, special-rarity cards can only be traded for other special-rarity cards.", isWhisper=isWhisper)
+                            return
+                        if len(args) != 4:
+                            self.message(channel, "To trade waifus of different rarities, please append a point value the owner of the lower tier card has to pay to the command to make the trade fair. (see !help)", isWhisper=isWhisper)
+                            return
+                        highercost = int(config["rarity" + str(max(have["rarity"], want["rarity"])) + "Value"])
+                        lowercost = int(config["rarity" + str(min(have["rarity"], want["rarity"])) + "Value"])
+                        costdiff = highercost - lowercost
+                        mini = int(costdiff/2)
+                        maxi = int(costdiff)
+                        if points < mini:
+                            self.message(channel, "Minimum points to trade this difference in rarity is " + str(mini), isWhisper=isWhisper)
+                            return
+                        if points > maxi:
+                            self.message(channel, "Maximum points to trade this difference in rarity is " + str(maxi), isWhisper=isWhisper)
+                            return
+                        if want["rarity"] < have["rarity"]:
+                            payup = otherid
+                            
+                    # cancel any old trades with this pairing
+                    cur.execute("UPDATE trades SET status = 'cancelled', updated = %s WHERE fromid = %s AND toid = %s AND status = 'open'", [current_milli_time(), ourid, otherid])
+                    
+                    # insert new trade
+                    tradeData = [ourid, otherid, want['id'], want['rarity'], have['id'], have['rarity'], points, payup, current_milli_time(), "$$whisper$$" if isWhisper else channel]
+                    cur.execute("INSERT INTO trades (fromid, toid, want, want_rarity, have, have_rarity, points, payup, status, created, originChannel) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)", tradeData)
+                    
+                    havedata = getWaifuById(have['id'])
+                    wantdata = getWaifuById(want['id'])
+                    haveStr = "[%d][%s] %s" % (have['id'], config["rarity"+str(have['rarity'])+"Name"], havedata['name'])
+                    wantStr = "[%d][%s] %s" % (want['id'], config["rarity"+str(want['rarity'])+"Name"], wantdata['name'])
+                    
+                    paying = ""
+                    if points > 0:
+                        if payup == ourid:
+                            paying = " with you paying them " + str(points) + " points"
+                        else:
+                            paying = " with them paying you " + str(points) + " points"
+                    self.message(channel, "Offered {other} to trade your {have} for their {want}{paying}".format(other=other, have=haveStr, want=wantStr, paying = paying), isWhisper=isWhisper)
                     return
-                maxi = maxWaifuID()
-                if int(have) <= 0 or int(want) <= 0 or int(have) > int(maxi) or int(want) > int(maxi):
-                    self.message(channel, "Invalid ID. Must be a number from 1 to " + str(maxi), isWhisper=isWhisper)
-                    cur.close()
-                    return
-
-                havewaifu = getWaifuById(have)
-                wantwaifu = getWaifuById(want)
-
-
-                points = 0
-                payup = ourid
-                if havewaifu["rarity"] != wantwaifu["rarity"]:
-                    if int(havewaifu["rarity"]) >= int(config["numNormalRarities"]) or int(wantwaifu["rarity"]) >= int(config["numNormalRarities"]):
-                        self.message(channel, "Sorry, special-rarity cards can only be traded for other special-rarity cards.", isWhisper=isWhisper)
-                        cur.close()
-                        return
-                    if len(args) != 4:
-                        self.message(channel, "To trade waifus of different rarities, please append a point value the owner of the lower tier card has to pay to the command to make the trade fair. (see !help)", isWhisper=isWhisper)
-                        cur.close()
-                        return
-                    points = int(args[3])
-                    highercost = int(config["rarity" + str(max(int(havewaifu["rarity"]), int(wantwaifu["rarity"]))) + "Value"])
-                    lowercost = int(config["rarity" + str(min(int(havewaifu["rarity"]), int(wantwaifu["rarity"]))) + "Value"])
-                    costdiff = highercost - lowercost
-                    mini = int(costdiff/2)
-                    maxi = int(costdiff)
-                    if points < mini:
-                        self.message(channel, "Minimum points to trade this difference in rarity is " + str(mini), isWhisper=isWhisper)
-                        cur.close()
-                        return
-                    if points > maxi:
-                        self.message(channel, "Maximum points to trade this difference in rarity is " + str(maxi), isWhisper=isWhisper)
-                        cur.close()
-                        return
-                    if int(wantwaifu["rarity"]) < int(havewaifu["rarity"]):
-                        payup = otherid
-                        
-                # cancel any old trades with this pairing
-                cur.execute("UPDATE trades SET status = 'cancelled', updated = %s WHERE fromid = %s AND toid = %s AND status = 'open'", [current_milli_time(), ourid, otherid])
-                
-                # insert new trade
-                tradeData = [ourid, otherid, want, have, points, payup, current_milli_time(), "$$whisper$$" if isWhisper else channel]
-                cur.execute("INSERT INTO trades (fromid, toid, want, have, points, payup, status, created, originChannel) VALUES(%s, %s, %s, %s, %s, %s, 'open', %s, %s)", tradeData)
-                
-                paying = ""
-                if points > 0:
-                    if payup == ourid:
-                        paying = " with you paying them " + str(points) + " points"
-                    else:
-                        paying = " with them paying you " + str(points) + " points"
-                self.message(channel, "Offered {other} to trade your {have} for their {want}{paying}".format(other=str(other), have=str(have), want=str(want), paying = paying), isWhisper=isWhisper)
-                return
             if command == "lookup":
                 if len(args) != 1:
                     self.message(channel, "Usage: !lookup <id>", isWhisper=isWhisper)
