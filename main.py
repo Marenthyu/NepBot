@@ -137,7 +137,7 @@ def loadConfig():
         for row in curg.fetchall():
             admins.append(row[0])
         logger.debug("Admins: %s", str(admins))
-        revrarity = {config["rarity" + str(i) + "Name"]:i for i in range(int(config["numNormalRarities"]) - 1)}
+        revrarity = {config["rarity" + str(i) + "Name"]:i for i in range(int(config["numNormalRarities"]))}
         curg.execute("SELECT name FROM blacklist")
         rows = curg.fetchall()
         blacklist = []
