@@ -316,7 +316,7 @@ def addDisplayToken(token, waifus):
     cur.execute("INSERT INTO displayTokens(token, waifuid) VALUES {valuesstring}".format(valuesstring=valuesstring))
     cur.close()
     
-def attemptDisenchant(bot, waifuid):
+def attemptBountyFill(bot, waifuid):
     # return profit from the bounty
     cur = db.cursor()
     cur.execute("SELECT bounties.id, bounties.userid, users.name, bounties.amount, waifus.name, waifus.base_rarity FROM bounties JOIN users ON bounties.userid = users.id JOIN waifus ON bounties.waifuid = waifus.id WHERE bounties.waifuid = %s AND bounties.status = 'open' ORDER BY bounties.amount DESC LIMIT 1", [waifuid])
@@ -721,6 +721,50 @@ def parseRarity(input):
     if rarity < 0 or rarity > int(config["numNormalRarities"]):
         raise ValueError(input)
     return rarity
+    
+class CardNotInHandException(Exception):
+    pass
+    
+class CardRarityNotInHandException(CardNotInHandException):
+    pass
+    
+class AmbiguousRarityException(Exception):
+    pass
+    
+# given a string specifying a card id + optional rarity, return id+rarity of the hand card matching it
+# throw various exceptions for invalid format / card not in hand / ambiguous rarity
+def parseHandCardSpecifier(hand, specifier):
+    if "-" in specifier:
+        id = int(specifier.split("-", 1)[0])
+        rarity = parseRarity(specifier.split("-", 1)[1])
+        
+        foundID = False
+        
+        for waifu in hand:
+            if waifu['id'] == id and waifu['rarity'] == rarity:
+                # done
+                return {"id": id, "rarity": rarity}
+            elif waifu['id'] == id:
+                foundID = True
+                
+        if foundID:
+            raise CardRarityNotInHandException()
+        else:
+            raise CardNotInHandException()
+    else:
+        id = int(specifier)
+        rarity = None
+        for waifu in hand:
+            if waifu['id'] == id:
+                if rarity is None:
+                    rarity = waifu['rarity']
+                else:
+                    raise AmbiguousRarityException()
+        
+        if rarity is None:
+            raise CardNotInHandException()
+        else:
+            return {"id": id, "rarity": rarity}
     
 class InvalidBoosterException(Exception):
     pass
@@ -1369,52 +1413,20 @@ class NepBot(NepBotClass):
                 
                 for arg in args:
                     # handle disenchanting
-                    if "-" in arg:
-                        try:
-                            id = int(arg.split("-", 1)[0])
-                            rarity = parseRarity(arg.split("-", 1)[1])
-                            packedDeValue = {"id": id, "rarity": rarity}
-                            if packedDeValue in disenchants:
-                                self.message(channel, "You can't disenchant the same waifu twice at once!", isWhisper=isWhisper)
-                                return
-                            
-                            found = False
-                            for waifu in hand:
-                                if waifu['id'] == id and waifu['rarity'] == rarity:
-                                    # found it
-                                    disenchants.append(packedDeValue)
-                                    found = True
-                                    break
-                            
-                            if not found:
-                                dontHave.append(arg)
-                        except Exception:
-                            self.message(channel, "Could not decipher one or more of the waifu IDs you provided.", isWhisper=isWhisper)
+                    try:
+                        deTarget = parseHandCardSpecifier(hand, arg)
+                        if deTarget in disenchants:
+                            self.message(channel, "You can't disenchant the same waifu twice at once!", isWhisper)
                             return
-                    else:
-                        try:
-                            id = int(arg)
-                            rarity = None
-                            for waifu in hand:
-                                if waifu['id'] == id:
-                                    if rarity is None:
-                                        rarity = waifu['rarity']
-                                    else:
-                                        self.message(channel, "You have more than one rarity of waifu %d in your hand. Please specify a rarity as well by appending a hyphen and then the rarity e.g. !disenchant %d-god" % (id, id))
-                                        return
-                            
-                            if rarity is None:
-                                dontHave.append(arg)
-                            else:
-                                packedDeValue = {"id": id, "rarity": rarity}
-                                if packedDeValue in disenchants:
-                                    self.message(channel, "You can't disenchant the same waifu twice at once!", isWhisper=isWhisper)
-                                    return
-                                else:
-                                    disenchants.append(packedDeValue)
-                        except Exception:
-                            self.message(channel, "Could not decipher one or more of the waifu IDs you provided.", isWhisper=isWhisper)
-                            return
+                        disenchants.append(deTarget)
+                    except CardNotInHandException:
+                        dontHave.append(arg)
+                    except AmbiguousRarityException:
+                        self.message(channel, "You have more than one rarity of waifu %s in your hand. Please specify a rarity as well by appending a hyphen and then the rarity e.g. !disenchant %s-god" % (arg, arg), isWhisper)
+                        return
+                    except ValueError:
+                        self.message(channel, "Could not decipher one or more of the waifu IDs you provided.", isWhisper)
+                        return
                             
                 if len(dontHave) > 0:
                     if len(dontHave) == 1:
@@ -1428,7 +1440,7 @@ class NepBot(NepBotClass):
                 ordersFilled = 0
                 for row in disenchants:
                     baseValue = int(config["rarity" + str(row['rarity']) + "Value"])
-                    profit = attemptDisenchant(self, row['id'])
+                    profit = attemptBountyFill(self, row['id'])
                     pointsGain += baseValue + profit
                     if profit > 0:
                         ordersFilled += 1
@@ -1574,7 +1586,7 @@ class NepBot(NepBotClass):
                         else:
                             # Disenchant
                             baseValue = int(config["rarity" + str(waifu['base_rarity']) + "Value"])
-                            profit = attemptDisenchant(self, id)
+                            profit = attemptBountyFill(self, id)
                             gottenpoints += baseValue + profit
                             if profit > 0:
                                 ordersFilled += 1
