@@ -328,7 +328,7 @@ def attemptBountyFill(bot, waifuid):
     
     if order is not None:
         # fill their order instead of actually disenchanting
-        giveCard(order[1], waifuid)
+        giveCard(order[1], waifuid, order[5])
         bot.message('#%s' % order[2], "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (waifuid, order[4], order[3]), True)
         cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s", [current_milli_time(), order[0]])
         cur.close()
@@ -674,25 +674,25 @@ def resetWeightings(*cards):
         inString = ",".join(["%s"] * len(cards))
         cur.execute("UPDATE waifus SET normal_weighting = 1 WHERE id IN({0})".format(inString), cards)
 
-def giveCard(userid, id, rarity):
+def giveCard(userid, id, rarity, amount=1):
     with db.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
         hasWaifu = cur.fetchone()[0] == 1
         if hasWaifu:
-            cur.execute("UPDATE has_waifu SET amount = amount + 1 WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
+            cur.execute("UPDATE has_waifu SET amount = amount + %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [amount, userid, id, rarity])
         else:
-            cur.execute("INSERT INTO has_waifu(userid, waifuid, rarity, amount) VALUES(%s, %s, %s, 1)", [userid, id, rarity])
+            cur.execute("INSERT INTO has_waifu(userid, waifuid, rarity, amount) VALUES(%s, %s, %s, %s)", [userid, id, rarity, amount])
     
-def takeCard(userid, id, rarity):
+def takeCard(userid, id, rarity, amount=1):
     with db.cursor() as cur:
         cur.execute("SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
         currentAmount = cur.fetchone()[0]
-        if currentAmount > 1:
-            cur.execute("UPDATE has_waifu SET amount = amount - 1 WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
-        elif currentAmount == 1:
+        if currentAmount > amount:
+            cur.execute("UPDATE has_waifu SET amount = amount - %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [amount, userid, id, rarity])
+        elif currentAmount == amount:
             cur.execute("DELETE FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
         else:
-            raise ValueError("Couldn't remove waifu %s at rarity %s from user %s as they don't own it!" % (str(id), str(rarity), str(userid)))
+            raise ValueError("Couldn't remove %d of waifu %s at rarity %s from user %s as they don't own it/that many!" % (amount, str(id), str(rarity), str(userid)))
     
 def logDrop(userid, waifuid, rarity, source, channel, isWhisper):
     trueChannel = "$$whisper$$" if isWhisper else channel
@@ -2292,7 +2292,49 @@ class NepBot(NepBotClass):
                     datestring = "{0}".format(a).split(".")[0]
                     self.message(channel, "Sorry, {user}, please wait {t} until you can search again.".format(user=tags['display-name'], t=datestring), isWhisper=isWhisper)
             if command == "promote":
-                # TODO
+                sentMessageAbout = []
+                messagedAtAll = False
+                while True:
+                    promotedThisRound = False
+                    hand = getHand(tags['user-id'])
+                    for waifu in hand:
+                        if waifu['amount'] >= 3 and waifu['rarity'] < int(config["numNormalRarities"]) - 1:
+                            amountToMake = waifu['amount'] // 3
+                            oldRarityName = config["rarity%dName" % waifu['rarity']]
+                            newRarityName = config["rarity%dName" % (waifu['rarity'] + 1)]
+                            uniquenessRepr = (waifu['id'], waifu['rarity'])
+                            # limit check?
+                            newRarityLimit = int(config["rarity%dMax" % (waifu['rarity'] + 1)])
+                            if newRarityLimit != 0:
+                                with db.cursor() as cur:
+                                    cur.execute("SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = %s AND rarity >= %s", [waifu['id'], waifu['rarity'] + 1])
+                                    currentAmount = cur.fetchone()[0]
+                                amountToMake = min(amountToMake, newRarityLimit - currentAmount)
+                                
+                                if amountToMake == 0 and uniquenessRepr not in sentMessageAbout:
+                                    warningArgs = (waifu['id'], oldRarityName, waifu['name'], newRarityName)
+                                    self.message(channel, "Couldn't promote any more [%d][%s] %s as the limit of copies at %s rarity or higher has already been reached." % warningArgs, isWhisper)
+                                    sentMessageAbout.append(uniquenessRepr)
+                                    messagedAtAll = True
+                                    
+                            if amountToMake != 0:
+                                takeCard(tags['user-id'], waifu['id'], waifu['rarity'], amountToMake * 3)
+                                giveCard(tags['user-id'], waifu['id'], waifu['rarity'] + 1, amountToMake)
+                                if amountToMake > 1:
+                                    msgArgs = (amountToMake * 3, waifu['id'], oldRarityName, waifu['name'], amountToMake, newRarityName)
+                                    self.message(channel, "Successfully promoted %dx [%d] [%s] %s into %dx %s rarity waifus!" % msgArgs, isWhisper)
+                                else:
+                                    self.message(channel, "Successfully promoted 3x [%d] [%s] %s into a %s rarity waifu!" % (waifu['id'], oldRarityName, waifu['name'], newRarityName), isWhisper)
+                                messagedAtAll = True
+                                promotedThisRound = True
+                                sentMessageAbout.append(uniquenessRepr)
+                    
+                    if not promotedThisRound:
+                        break
+                                
+                if not messagedAtAll:
+                    self.message(channel, "%s, you don't hold any waifus that are eligible for promotion right now! Collect 3 of the same waifu and try again." % tags['display-name'], isWhisper)
+                            
                 return
             if command == "bet":
                 if len(args) < 1:
