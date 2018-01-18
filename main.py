@@ -1425,6 +1425,13 @@ class NepBot(NepBotClass):
                 if len(args) == 0 or (len(args) == 1 and len(args[0]) == 0):
                     self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
                     return
+                
+                # check for confirmation
+                hasConfirmed = False
+                if args[-1].lower() == "yes":
+                    hasConfirmed = True
+                    args = args[:-1]
+                
                 disenchants = []
                 dontHave = []
                 hand = getHand(tags['user-id'])
@@ -1435,6 +1442,13 @@ class NepBot(NepBotClass):
                         deTarget = parseHandCardSpecifier(hand, arg)
                         if deTarget in disenchants:
                             self.message(channel, "You can't disenchant the same waifu twice at once!", isWhisper)
+                            return
+                        if deTarget['rarity'] == int(config["numNormalRarities"]) and not hasConfirmed:
+                            self.message(channel, "%s, you are trying to disenchant one or more special waifus! Special waifus do not take up any hand space and disenchant for 0 points. If you are sure you want to do this, append \" yes\" to the end of your command." % tags['display-name'], isWhisper)
+                            return
+                        if deTarget['rarity'] >= int(config["disenchantRequireConfirmationRarity"]) and not hasConfirmed:
+                            confirmRarityName = config["rarity%sName" % config["disenchantRequireConfirmationRarity"]]
+                            self.message(channel, "%s, you are trying to disenchant one or more waifus of %s rarity or higher! If you are sure you want to do this, append \" yes\" to the end of your command." % (tags['display-name'], confirmRarityName), isWhisper)
                             return
                         disenchants.append(deTarget)
                     except CardNotInHandException:
@@ -1524,6 +1538,12 @@ class NepBot(NepBotClass):
                 if len(args) < 1:
                     self.message(channel, "Usage: !booster buy <%s> OR !booster select <take/disenchant> (for each waifu) OR !booster show" % visiblepacks, isWhisper=isWhisper)
                     return
+                    
+                # check for confirmation
+                hasConfirmed = False
+                if args[-1].lower() == "yes":
+                    hasConfirmed = True
+                    args = args[:-1]
 
                 cmd = args[0].lower()
                 # even more shorthand shortcut for disenchant all
@@ -1577,6 +1597,7 @@ class NepBot(NepBotClass):
                         self.message(channel, "You did not specify the correct amount of keep/disenchant.", isWhisper=isWhisper)
                         cur.close()
                         return
+                    
                     keeping = 0
                     for arg in selectArgs:
                         if not (arg.lower() == "keep" or arg.lower() == "disenchant"):
@@ -1585,40 +1606,50 @@ class NepBot(NepBotClass):
                             return
                         if arg.lower() == "keep":
                             keeping += 1
-                    currCards = currentCards(tags['user-id'])
-                    if keeping + currCards > handLimit(tags['user-id']) and keeping != 0:
+                    
+                    if keeping + currentCards(tags['user-id']) > handLimit(tags['user-id']) and keeping != 0:
                         self.message(channel, "You can't keep that many waifus! !disenchant some!", isWhisper=isWhisper)
                         cur.close()
                         return
-                    gottenpoints = 0
-                    response = "You take your booster pack and: "
-                    cur = db.cursor()
-                    keeps = []
-                    des = []
-                    ordersFilled = 0
+                        
+                    # check card info for rarities etc
+                    keepCards = []
+                    deCards = []
                     for i in range(len(cards)):
                         waifu = getWaifuById(cards[i])
-                        if str(selectArgs[i+2]).lower() == "keep":
-                            giveCard(tags['user-id'], waifu['id'], waifu['base_rarity'])
-                            keeps.append(waifu['id'])
+                        if selectArgs[i].lower() == "keep":
+                            keepCards.append(waifu)
                         else:
-                            # Disenchant
-                            baseValue = int(config["rarity" + str(waifu['base_rarity']) + "Value"])
-                            profit = attemptBountyFill(self, id)
-                            gottenpoints += baseValue + profit
-                            if profit > 0:
-                                ordersFilled += 1
-                            elif waifu['base_rarity'] >= int(config["disenchantAlertMinimumRarity"]):
-                                # valuable waifu being disenchanted
-                                threading.Thread(target=sendDisenchantAlert, args=(channel, waifu, str(tags["display-name"]))).start()
+                            # disenchant
+                            if waifu['base_rarity'] >= int(config["disenchantRequireConfirmationRarity"]) and not hasConfirmed:
+                                confirmRarityName = config["rarity%sName" % config["disenchantRequireConfirmationRarity"]]
+                                self.message(channel, "%s, you are trying to disenchant one or more waifus of %s rarity or higher! If you are sure you want to do this, append \" yes\" to the end of your command." % (tags['display-name'], confirmRarityName), isWhisper)
+                                return
+                            deCards.append(waifu)
                             
-                            des.append(waifu['id'])
-                    
+                    # if we made it through the whole pack without tripping confirmation, we can actually do it now
+                    for waifu in keepCards:
+                        giveCard(tags['user-id'], waifu['id'], waifu['base_rarity'])
+                    gottenpoints = 0
+                    ordersFilled = 0
+                    for waifu in deCards:
+                        baseValue = int(config["rarity" + str(waifu['base_rarity']) + "Value"])
+                        profit = attemptBountyFill(self, waifu['id'])
+                        gottenpoints += baseValue + profit
+                        if profit > 0:
+                            ordersFilled += 1
+                        elif waifu['base_rarity'] >= int(config["disenchantAlertMinimumRarity"]):
+                            # valuable waifu being disenchanted
+                            threading.Thread(target=sendDisenchantAlert, args=(channel, waifu, str(tags["display-name"]))).start()
                     addPoints(tags['user-id'], gottenpoints)
-                    if len(keeps) > 0:
-                        response += " keep " + ', '.join(str(x) for x in keeps) + ";"
-                    if len(des) > 0:
-                        response += " disenchant " + ', '.join(str(x) for x in des)
+                    
+                    # compile the message to be sent in chat
+                    response = "You take your booster pack and: "
+                    
+                    if len(keepCards) > 0:
+                        response += " keep " + ', '.join("[{id}] {name}".format(**x) for x in keepCards) + ";"
+                    if len(deCards) > 0:
+                        response += " disenchant " + ', '.join("[{id}] {name}".format(**x) for x in deCards)
                         if ordersFilled > 0:
                             response += " (%d bounties filled)" % ordersFilled
                         response += ";"
