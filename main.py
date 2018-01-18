@@ -1289,6 +1289,8 @@ class NepBot(NepBotClass):
         # failsafe since display-name can (very rarely) be null for certain Twitch accounts
         if 'display-name' not in tags or not tags['display-name']:
             tags['display-name'] = sender
+            
+        activeCommands = ["checkhand", "points", "freewaifu", "disenchant", "buy", "booster", "trade", "lookup", "alerts", "redeem", "wars", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway", "bounty"]
 
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
@@ -1307,8 +1309,13 @@ class NepBot(NepBotClass):
 
             if message.startswith("!"):
                 parts = message.split()
-                self.do_command(parts[0][1:].lower(), parts[1:], target, source, tags, isWhisper=isWhisper)
-        elif message.startswith("!"):
+                command = parts[0][1:].lower()
+                if command in activeCommands:
+                    with busyLock:
+                        with db.cursor() as cur:
+                            cur.execute("UPDATE users SET lastActiveTimestamp = %s, lastActiveChannel = %s WHERE id = %s", [current_milli_time(), "$$whisper$$" if isWhisper else source, tags['user-id']])
+                self.do_command(command, parts[1:], target, source, tags, isWhisper=isWhisper)
+        elif message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
             self.message(source, "Bad Bot. No.")
             return
 
