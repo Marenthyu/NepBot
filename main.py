@@ -3075,7 +3075,57 @@ class NepBot(NepBotClass):
                     except Exception:
                         self.message(channel, "Usage: !bounty cancel <ID>", isWhisper=isWhisper)
                         return
+            if command == "raritychange" and sender in self.myadmins:
+                if len(args) < 2:
+                    self.message(channel, "Usage: !raritychange <ID> <rarity>", isWhisper)
+                    return
                 
+                try:
+                    waifu = getWaifuById(args[0])
+                    assert waifu is not None
+                    rarity = parseRarity(args[1])
+                except Exception:
+                    self.message(channel, "Usage: !raritychange <ID> <rarity>", isWhisper)
+                    return
+                    
+                if waifu['base_rarity'] == int(config['numNormalRarities']):
+                    self.message(channel, "You shouldn't be changing a special waifu into another rarity.", isWhisper)
+                    return
+                    
+                if rarity == waifu['base_rarity']:
+                    self.message(channel, "[%d] %s is already %s base rarity!" % (waifu['id'], waifu['name'], config['rarity%dName' % rarity]), isWhisper)
+                    return
+                
+                # limit check
+                oldRarityLimit = int(config['rarity%dMax' % waifu['base_rarity']])
+                newRarityLimit = int(config['rarity%dMax' % rarity])
+                if newRarityLimit != 0 and (oldRarityLimit == 0 or oldRarityLimit > newRarityLimit):
+                    with db.cursor() as cur:
+                        cur.execute("SELECT (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = %s) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = %s AND boosters_opened.status = 'open')", [waifu['id'], waifu['id']])
+                        currentOwned = cur.fetchone()[0]
+                        
+                    if currentOwned > newRarityLimit:
+                        errorArgs = (waifu['id'], waifu['name'], config['rarity%dName' % rarity], currentOwned, newRarityLimit)
+                        self.message(channel, "[%d] %s cannot be changed to %s base rarity. There are %d copies of her already owned while the limit at the new rarity would be %d." % errorArgs, isWhisper)
+                        return
+                        
+                # okay, do it
+                with db.cursor() as cur:
+                    cur.execute("UPDATE waifus SET base_rarity = %s WHERE id = %s", [rarity, waifu['id']])
+                    cur.execute("UPDATE has_waifu SET rarity = %s WHERE waifuid = %s AND rarity < %s", [rarity, waifu['id'], rarity])
+                    
+                    # cancel all bounties
+                    cur.execute("SELECT bounties.userid, users.name, bounties.amount FROM bounties JOIN users ON bounties.userid = users.id WHERE bounties.waifuid = %s AND bounties.status = 'open'", [waifu['id']])
+                    bounties = cur.fetchall()
+                    for bounty in bounties:
+                        addPoints(bounty[0], bounty[2])
+                        self.message('#%s' % bounty[1], "Your bounty for [%d] %s has been cancelled due to its rarity changing. Your %d points have been refunded." % (waifu['id'], waifu['name'], bounty[2]), True)
+                    cur.execute("UPDATE bounties SET status='cancelled', updated=%s WHERE waifuid = %s AND status='open'", [current_milli_time(), waifu['id']])
+                    
+                # done
+                self.message(channel, "Successfully changed [%d] %s's base rarity to %s." % (waifu['id'], waifu['name'], config['rarity%dName' % rarity]), isWhisper)
+                return
+                    
 
 class HDNBot(pydle.Client):
     instance = None
