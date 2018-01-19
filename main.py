@@ -640,15 +640,12 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
             upgradeChances = [float(config["rarity%dUpgradeChance" % i]) for i in range(maxrarity)]
         else:
             assert len(upgradeChances) == maxrarity
-        i = 0
         rarity = 0
-        while (i < maxrarity):
-            r = random.random()
-            if r <= upgradeChances[i]:
-                rarity = rarity + 1
-                i = i + 1
-                continue
-            break
+        while (rarity < maxrarity):
+            if random.random() < upgradeChances[rarity]:
+                rarity += 1
+            else:
+                break
         return dropCard(rarity, useEventWeightings=useEventWeightings, allowDowngrades=allowDowngrades)
     else:
         with db.cursor() as cur:
@@ -808,7 +805,6 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         maxScalingRarity = int(config["pullScalingMaxRarity"])
         numScalingRarities = maxScalingRarity - minScalingRarity + 1
         scalingThresholds = [int(config["pullScalingRarity%dThreshold" % rarity]) for rarity in range(minScalingRarity, maxScalingRarity + 1)]
-        scalingPulls = [False] * numScalingRarities
             
         cur.execute("SELECT pullScalingData FROM users WHERE id = %s", [userid])
         scalingRaw = cur.fetchone()[0]
@@ -865,13 +861,12 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                 alertwaifus.append(waifu)
                 
-            if waifu['base_rarity'] >= minScalingRarity and waifu['base_rarity'] <= maxScalingRarity:
-                scalingData[waifu['base_rarity'] - minScalingRarity] = 0
-                
             if buying:
-                for i in range(numScalingRarities):
-                    if i + minScalingRarity != waifu['base_rarity']:
-                        scalingData[i] += cost / numCards
+                for r in range(numScalingRarities):
+                    if r + minScalingRarity != waifu['base_rarity']:
+                        scalingData[r] += cost / numCards
+                    else:
+                        scalingData[r] = 0
                 
             logDrop(str(userid), str(card), waifu['base_rarity'], "boosters.%s" % packname, channel, isWhisper)  
         
