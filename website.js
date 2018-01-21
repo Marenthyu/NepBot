@@ -47,27 +47,7 @@ con.connect(function (err) {
     console.log("Connected!");
 });
 
-let waifuPreLink = "<div style=\"border-style: solid; display: inline-block\" onchange=\"update()\" id=\"waifu1\"><img src=\"";
-let waifuPostLink = "\" height=300/><br/>";
-let waifuCheckbox = "<br/><input type=\"checkbox\">Keep?</input>";
-let waifuClose = "</div>";
 let rarities = {0: "common", 1: "uncommon", 2: "rare", 3: "super", 4: "ultra", 5: "legendary", 6: "mythical", 7: "god", 8: "special"};
-let fancyhead = "<!DOCTYPE html>\n" +
-    "<html lang=\"en\">\n" +
-    "<head>\n" +
-    "    <meta charset=\"UTF-8\">\n" +
-    "    <title>Fancy waifu TCG Booster selector</title>\n" +
-    "    <script src=\"https://threejs.org/build/three.min.js\"></script>\n" +
-    "</head>\n" +
-    "<body style=\"overflow: hidden\">\n" +
-    "<script src=\"https://share.marenthyu.de/boosteranimation.js\"></script>\n" +
-    "<script>\n" +
-    "    animation([";
-let fancybetween = "])\n" +
-    "</script>\n";
-let fancyfoot =
-    "</body>\n" +
-    "</html>";
 let sethead = "<!DOCTYPE html>\n" +
     "<html lang=\"en\">\n" +
     "<head>\n" +
