@@ -650,7 +650,7 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
     else:
         with db.cursor() as cur:
             raritymax = int(config["rarity" + str(rarity) + "Max"])
-            weighting_column = "event_weighting" if useEventWeightings else "normal_weighting"
+            weighting_column = "(event_weighting*normal_weighting)" if useEventWeightings else "normal_weighting"
             if raritymax > 0:
                 cur.execute("SELECT id FROM waifus WHERE base_rarity = %s AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column), (rarity, raritymax))
             else:
@@ -780,20 +780,21 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         rarityColumns = ", ".join("rarity"+str(i)+"UpgradeChance" for i in range(int(config["numNormalRarities"]) - 1))
         
         if buying:
-            cur.execute("SELECT cost, numCards, guaranteedSCrarity, useEventWeightings, "+rarityColumns+" FROM boosters WHERE name = %s AND buyable = 1", [packname])
+            cur.execute("SELECT listed, cost, numCards, guaranteedSCrarity, useEventWeightings, "+rarityColumns+" FROM boosters WHERE name = %s AND buyable = 1", [packname])
         else:
-            cur.execute("SELECT cost, numCards, guaranteedSCrarity, useEventWeightings, "+rarityColumns+" FROM boosters WHERE name = %s", [packname])
+            cur.execute("SELECT listed, cost, numCards, guaranteedSCrarity, useEventWeightings, "+rarityColumns+" FROM boosters WHERE name = %s", [packname])
         
         packinfo = cur.fetchone()
 
         if packinfo is None:
             raise InvalidBoosterException()
             
-        cost = packinfo[0]
-        numCards = packinfo[1]
-        minSCRarity = packinfo[2]
-        useEventWeightings = packinfo[3] != 0
-        normalChances = packinfo[4:]
+        listed = packinfo[0]
+        cost = packinfo[1]
+        numCards = packinfo[2]
+        minSCRarity = packinfo[3]
+        useEventWeightings = packinfo[4] != 0
+        normalChances = packinfo[5:]
             
         if buying:
             if not hasPoints(userid, cost):
@@ -819,24 +820,25 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             # scale chances of the card appropriately
             currentChances = list(normalChances)
             guaranteedRarity = 0
-            for rarity in range(maxScalingRarity, minScalingRarity - 1, -1):
-                scaleIdx = rarity - minScalingRarity
-                if scalingData[scaleIdx] >= scalingThresholds[scaleIdx] * 2:
-                    # guarantee this rarity drops now
-                    if rarity == int(config["numNormalRarities"]) - 1:
-                        currentChances = [1] * len(currentChances)
-                    else:
-                        currentChances = ([1] * rarity) + [functools.reduce((lambda x, y: x*y), currentChances[:rarity+1])] + list(currentChances[rarity+1:])
-                    guaranteedRarity = rarity
-                    break
-                elif scalingData[scaleIdx] > scalingThresholds[scaleIdx]:
-                    # make this rarity more likely to drop
-                    oldPromoChance = currentChances[rarity - 1]
-                    currentChances[rarity - 1] = min(currentChances[rarity - 1] * scalingData[scaleIdx]/scalingThresholds[scaleIdx], 1)
-                    increaseRatio = currentChances[rarity - 1] / oldPromoChance
-                    if rarity != int(config["numNormalRarities"]) - 1:
-                        # make rarities above this one NOT more likely to drop
-                        currentChances[rarity] /= increaseRatio
+            if listed:
+                for rarity in range(maxScalingRarity, minScalingRarity - 1, -1):
+                    scaleIdx = rarity - minScalingRarity
+                    if scalingData[scaleIdx] >= scalingThresholds[scaleIdx] * 2:
+                        # guarantee this rarity drops now
+                        if rarity == int(config["numNormalRarities"]) - 1:
+                            currentChances = [1] * len(currentChances)
+                        else:
+                            currentChances = ([1] * rarity) + [functools.reduce((lambda x, y: x*y), currentChances[:rarity+1])] + list(currentChances[rarity+1:])
+                        guaranteedRarity = rarity
+                        break
+                    elif scalingData[scaleIdx] > scalingThresholds[scaleIdx]:
+                        # make this rarity more likely to drop
+                        oldPromoChance = currentChances[rarity - 1]
+                        currentChances[rarity - 1] = min(currentChances[rarity - 1] * scalingData[scaleIdx]/scalingThresholds[scaleIdx], 1)
+                        increaseRatio = currentChances[rarity - 1] / oldPromoChance
+                        if rarity != int(config["numNormalRarities"]) - 1:
+                            # make rarities above this one NOT more likely to drop
+                            currentChances[rarity] /= increaseRatio
                         
             # account for min-singlecard-rarity in the pack
             if i == 0 and minSCRarity > guaranteedRarity:
@@ -861,7 +863,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                 alertwaifus.append(waifu)
                 
-            if buying:
+            if buying and listed:
                 for r in range(numScalingRarities):
                     if r + minScalingRarity != waifu['base_rarity']:
                         scalingData[r] += cost / numCards
@@ -1312,7 +1314,7 @@ class NepBot(NepBotClass):
         if 'display-name' not in tags or not tags['display-name']:
             tags['display-name'] = sender
             
-        activeCommands = ["checkhand", "points", "freewaifu", "disenchant", "buy", "booster", "trade", "lookup", "alerts", "redeem", "wars", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway", "bounty"]
+        activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup", "alerts", "redeem", "wars", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway", "bounty"]
 
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
@@ -1450,7 +1452,7 @@ class NepBot(NepBotClass):
                                  str(tags['display-name']) + ", you need to wait {0} for your next free drop!".format(datestring), isWhisper=isWhisper)
                 cur.close()
                 return
-            if command == "disenchant":
+            if command == "disenchant" or command == "de":
                 if len(args) == 0 or (len(args) == 1 and len(args[0]) == 0):
                     self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
                     return
