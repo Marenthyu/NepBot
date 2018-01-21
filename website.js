@@ -19,24 +19,32 @@ let cfgfile = fs.readFileSync('nepbot.cfg', 'utf8');
 let cfglines = cfgfile.match(/[^\r\n]+/g);
 let dbpw = null;
 let dbname = null;
+let dbuser = null;
+let dbhost = null;
 for(let line of cfglines) {
     let lineparts = line.split("=");
-    if(lineparts[0] == "password") {
+    if(lineparts[0] == "dbpassword") {
         dbpw = lineparts[1];
     }
     else if(lineparts[0] == "database") {
         dbname = lineparts[1];
     }
+    else if(lineparts[0] == "dbuser") {
+        dbuser = lineparts[1];
+    }
+    else if(lineparts[0] == "dbhost") {
+        dbhost = lineparts[1];
+    }
 }
 
-if(dbpw === null || dbname === null) {
+if(dbpw === null || dbname === null || dbuser === null || dbhost === null) {
     process.exit(1);
     return;
 }
 
 let con = mysql.createConnection({
-    host: "localhost",
-    user: "nepbot",
+    host: dbhost,
+    user: dbuser,
     password: dbpw,
     database: dbname,
     charset: "utf8mb4",

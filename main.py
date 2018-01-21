@@ -55,6 +55,8 @@ current_milli_time = lambda: int(round(time.time() * 1000))
 pymysql.install_as_MySQLdb()
 dbpw = None
 dbname = None
+dbhost = None
+dbuser = None
 silence = False
 debugMode = False
 hdnoauth = None
@@ -69,10 +71,14 @@ try:
         name, value = line.split("=")
         value = str(value).strip("\n")
         logger.info("Reading config value '%s' = '<redacted>'", name)
-        if name == "password":
+        if name == "dbpassword":
             dbpw = value
         if name == "database":
             dbname = value
+        if name == "dbhost":
+            dbhost = value
+        if name == "dbuser":
+            dbuser = value
         if name == "hdnoauth":
             hdnoauth = value
         if name == "streamlabsclient":
@@ -89,10 +95,16 @@ try:
             logger.warning("Debug mode enabled, !as command is available")
             debugMode = True
     if dbpw is None:
-        logger.error("Database password not set. Please add it to the config file, with 'password=<pw>'")
+        logger.error("Database password not set. Please add it to the config file, with 'dbpassword=<pw>'")
         sys.exit(1)
     if dbname is None:
         logger.error("Database name not set. Please add it to the config file, with 'database=<name>'")
+        sys.exit(1)
+    if dbhost is None:
+        logger.error("Database host not set. Please add it to the config file, with 'dbhost=<host>'")
+        sys.exit(1)
+    if dbuser is None:
+        logger.error("Database user not set. Please add it to the config file, with 'dbuser=<user>'")
         sys.exit(1)
     if hdnoauth is None:
         logger.error("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
@@ -101,12 +113,12 @@ try:
         logger.error("Twitch Client Secret not set. Please add it to the conig file, with 'twitchclientsecret=<pw>'")
         sys.exit(1)
     f.close()
-except:
+except Exception:
     logger.error("Error reading config file (nepbot.cfg), aborting.")
     sys.exit(1)
 
 
-db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
+db = pymysql.connect(host=dbhost, user=dbuser, passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
 admins = []
 activitymap = {}
 blacklist = []
@@ -260,7 +272,7 @@ def cancelBet(channel):
 def getHand(twitchid):
     try:
         tID = int(twitchid)
-    except:
+    except Exception:
         logger.error("Got non-integer id for getHand. Aborting.")
         return []
     cur = db.cursor()
@@ -347,7 +359,7 @@ def getHoraro():
         j = r.json()
         #("got horaro ticker: " + str(j))
         return j
-    except:
+    except Exception:
         logger.error("Horaro Error:")
         logger.error(str(r.status_code))
         logger.error(r.text)
@@ -363,7 +375,7 @@ def updateBoth(game, title):
     try:
         j = r.json()
         # print("tried to update channel title, response: " + str(j))
-    except:
+    except Exception:
         logger.error(str(r.status_code))
         logger.error(r.text)
 
@@ -378,7 +390,7 @@ def updateTitle(title):
     try:
         j = r.json()
         #print("tried to update channel title, response: " + str(j))
-    except:
+    except Exception:
         logger.error(str(r.status_code))
         logger.error(r.text)
 
@@ -393,7 +405,7 @@ def updateGame(game):
     try:
         j = r.json()
         #print("tried to update channel title, response: " + str(j))
-    except:
+    except Exception:
         logger.error(str(r.status_code))
         logger.error(r.text)
 
@@ -413,7 +425,7 @@ def sendStreamlabsAlert(channel, data):
             req = requests.post(streamlabsalerturl, headers=alertheaders, json=data)
             if req.status_code != 200:
                 logger.debug("response for streamlabs alert: %s; %s", str(req.status_code), str(req.text))
-        except:
+        except Exception:
             logger.error("Tried to send a Streamlabs alert to %s, but failed." % channel)
             logger.error("Error: %s", str(sys.exc_info()))
             
@@ -714,7 +726,7 @@ def formatTimeDelta(ms):
 def parseRarity(input):
     try:
         rarity = int(input)
-    except:
+    except Exception:
         if input.lower() in revrarity:
             rarity = revrarity[input.lower()]
         else:
@@ -1023,11 +1035,11 @@ class NepBot(NepBotClass):
                 global db
                 try:
                     db.close()
-                except:
+                except Exception:
                     logger.warning("Error closing db connection cleanly, ignoring.")
                 try:
-                    db = pymysql.connect(host="localhost", user="nepbot", passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
-                except:
+                    db = pymysql.connect(host=dbhost, user=dbuser, passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
+                except Exception:
                     logger.error("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
                 if int(config["last_weighting_update"]) < current_milli_time() - int(config["weighting_increase_cycle"]):
@@ -1073,7 +1085,7 @@ class NepBot(NepBotClass):
             for c in self.leavechannels:
                 try:
                     self.mychannels.remove(c)
-                except:
+                except Exception:
                     logger.warning("Couldn't remove channel %s from channels, it wasn't found. Channel list: %s", str(c), str(self.mychannels))
             self.leavechannels = []
             try:
@@ -1101,7 +1113,7 @@ class NepBot(NepBotClass):
                                     doneusers.append(viewer)
                                 if isLive[channelName] and viewer not in validactivity:
                                     validactivity.append(viewer)
-                    except:
+                    except Exception:
                         logger.error("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
                         logger.error("Error: %s", str(sys.exc_info()))
 
@@ -1191,7 +1203,7 @@ class NepBot(NepBotClass):
 
                 for user in activitymap:
                     activitymap[user] = activitymap[user] + 1
-            except:
+            except Exception:
                 logger.warning("We had an error during passive point gain. skipping this cycle.")
                 logger.warning("Error: ", str(sys.exc_info()))
 
@@ -1225,7 +1237,7 @@ class NepBot(NepBotClass):
                                                                                                         runners)) if runners != [] else "")
                     updateBoth(str(gamesdict[str(game)]) if game in gamesdict.keys() else "Hyperdimension Neptunia", title=title)
                     setFollows(runners)
-                except:
+                except Exception:
                     logger.warning("Error updating from Horaro. Skipping this cycle.")
                     logger.warning("Error: ", str(sys.exc_info()))
 
@@ -1239,7 +1251,7 @@ class NepBot(NepBotClass):
                     #print("Using " + "DELETE FROM displayTokens WHERE unix_timestamp(timestamp) < {ts}".format(ts=str(beforeSeconds)))
                     cur.execute("DELETE FROM displayTokens WHERE unix_timestamp(timestamp) < %s", [str(beforeSeconds)])
 
-                except:
+                except Exception:
                     logger.warning("Error deleting old tokens. skipping this cycle.")
                 cur.close()
 
@@ -1537,7 +1549,7 @@ class NepBot(NepBotClass):
                     return
                 try:
                     rarity = parseRarity(args[0])
-                except:
+                except Exception:
                     self.message(channel, "Unknown rarity. Usage: !buy <rarity> (So !buy uncommon for an uncommon)", isWhisper=isWhisper)
                     return
                 if rarity == int(config["numNormalRarities"]) or int(config["rarity" + str(rarity) + "Max"]) == 1:
@@ -1967,7 +1979,7 @@ class NepBot(NepBotClass):
 
                         if sender not in self.myadmins:
                             cur.execute("UPDATE users SET lastLookup = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
-                    except:
+                    except Exception:
                         self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
                 else:
                     a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
@@ -2006,8 +2018,8 @@ class NepBot(NepBotClass):
                     return
                 if subcmd == "test":
                     try:
-                        rarity = int(args[1])
-                    except:
+                        rarity = parseRarity(args[1])
+                    except Exception:
                         rarity = int(config["numNormalRarities"]) - 1
                     cur = db.cursor()
                     cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
@@ -2024,7 +2036,7 @@ class NepBot(NepBotClass):
                 if subcmd == "config":
                     try:
                         configName = args[1]
-                    except:
+                    except Exception:
                         self.message(channel, "Valid alert config options: " + ", ".join(validalertconfigvalues), isWhisper=isWhisper)
                         return
                     if configName == "reset":
@@ -2039,7 +2051,7 @@ class NepBot(NepBotClass):
                         return
                     try:
                         configValue = args[2]
-                    except:
+                    except Exception:
                         cur = db.cursor()
                         cur.execute("SELECT val FROM alertConfig WHERE channelName=%s AND config = %s", [sender, configName])
                         rows = cur.fetchall()
@@ -2119,7 +2131,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "Joined #" + chan, isWhisper=isWhisper)
                     cur.close()
                     return
-                except:
+                except Exception:
                     self.message(channel, "Tried joining, failed. Tell Marenthyu the following: " + str(sys.exc_info()), isWhisper=isWhisper)
                     logger.error("Error Joining channel %s: %s", chan, str(sys.exc_info()))
                     return
@@ -2136,7 +2148,7 @@ class NepBot(NepBotClass):
                     self.part(channel)
                     cur.close()
                     return
-                except:
+                except Exception:
                     self.message(channel, "Tried to leave but failed D:", isWhisper=isWhisper)
                     logger.error("Error leaving %s: %s", channel, str(sys.exc_info()))
                     return
@@ -2278,7 +2290,7 @@ class NepBot(NepBotClass):
                         if not hasPoints(tags['user-id'], int(args[3])):
                             self.message(channel, "Sorry, you do not have enough points to invest " + str(args[3]), isWhisper=isWhisper)
                             return
-                    except:
+                    except Exception:
                         cur.close()
                         self.message(channel, "Sorry, but {} is not a valid number!".format(str(args[3])), isWhisper=isWhisper)
                         return
@@ -2293,7 +2305,7 @@ class NepBot(NepBotClass):
                     cur.close()
                     self.message(channel, "Successfully voted to '{war[name]}' Option '{option[name]}' using {amount} points!".format(war=selectedWar, option=selectedOption, amount=str(args[3])), isWhisper=isWhisper)
                     return
-                except:
+                except Exception:
                     self.message(channel, "Usage: !wars OR !wars vote <warID> <optionID> <points>", isWhisper=isWhisper)
                     cur.close()
                     return
@@ -2693,7 +2705,7 @@ class NepBot(NepBotClass):
                         cur.close()
                         self.message(channel, "Successfully added %d waifus to the database." % len(addwaifus), isWhisper)
                         return
-                except:
+                except Exception:
                     self.message(channel, "Error loading waifu data.", isWhisper)
                     logger.error("Error importing waifus: %s", str(sys.exc_info()))
                     return
@@ -3217,7 +3229,7 @@ r = requests.get("https://api.twitch.tv/helix/users", headers=headers, params={"
 j = r.json()
 try:
     twitchid = j["data"][0]["id"]
-except:
+except Exception:
     twitchid = 0
 config["twitchid"] = str(twitchid)
 b = NepBot(config, channels, admins)
