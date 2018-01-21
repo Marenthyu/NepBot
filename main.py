@@ -334,7 +334,7 @@ def attemptBountyFill(bot, waifuid):
         cur.close()
         # give the disenchanter 50% profit
         base_value = int(config["rarity"+str(order[5])+"Value"])
-        return math.floor((order[3] - base_value)*0.5) 
+        return max(math.floor((order[3] - base_value)*0.5), 2)
     else:
         # no bounty
         cur.close()
@@ -834,11 +834,10 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
                     elif scalingData[scaleIdx] > scalingThresholds[scaleIdx]:
                         # make this rarity more likely to drop
                         oldPromoChance = currentChances[rarity - 1]
-                        currentChances[rarity - 1] = min(currentChances[rarity - 1] * scalingData[scaleIdx]/scalingThresholds[scaleIdx], 1)
-                        increaseRatio = currentChances[rarity - 1] / oldPromoChance
+                        currentChances[rarity - 1] = min(currentChances[rarity - 1] * ((scalingData[scaleIdx]/scalingThresholds[scaleIdx] - 1)*2 + 1), 1)
                         if rarity != int(config["numNormalRarities"]) - 1:
                             # make rarities above this one NOT more likely to drop
-                            currentChances[rarity] /= increaseRatio
+                            currentChances[rarity] /= currentChances[rarity - 1] / oldPromoChance
                         
             # account for min-singlecard-rarity in the pack
             if i == 0 and minSCRarity > guaranteedRarity:
@@ -1675,15 +1674,25 @@ class NepBot(NepBotClass):
                     addPoints(tags['user-id'], gottenpoints)
                     
                     # compile the message to be sent in chat
-                    response = "You take your booster pack and: "
+                    shortresponse = longresponse = "You take your booster pack and: "
                     
                     if len(keepCards) > 0:
-                        response += " keep " + ', '.join("[{id}] {name}".format(**x) for x in keepCards) + ";"
+                        longresponse += " keep " + ', '.join("[{id}] {name}".format(**x) for x in keepCards) + ";"
+                        shortresponse += " keep " + ', '.join(str(x['id']) for x in keepCards) + ";"
                     if len(deCards) > 0:
-                        response += " disenchant " + ', '.join("[{id}] {name}".format(**x) for x in deCards)
-                        if ordersFilled > 0:
-                            response += " (%d bounties filled)" % ordersFilled
+                        longresponse += " disenchant " + ', '.join("[{id}] {name}".format(**x) for x in deCards)
+                        shortresponse += " disenchant " + ', '.join(str(x['id']) for x in deCards)
+                    
+                    if len(longresponse) <= 400:
+                        response = longresponse
+                    else:
+                        response = shortresponse
+                    
+                    if ordersFilled > 0:
+                        response += " (%d bounties filled);" % ordersFilled
+                    elif len(deCards) > 0:
                         response += ";"
+                    
                     self.message(channel, response + " netting a total of " + str(gottenpoints) + " points.", isWhisper=isWhisper)
                     cur.execute("UPDATE boosters_opened SET status = 'closed', updated = %s WHERE id = %s", [current_milli_time(), boosterinfo[0]])
                     cur.close()
