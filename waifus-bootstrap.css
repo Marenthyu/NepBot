@@ -1,0 +1,149 @@
+html {
+    font-size: 80%;
+}
+
+body {
+  padding-top: 10px;
+  padding-bottom: 30px;
+}
+
+.id-holder {
+	position: absolute;
+	bottom: 0px;
+	left: 0px;
+	padding: 2px 5px 2px 5px;
+	border-radius: 0px 8px 0px 0px;
+	font-size: 120%;
+}
+
+.rarity-holder {
+	position: absolute;
+	bottom: 0px;
+	right: 0px;
+	text-transform: uppercase;
+	padding: 2px 5px 2px 5px;
+	border-radius: 8px 0px 0px 0px;
+	font-size: 120%;
+}
+
+.amount-holder {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    padding: 2px 5px 2px 5px;
+    border-radius: 0px 0px 8px 0px;
+	font-size: 150%;
+}
+
+.promotion-holder {
+    position: absolute;
+    top: 0px;
+    right: 0px;
+    padding: 2px 5px 2px 5px;
+    border-radius: 0px 0px 0px 8px;
+	font-size: 120%;
+}
+
+.invisible-space-holder {
+    position: absolute;
+    bottom: 0px;
+    left: 0px;
+    right: 0px;
+}
+
+.rarity-common {
+	background-color: #BBBBBB;
+	color: black;
+}
+
+.rarity-uncommon {
+	background-color: #666666;
+	color: white;
+}
+
+.rarity-rare {
+	background-color: black;
+	color: white;
+}
+
+.rarity-super {
+	background-color: #E6E600;
+	color: black;
+}
+
+.rarity-ultra {
+	background-color: #820DFF;
+	color: white;
+}
+
+.rarity-legendary {
+	background-color: #FF831E;
+	color: black;
+}
+
+.rarity-mythical {
+	background-color: red;
+	color: black;
+}
+
+.rarity-god {
+	background-color: #0C96B4;
+	color: white;
+}
+
+.rarity-special {
+	background: linear-gradient(to right,rgba(255, 0, 0, 0.8),rgba(255, 165, 0, 0.8),rgba(0, 128, 0, 0.8),rgba(0, 0, 255, 0.8),rgba(75, 0, 162, 0.8),rgba(238, 162, 238, 0.8)), black;
+	color: white;
+}
+
+.card-body-tcg {
+	padding: 0;
+    position: relative;
+    text-align: center;
+}
+
+.card-tcg {
+	margin: 0.5rem;
+	display: inline-block;
+    min-width: 170px;
+}
+
+.card-image {
+    height: 250px;
+}
+
+.card-footer {
+    overflow: hidden;
+}
+
+.card-footer .owned-icon {
+    float: left;
+    margin-right: 10px;
+    font-size: 300%;
+}
+
+.card-footer .keep-box {
+    float: left;
+    margin-right: 10px;
+}
+
+.card-footer .card-info {
+    overflow: hidden;
+}
+
+.owned {
+    background-color: #96ff95;
+}
+
+.not-owned {
+    background-color: #ffabb2;
+}
+
+.sets-holder {
+    padding-top: 20px;
+    padding-bottom: 20px;
+}
+
+.btn-set {
+    margin-bottom: 10px;
+}
