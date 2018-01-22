@@ -320,17 +320,6 @@ def upgradeHand(userid, gifted=False):
     cur = db.cursor()
     cur.execute("UPDATE users SET handLimit = handLimit + 1, paidHandUpgrades = paidHandUpgrades + %s WHERE id = %s", [0 if gifted else 1, userid])
     cur.close()
-
-def addDisplayToken(token, waifus):
-    if (waifus is None or len(waifus) == 0):
-        return
-    valuesstring = "('{token}', {waifu})".format(waifu=str(waifus[0]), token=str(token))
-    for w in waifus[1:]:
-        valuesstring = valuesstring + ", ('{token}', {waifu})".format(waifu=str(w), token=str(token))
-
-    cur = db.cursor()
-    cur.execute("INSERT INTO displayTokens(token, waifuid) VALUES {valuesstring}".format(valuesstring=valuesstring))
-    cur.close()
     
 def attemptBountyFill(bot, waifuid):
     # return profit from the bounty
@@ -897,12 +886,8 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         # alerts
         for w in alertwaifus:
             threading.Thread(target=sendDrawAlert, args=(channel, w, str(username))).start()
-
-        # insert display token
-        token = ''.join(choice(ascii_letters) for v in range(10))
-        addDisplayToken(token, cards)
         
-        return (boosterid, token)
+        return boosterid
 
 
 # From https://github.com/Shizmob/pydle/issues/35
@@ -1240,20 +1225,6 @@ class NepBot(NepBotClass):
                 except Exception:
                     logger.warning("Error updating from Horaro. Skipping this cycle.")
                     logger.warning("Error: ", str(sys.exc_info()))
-
-            with busyLock:
-                cur = db.cursor()
-                try:
-                    #print("Deleting outdated displayTokens")
-
-                    a = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
-                    beforeSeconds = int((a - datetime.datetime(1970,1,1)).total_seconds())
-                    #print("Using " + "DELETE FROM displayTokens WHERE unix_timestamp(timestamp) < {ts}".format(ts=str(beforeSeconds)))
-                    cur.execute("DELETE FROM displayTokens WHERE unix_timestamp(timestamp) < %s", [str(beforeSeconds)])
-
-                except Exception:
-                    logger.warning("Error deleting old tokens. skipping this cycle.")
-                cur.close()
 
         if t is None:
             timer()
@@ -1603,13 +1574,12 @@ class NepBot(NepBotClass):
                     return
 
                 if cmd == "show":
-                    cur.execute("SELECT waifuid FROM boosters_cards WHERE boosterid = %s", [boosterinfo[0]])
-                    cardrows = cur.fetchall()
-                    cards = [row[0] for row in cardrows]
-                    token = ''.join(choice(ascii_letters) for v in range(10))
-                    addDisplayToken(token, cards)
-                    droplink = config["siteHost"] + "/booster?token=" + token
-                    self.message(channel, "{user}, your current open booster pack: {droplink}".format(user=tags['display-name'], droplink=droplink), isWhisper=isWhisper)
+                    if len(args) > 1 and args[1].lower() == "verbose":
+                        # TODO
+                        pass
+                    else:
+                        droplink = config["siteHost"] + "/booster?user=" + sender
+                        self.message(channel, "{user}, your current open booster pack: {droplink}".format(user=tags['display-name'], droplink=droplink), isWhisper=isWhisper)
                     cur.close()
                     return
 
@@ -1721,8 +1691,8 @@ class NepBot(NepBotClass):
                         
                     packname = args[1].lower()
                     try:
-                        packid, token = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, True)
-                        droplink = config["siteHost"] + "/booster?token=" + token
+                        openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, True)
+                        droplink = config["siteHost"] + "/booster?user=" + sender
                         self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
                     except InvalidBoosterException:
                         self.message(channel, "Invalid booster type. Packs available right now: %s." % visiblepacks, isWhisper=isWhisper)
@@ -2202,8 +2172,8 @@ class NepBot(NepBotClass):
                         return
                         
                     try:
-                        packid, packtoken = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3], False)
-                        received.append("a free booster: %s/booster?token=%s" % (config["siteHost"], packtoken))
+                        packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3], False)
+                        received.append("a free booster: %s/booster?user=%s" % (config["siteHost"], sender))
                     except InvalidBoosterException:
                         self.message(channel, "Go tell an admin that token %s is broken (invalid booster attached)." % args[0], isWhisper)
                         cur.close()

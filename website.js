@@ -411,18 +411,17 @@ function bootstraphand(req, res, query) {
 }
 
 function bootstrapbooster(req, res, query) {
-    if (!('token' in query)) {
+    if (!('user' in query)) {
         res.writeHead(400, "Missing Parameter");
         res.end();
         return;
     }
 
-    con.query("SELECT waifus.* FROM waifus JOIN displayTokens ON waifuid = waifus.id " +
-        "WHERE displayTokens.token = ?", query.token, function (err, result) {
+    con.query("SELECT waifus.* FROM boosters_opened JOIN users ON boosters_opened.userid = users.id LEFT JOIN boosters_cards ON boosters_opened.id = boosters_cards.boosterid JOIN waifus ON boosters_cards.waifuid = waifus.id WHERE users.name = ? AND boosters_opened.status = 'open' ORDER BY waifus.id ASC", query.user, function (err, result) {
         if (err) throw err;
         if (result.length === 0) {
-            res.writeHead(404, "Token Not Found", {'Content-Type': 'text/html'});
-            res.write("404 - Display Token not found.");
+            res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
+            res.write("404 - This user doesn't exist or has no open booster.");
             res.end();
             return;
         }
