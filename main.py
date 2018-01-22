@@ -281,9 +281,12 @@ def getHand(twitchid):
     cur.close()
     return [{"name":row[1], "amount":row[0], "id":row[2], "rarity":row[3], "series":row[4], "image":row[5], "base_rarity": row[6]} for row in rows]
     
-def search(query):
+def search(query, series = None):
     cur = db.cursor()
-    cur.execute("SELECT id, name, series, base_rarity FROM waifus WHERE Name LIKE %s", ["%" + str(query) + "%"])
+    if series is None:
+        cur.execute("SELECT id, Name, series, base_rarity FROM waifus WHERE Name LIKE %s", ["%" + query + "%"])
+    else:
+        cur.execute("SELECT id, Name, series, base_rarity FROM waifus WHERE Name LIKE %s AND series LIKE %s", ["%" + query + "%", "%" + series + "%"])
     rows = cur.fetchall()
     ret = []
     for row in rows:
@@ -2316,7 +2319,7 @@ class NepBot(NepBotClass):
                 return
             if command == "search":
                 if len(args) < 1:
-                    self.message(channel, "Usage: !search <name>", isWhisper=isWhisper)
+                    self.message(channel, "Usage: !search <name>(|<series>)", isWhisper=isWhisper)
                     return
                 cur = db.cursor()
                 cur.execute("SELECT lastSearch FROM users WHERE id = %s", [tags['user-id']])
@@ -2324,7 +2327,10 @@ class NepBot(NepBotClass):
                 lookupAvailable = nextFree < current_milli_time()
                 if lookupAvailable:
                     q = " ".join(args)
-                    result = search(q)
+                    series = None
+                    if "|" in q:
+                        q, series = q.split("|", 1)
+                    result = search(q, series)
                     #print(result)
                     if len(result) == 0:
                         self.message(channel, "No waifu found with that name.", isWhisper=isWhisper)
