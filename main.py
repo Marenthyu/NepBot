@@ -2319,17 +2319,20 @@ class NepBot(NepBotClass):
                 return
             if command == "search":
                 if len(args) < 1:
-                    self.message(channel, "Usage: !search <name>(|<series>)", isWhisper=isWhisper)
+                    self.message(channel, "Usage: !search <name>[ from <series>]", isWhisper=isWhisper)
                     return
                 cur = db.cursor()
                 cur.execute("SELECT lastSearch FROM users WHERE id = %s", [tags['user-id']])
                 nextFree = 1800000 + int(cur.fetchone()[0])
                 lookupAvailable = nextFree < current_milli_time()
                 if lookupAvailable:
-                    q = " ".join(args)
-                    series = None
-                    if "|" in q:
-                        q, series = q.split("|", 1)
+                    try:
+                        from_index = [arg.lower() for arg in args].index("from")
+                        q = " ".join(args[:from_index])
+                        series = " ".join(args[from_index+1:])
+                    except ValueError:
+                        q = " ".join(args)
+                        series = None
                     result = search(q, series)
                     #print(result)
                     if len(result) == 0:
