@@ -636,11 +636,16 @@ def maxWaifuID():
     cur.close()
     return ret
     
-def getGods(userid):
+def getUniqueCards(userid):
     with db.cursor() as cur:
-        cur.execute("SELECT waifuid FROM has_waifu WHERE userid = %s AND rarity = %s", [userid, int(config["numNormalRarities"]) - 1])
-        rows = cur.fetchall()
-        return [row[0] for row in rows]
+        uniqueRarities = [rarity for rarity in range(int(config["numNormalRarities"])) if int(config["rarity%dMax" % rarity]) == 1]
+        if len(uniqueRarities) == 0:
+            return []
+        else:
+            inStr = ",".join(["%s"] * len(uniqueRarities))
+            cur.execute("SELECT waifuid FROM has_waifu WHERE userid = %s AND rarity IN ({0})".format(inStr), [userid] + uniqueRarities)
+            rows = cur.fetchall()
+            return [row[0] for row in rows]
 
 def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDowngrades=True, bannedCards=None):
     random.seed()
@@ -830,7 +835,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             
         cards = []
         alertwaifus = []
-        gods = getGods(userid)
+        uniques = getUniqueCards(userid)
         for i in range(numCards):
             # scale chances of the card appropriately
             currentChances = list(normalChances)
@@ -864,7 +869,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             logger.debug("using odds for card %d: %s", i, str(currentChances))
                     
             # actually drop the card
-            card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings, bannedCards=gods+cards))
+            card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings, bannedCards=uniques+cards))
             cards.append(card)
                     
             # check its rarity and adjust scaling data
@@ -1423,7 +1428,7 @@ class NepBot(NepBotClass):
                 limit = int(res[1])
                 freeAvailable = nextFree < current_milli_time()
                 if freeAvailable and currentCards(tags['user-id']) < limit:
-                    row = getWaifuById(dropCard(bannedCards=getGods(tags['user-id'])))
+                    row = getWaifuById(dropCard(bannedCards=getUniqueCards(tags['user-id'])))
                     resetWeightings(row['id'])
                     logDrop(str(tags['user-id']), id, row['base_rarity'], "freewaifu", channel, isWhisper)
                     if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
@@ -1540,7 +1545,7 @@ class NepBot(NepBotClass):
                 if not hasPoints(tags['user-id'], price):
                     self.message(channel, "You do not have enough points to buy a " + str(config["rarity" + str(rarity) + "Name"]) + " waifu. You need " + str(price) + " points.", isWhisper=isWhisper)
                     return
-                chosenWaifu = dropCard(rarity=rarity, allowDowngrades=False, bannedCards=getGods(tags['user-id']))
+                chosenWaifu = dropCard(rarity=rarity, allowDowngrades=False, bannedCards=getUniqueCards(tags['user-id']))
                 if chosenWaifu is not None:
                     addPoints(tags['user-id'], 0 - price)
                     row = getWaifuById(chosenWaifu)
