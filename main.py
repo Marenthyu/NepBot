@@ -635,8 +635,14 @@ def maxWaifuID():
     ret = int(cur.fetchone()[0])
     cur.close()
     return ret
+    
+def getGods(userid):
+    with db.cursor() as cur:
+        cur.execute("SELECT waifuid FROM has_waifu WHERE userid = %s AND rarity = %s", [userid, int(config["numNormalRarities"]) - 1])
+        rows = cur.fetchall()
+        return [row[0] for row in rows]
 
-def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDowngrades=True):
+def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDowngrades=True, bannedCards=None):
     random.seed()
     if rarity == -1:
         maxrarity = int(config["numNormalRarities"]) - 1
@@ -650,21 +656,25 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
                 rarity += 1
             else:
                 break
-        return dropCard(rarity, useEventWeightings=useEventWeightings, allowDowngrades=allowDowngrades)
+        return dropCard(rarity=rarity, useEventWeightings=useEventWeightings, allowDowngrades=allowDowngrades, bannedCards=bannedCards)
     else:
         with db.cursor() as cur:
+            if bannedCards is not None and len(bannedCards) > 0:
+                banClause = " AND id NOT IN(" + ",".join(str(id) for id in bannedCards)+")"
+            else:
+                banClause = ""
             raritymax = int(config["rarity" + str(rarity) + "Max"])
             weighting_column = "(event_weighting*normal_weighting)" if useEventWeightings else "normal_weighting"
             if raritymax > 0:
-                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column), (rarity, raritymax))
+                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), (rarity, raritymax))
             else:
-                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column), (rarity,))
+                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), (rarity,))
             result = cur.fetchone()
             if result is None:
                 # no waifus left at this rarity
                 logger.info("No waifus left at rarity %d" % rarity)
                 if allowDowngrades:
-                    return dropCard(rarity - 1, useEventWeightings=useEventWeightings)
+                    return dropCard(rarity=rarity - 1, useEventWeightings=useEventWeightings, bannedCards=bannedCards)
                 else:
                     return None
             else:
@@ -820,6 +830,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             
         cards = []
         alertwaifus = []
+        gods = getGods(userid)
         for i in range(numCards):
             # scale chances of the card appropriately
             currentChances = list(normalChances)
@@ -853,12 +864,8 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             logger.debug("using odds for card %d: %s", i, str(currentChances))
                     
             # actually drop the card
-            card = None
-            while True:
-                card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings))
-                if card not in cards:
-                    cards.append(card)
-                    break
+            card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings, bannedCards=gods+cards))
+            cards.append(card)
                     
             # check its rarity and adjust scaling data
             waifu = getWaifuById(card)
@@ -1416,7 +1423,7 @@ class NepBot(NepBotClass):
                 limit = int(res[1])
                 freeAvailable = nextFree < current_milli_time()
                 if freeAvailable and currentCards(tags['user-id']) < limit:
-                    row = getWaifuById(dropCard())
+                    row = getWaifuById(dropCard(bannedCards=getGods(tags['user-id'])))
                     resetWeightings(row['id'])
                     logDrop(str(tags['user-id']), id, row['base_rarity'], "freewaifu", channel, isWhisper)
                     if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
@@ -1533,7 +1540,7 @@ class NepBot(NepBotClass):
                 if not hasPoints(tags['user-id'], price):
                     self.message(channel, "You do not have enough points to buy a " + str(config["rarity" + str(rarity) + "Name"]) + " waifu. You need " + str(price) + " points.", isWhisper=isWhisper)
                     return
-                chosenWaifu = dropCard(rarity, allowDowngrades=False)
+                chosenWaifu = dropCard(rarity=rarity, allowDowngrades=False, bannedCards=getGods(tags['user-id']))
                 if chosenWaifu is not None:
                     addPoints(tags['user-id'], 0 - price)
                     row = getWaifuById(chosenWaifu)
