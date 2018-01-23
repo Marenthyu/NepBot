@@ -665,19 +665,20 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
     else:
         with db.cursor() as cur:
             if bannedCards is not None and len(bannedCards) > 0:
-                banClause = " AND id NOT IN(" + ",".join(str(id) for id in bannedCards)+")"
+                banClause = " AND id NOT IN(" + ",".join(["%s"] * len(bannedCards)) + ")"
             else:
                 banClause = ""
+                bannedCards = []
             raritymax = int(config["rarity" + str(rarity) + "Max"])
             weighting_column = "(event_weighting*normal_weighting)" if useEventWeightings else "normal_weighting"
             if raritymax > 0:
-                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), (rarity, raritymax))
+                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), [rarity] + bannedCards + [raritymax])
             else:
-                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), (rarity,))
+                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), [rarity] + bannedCards)
             result = cur.fetchone()
             if result is None:
                 # no waifus left at this rarity
-                logger.info("No waifus left at rarity %d" % rarity)
+                logger.info("No droppable waifus left at rarity %d" % rarity)
                 if allowDowngrades:
                     return dropCard(rarity=rarity - 1, useEventWeightings=useEventWeightings, bannedCards=bannedCards)
                 else:
