@@ -144,7 +144,7 @@ def loadConfig():
         logger.debug("Config: %s", str(config))
         alertRarityRange = range(int(config["drawAlertMinimumRarity"]), int(config["numNormalRarities"]))
         validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound"] + ["rarity%dLength" % rarity for rarity in alertRarityRange] + ["rarity%dSound" % rarity for rarity in alertRarityRange]
-        waifu_regex = re.compile('(\[(?P<id>[0-9]+?)])?(?P<name>.+?) *- *(?P<series>.+) *- *(?P<rarity>[0-'+config["numNormalRarities"]+']) *- *(?P<link>.+?)$')
+        waifu_regex = re.compile('(\[(?P<id>[0-9]+?)])?(?P<name>.+?) *- *(?P<series>.+) *- *(?P<rarity>[0-'+str(int(config["numNormalRarities"])-1)+']) *- *(?P<link>.+?)$')
         logger.debug("Alert config values: %s", str(validalertconfigvalues))
         logger.debug("Waifu regex: %s", str(waifu_regex))
         logger.info("Fetching admin list...")
@@ -153,7 +153,7 @@ def loadConfig():
         for row in curg.fetchall():
             admins.append(row[0])
         logger.debug("Admins: %s", str(admins))
-        revrarity = {config["rarity" + str(i) + "Name"]:i for i in range(int(config["numNormalRarities"]) + 1)}
+        revrarity = {config["rarity" + str(i) + "Name"]:i for i in range(int(config["numNormalRarities"]) + int(config["numSpecialRarities"]))}
         curg.execute("SELECT name FROM blacklist")
         rows = curg.fetchall()
         blacklist = []
@@ -739,7 +739,7 @@ def parseRarity(input):
             rarity = revrarity[input.lower()]
         else:
             raise ValueError(input)
-    if rarity < 0 or rarity > int(config["numNormalRarities"]):
+    if rarity < 0 or rarity >= int(config["numNormalRarities"]) + int(config["numSpecialRarities"]):
         raise ValueError(input)
     return rarity
     
@@ -1472,7 +1472,7 @@ class NepBot(NepBotClass):
                         if deTarget in disenchants:
                             self.message(channel, "You can't disenchant the same waifu twice at once!", isWhisper)
                             return
-                        if deTarget['rarity'] == int(config["numNormalRarities"]) and not hasConfirmed:
+                        if deTarget['rarity'] >= int(config["numNormalRarities"]) and not hasConfirmed:
                             self.message(channel, "%s, you are trying to disenchant one or more special waifus! Special waifus do not take up any hand space and disenchant for 0 points. If you are sure you want to do this, append \" yes\" to the end of your command." % tags['display-name'], isWhisper)
                             return
                         if deTarget['rarity'] >= int(config["disenchantRequireConfirmationRarity"]) and not hasConfirmed:
@@ -1539,7 +1539,7 @@ class NepBot(NepBotClass):
                 except Exception:
                     self.message(channel, "Unknown rarity. Usage: !buy <rarity> (So !buy uncommon for an uncommon)", isWhisper=isWhisper)
                     return
-                if rarity == int(config["numNormalRarities"]) or int(config["rarity" + str(rarity) + "Max"]) == 1:
+                if rarity >= int(config["numNormalRarities"]) or int(config["rarity" + str(rarity) + "Max"]) == 1:
                     self.message(channel, "You can't buy that rarity of waifu.", isWhisper=isWhisper)
                     return
                 price = int(config["rarity" + str(rarity) + "Value"]) * 5
@@ -3129,7 +3129,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "Usage: !raritychange <ID> <rarity>", isWhisper)
                     return
                     
-                if waifu['base_rarity'] == int(config['numNormalRarities']):
+                if waifu['base_rarity'] >= int(config['numNormalRarities']):
                     self.message(channel, "You shouldn't be changing a special waifu into another rarity.", isWhisper)
                     return
                     

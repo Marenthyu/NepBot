@@ -96,6 +96,11 @@ body {
 	color: white;
 }
 
+.rarity-promo {
+	background: linear-gradient(to left,rgba(255, 0, 0, 0.8),rgba(255, 165, 0, 0.8),rgba(0, 128, 0, 0.8),rgba(0, 0, 255, 0.8),rgba(75, 0, 162, 0.8),rgba(238, 162, 238, 0.8)), black;
+	color: white;
+}
+
 .card-body-tcg {
 	padding: 0;
     position: relative;
