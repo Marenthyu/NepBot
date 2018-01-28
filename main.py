@@ -284,9 +284,9 @@ def getHand(twitchid):
 def search(query, series = None):
     cur = db.cursor()
     if series is None:
-        cur.execute("SELECT id, Name, series, base_rarity FROM waifus WHERE Name LIKE %s", ["%" + query + "%"])
+        cur.execute("SELECT id, Name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND Name LIKE %s", ["%" + query + "%"])
     else:
-        cur.execute("SELECT id, Name, series, base_rarity FROM waifus WHERE Name LIKE %s AND series LIKE %s", ["%" + query + "%", "%" + series + "%"])
+        cur.execute("SELECT id, Name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND Name LIKE %s AND series LIKE %s", ["%" + query + "%", "%" + series + "%"])
     rows = cur.fetchall()
     ret = []
     for row in rows:
@@ -610,9 +610,9 @@ def getWaifuById(id):
     except Exception:
         return None
     cur = db.cursor()
-    cur.execute("SELECT id, Name, image, base_rarity, series FROM waifus WHERE id=%s", [id])
+    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup FROM waifus WHERE id=%s", [id])
     row = cur.fetchone()
-    ret = {"id":row[0], "name":row[1], "image":row[2], "base_rarity":row[3], "series":row[4]}
+    ret = {"id":row[0], "name":row[1], "image":row[2], "base_rarity":row[3], "series":row[4], "can_lookup": row[5]}
     cur.close()
     #print("Fetched Waifu from id: " + str(ret))
     return ret
@@ -689,7 +689,8 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
 def resetWeightings(*cards):
     with db.cursor() as cur:
         inString = ",".join(["%s"] * len(cards))
-        cur.execute("UPDATE waifus SET normal_weighting = 1 WHERE id IN({0})".format(inString), cards)
+        cur.execute("UPDATE waifus SET normal_weighting = normal_weighting / %s WHERE id IN({0}) AND normal_weighting <= 1".format(inString), [float(config["weighting_increase_amount"])] + cards)
+        cur.execute("UPDATE waifus SET normal_weighting = 1 WHERE id IN({0}) AND normal_weighting > 1".format(inString), cards)
 
 def giveCard(userid, id, rarity, amount=1):
     with db.cursor() as cur:
@@ -904,6 +905,36 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             threading.Thread(target=sendDrawAlert, args=(channel, w, str(username))).start()
         
         return boosterid
+        
+def infoCommandAvailable(userid, username, bot, channel, isWhisper):
+    with db.cursor() as cur:
+        private = isWhisper or channel == '#'+config['username']
+        columnName = "Private" if private else "Public" 
+        cur.execute("SELECT infoUsed{0}, infoLastReset{0} FROM users WHERE id = %s".format(columnName), [userid])
+        limitData = list(cur.fetchone())
+        
+        timeUntilReset = limitData[1] - (current_milli_time() - int(config["infoResetPeriod"])*60000) 
+        
+        if timeUntilReset <= 0:
+            limitData[0] = 0
+            cur.execute("UPDATE users SET infoUsed{0} = 0, infoLastReset{0} = %s WHERE id = %s".format(columnName), [current_milli_time(), userid])
+        
+        limit = int(config["infoLimit%s" % columnName])
+        if limitData[0] < limit:
+            return True
+        else:
+            timeDiff = formatTimeDelta(timeUntilReset)
+            if private:
+                bot.message(channel, "%s, you have hit the rate limit for info commands. Please wait %s to use more." % (username, timeDiff), isWhisper)
+            else:
+                bot.message(channel, "%s, you have hit the rate limit for info commands in public chats. Please wait %s to use more or use them via whisper or in the bot's own chat." % (username, timeDiff), isWhisper)
+            return False
+            
+def useInfoCommand(userid, channel, isWhisper):
+    with db.cursor() as cur:
+        private = isWhisper or channel == '#'+config['username']
+        columnName = "Private" if private else "Public"
+        cur.execute("UPDATE users SET infoUsed{0} = infoUsed{0} + 1 WHERE id = %s".format(columnName), [userid])
 
 
 # From https://github.com/Shizmob/pydle/issues/35
@@ -1925,18 +1956,18 @@ class NepBot(NepBotClass):
                 if len(args) != 1:
                     self.message(channel, "Usage: !lookup <id>", isWhisper=isWhisper)
                     return
-                cur = db.cursor()
-                cur.execute("SELECT lastLookup FROM users WHERE id = %s", [tags['user-id']])
-                nextFree = 1800000 + int(cur.fetchone()[0])
-                lookupAvailable = nextFree < current_milli_time()
 
-                if lookupAvailable:
+                if infoCommandAvailable(tags['user-id'], tags['display-name'], self, channel, isWhisper):
                     try:
                         waifu = getWaifuById(args[0])
                         assert waifu is not None
-                        baseRarityName = config["rarity%dName" % waifu["base_rarity"]]
-                        cur.execute("SELECT users.name, has_waifu.rarity, has_waifu.amount FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE has_waifu.waifuid = %s", [waifu['id']])
-                        allOwners = cur.fetchall()
+                        assert waifu['can_lookup'] == 1
+                        
+                        with db.cursor() as cur:
+                            baseRarityName = config["rarity%dName" % waifu["base_rarity"]]
+                            cur.execute("SELECT users.name, has_waifu.rarity, has_waifu.amount FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE has_waifu.waifuid = %s", [waifu['id']])
+                            allOwners = cur.fetchall()
+                        
                         # compile per-owner data
                         ownerData = {}
                         ownedByOwner = {}
@@ -1964,15 +1995,10 @@ class NepBot(NepBotClass):
                         self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}'.format(**waifu), isWhisper=isWhisper)
 
                         if sender not in self.myadmins:
-                            cur.execute("UPDATE users SET lastLookup = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
+                            useInfoCommand(tags['user-id'], channel, isWhisper)
                     except Exception:
                         self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
-                else:
-                    a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
-                    datestring = "{0}".format(a).split(".")[0]
-                    self.message(channel, "Sorry, {user}, please wait {t} until you lookup again.".format(user=str(sender), t=datestring), isWhisper=isWhisper)
-
-                cur.close()
+                
                 return
             if command == "whisper":
                 if followsme(tags['user-id']):
@@ -2334,11 +2360,7 @@ class NepBot(NepBotClass):
                 if len(args) < 1:
                     self.message(channel, "Usage: !search <name>[ from <series>]", isWhisper=isWhisper)
                     return
-                cur = db.cursor()
-                cur.execute("SELECT lastSearch FROM users WHERE id = %s", [tags['user-id']])
-                nextFree = 1800000 + int(cur.fetchone()[0])
-                lookupAvailable = nextFree < current_milli_time()
-                if lookupAvailable:
+                if infoCommandAvailable(tags['user-id'], tags['display-name'], self, channel, isWhisper):
                     try:
                         from_index = [arg.lower() for arg in args].index("from")
                         q = " ".join(args[:from_index])
@@ -2347,29 +2369,27 @@ class NepBot(NepBotClass):
                         q = " ".join(args)
                         series = None
                     result = search(q, series)
-                    #print(result)
                     if len(result) == 0:
                         self.message(channel, "No waifu found with that name.", isWhisper=isWhisper)
                         return
-                    if len(result) == 1:
-                        self.message(channel,
-                                     "Found one waifu: [{w[id]}][{rarity}]{w[name]} from {w[series]} (use !lookup {w[id]} for more info)".format(
-                                         w=result[0], rarity=config['rarity' + str(result[0]['base_rarity']) + 'Name']), isWhisper=isWhisper)
-                        return
+                    
                     if len(result) > 8:
                         self.message(channel, "Too many results! ({amount}) - try a longer search query.".format(
                             amount=str(len(result))), isWhisper=isWhisper)
                         return
+                    
+                    if len(result) == 1:
+                        self.message(channel,
+                                     "Found one waifu: [{w[id]}][{rarity}]{w[name]} from {w[series]} (use !lookup {w[id]} for more info)".format(
+                                         w=result[0], rarity=config['rarity' + str(result[0]['base_rarity']) + 'Name']), isWhisper=isWhisper)
                     else:
                         self.message(channel, "Multiple results (Use !lookup for more details): " + ", ".join(
                             map(lambda waifu: str(waifu['id']), result)), isWhisper=isWhisper)
+                    
                     if sender not in self.myadmins:
-                        cur.execute("UPDATE users SET lastSearch = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
-                    return
-                else:
-                    a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
-                    datestring = "{0}".format(a).split(".")[0]
-                    self.message(channel, "Sorry, {user}, please wait {t} until you can search again.".format(user=tags['display-name'], t=datestring), isWhisper=isWhisper)
+                        useInfoCommand(tags['user-id'], channel, isWhisper)
+                
+                return
             if command == "promote":
                 sentMessageAbout = []
                 messagedAtAll = False
@@ -2939,42 +2959,43 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !bounty check <ID>", isWhisper=isWhisper)
                         return
                         
-                    try:
-                        waifu = getWaifuById(args[1])
-                        assert waifu is not None
-                        
-                        if waifu['base_rarity'] == int(config["numNormalRarities"]) - 1:
-                            self.message(channel, "Bounties cannot be placed on special waifus.", isWhisper)
-                            return
+                    if infoCommandAvailable(tags['user-id'], tags['display-name'], self, channel, isWhisper):
+                        try:
+                            waifu = getWaifuById(args[1])
+                            assert waifu is not None
+                            assert waifu['can_lookup'] == 1
                             
-                        cur = db.cursor()
-                        cur.execute("SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM bounties WHERE waifuid = %s AND status='open'", [waifu['id']])
-                        allordersinfo = cur.fetchone()
-                        
-                        if allordersinfo[0] == 0:
-                            self.message(channel, "[{id}] {name} has no bounties right now.".format(id=waifu['id'], name=waifu['name']), isWhisper)
-                            cur.close()
-                            return
-                        
-                        cur.execute("SELECT amount FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'", [tags['user-id'], waifu['id']])
-                        myorderinfo = cur.fetchone()
-                        minfo = {"count": allordersinfo[0], "id": waifu['id'], "name": waifu['name'], "highest": allordersinfo[1]}
-                        if myorderinfo is not None:
-                            minfo["mine"] = myorderinfo[0]
-                            if myorderinfo[0] == allordersinfo[1]:
-                                self.message(channel, "There are currently {count} bounties for [{id}] {name}. You are the highest bidder at {highest} points.".format(**minfo), isWhisper)
-                            else:
-                                self.message(channel, "There are currently {count} bounties for [{id}] {name}. Your bid of {mine} points is lower than the highest bid of {highest} points.".format(**minfo), isWhisper)
-                        else:
-                            self.message(channel, "There are currently {count} bounties for [{id}] {name}. The highest bid is {highest} points. You don't have a bounty on this waifu right now.".format(**minfo), isWhisper)
-                        
-                        cur.close()
-                        return
+                            if waifu['base_rarity'] == int(config["numNormalRarities"]) - 1:
+                                self.message(channel, "Bounties cannot be placed on special waifus.", isWhisper)
+                                return
+                            
+                            if sender not in self.myadmins:
+                                useInfoCommand(tags['user-id'], channel, isWhisper)
+                            
+                            with db.cursor() as cur:
+                                cur.execute("SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM bounties WHERE waifuid = %s AND status='open'", [waifu['id']])
+                                allordersinfo = cur.fetchone()
                                 
-                    except Exception:
-                        self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
-                        return
-                        
+                                if allordersinfo[0] == 0:
+                                    self.message(channel, "[{id}] {name} has no bounties right now.".format(id=waifu['id'], name=waifu['name']), isWhisper)
+                                    return
+                                
+                                cur.execute("SELECT amount FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'", [tags['user-id'], waifu['id']])
+                                myorderinfo = cur.fetchone()
+                                minfo = {"count": allordersinfo[0], "id": waifu['id'], "name": waifu['name'], "highest": allordersinfo[1]}
+                                if myorderinfo is not None:
+                                    minfo["mine"] = myorderinfo[0]
+                                    if myorderinfo[0] == allordersinfo[1]:
+                                        self.message(channel, "There are currently {count} bounties for [{id}] {name}. You are the highest bidder at {highest} points.".format(**minfo), isWhisper)
+                                    else:
+                                        self.message(channel, "There are currently {count} bounties for [{id}] {name}. Your bid of {mine} points is lower than the highest bid of {highest} points.".format(**minfo), isWhisper)
+                                else:
+                                    self.message(channel, "There are currently {count} bounties for [{id}] {name}. The highest bid is {highest} points. You don't have a bounty on this waifu right now.".format(**minfo), isWhisper)
+                                    
+                        except Exception:
+                            self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
+                            
+                    return    
                 if subcmd == "list":
                     cur = db.cursor()
                     cur.execute("SELECT waifuid, amount, waifus.name FROM bounties JOIN waifus ON bounties.waifuid = waifus.id WHERE userid = %s AND status='open'", [tags['user-id']])
@@ -3011,6 +3032,7 @@ class NepBot(NepBotClass):
                     try:
                         waifu = getWaifuById(args[1])
                         assert waifu is not None
+                        assert waifu['can_lookup'] == 1
                         
                         if waifu['base_rarity'] == int(config["numNormalRarities"]) - 1:
                             self.message(channel, "Bounties cannot be placed on special waifus.", isWhisper)
@@ -3098,6 +3120,7 @@ class NepBot(NepBotClass):
                     try:
                         waifu = getWaifuById(args[1])
                         assert waifu is not None
+                        assert waifu['can_lookup'] == 1
                         
                         # check for a current order
                         cur = db.cursor()

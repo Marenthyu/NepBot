@@ -82,12 +82,12 @@ body {
 }
 
 .rarity-mythical {
-	background-color: red;
-	color: black;
+	background-color: #ff69b4;
+	color: white;
 }
 
 .rarity-god {
-	background-color: #0C96B4;
+	background-color: #3498DB;
 	color: white;
 }
 

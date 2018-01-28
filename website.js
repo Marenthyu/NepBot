@@ -377,7 +377,7 @@ function bootstraphand(req, res, query) {
     }
 
     con.query("SELECT waifus.*, rarity, amount FROM waifus JOIN has_waifu ON waifus.id = has_waifu.waifuid JOIN users ON " +
-        "has_waifu.userid = users.id WHERE users.name = ? ORDER BY (has_waifu.rarity < 8) DESC, waifus.id ASC", query.user, function (err, result) {
+        "has_waifu.userid = users.id WHERE users.name = ? ORDER BY (has_waifu.rarity < 8) DESC, waifus.id ASC, has_waifu.rarity ASC", query.user, function (err, result) {
         if (err) throw err;
         if (result.length === 0) {
             res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
