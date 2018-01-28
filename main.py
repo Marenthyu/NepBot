@@ -2965,7 +2965,7 @@ class NepBot(NepBotClass):
                             assert waifu is not None
                             assert waifu['can_lookup'] == 1
                             
-                            if waifu['base_rarity'] == int(config["numNormalRarities"]) - 1:
+                            if waifu['base_rarity'] >= int(config["numNormalRarities"]):
                                 self.message(channel, "Bounties cannot be placed on special waifus.", isWhisper)
                                 return
                             
@@ -3034,7 +3034,7 @@ class NepBot(NepBotClass):
                         assert waifu is not None
                         assert waifu['can_lookup'] == 1
                         
-                        if waifu['base_rarity'] == int(config["numNormalRarities"]) - 1:
+                        if waifu['base_rarity'] >= int(config["numNormalRarities"]):
                             self.message(channel, "Bounties cannot be placed on special waifus.", isWhisper)
                             return
                         
