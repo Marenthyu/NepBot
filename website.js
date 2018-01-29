@@ -94,7 +94,7 @@ let green = "#96ff95";
 let downloading = 0;
 
 let bootstraphandtpl = fs.readFileSync('bootstraphandtemplate.htm', 'utf8');
-let bootstraphandcard = '<div class="card card-tcg">' +
+let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-body card-body-tcg">' +
     '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />'+
     '<div class="id-holder rarity-{RARITY}">{ID}</div>'+
@@ -111,7 +111,7 @@ let bootstraphandcard = '<div class="card card-tcg">' +
 let bootstraphandamtholder = '<div class="amount-holder rarity-{RARITY}">x{AMOUNT}</div>'
 let bootstraphandpromoholder = '<div class="promotion-holder rarity-{RARITY}">{STARS}</div>'
 let bootstrapboostertpl = fs.readFileSync('bootstrapboostertemplate.htm', 'utf8');
-let bootstrapboostercard = '<div class="card card-tcg">' +
+let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-body card-body-tcg">' +
     '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />'+
     '<div class="id-holder rarity-{RARITY}">{ID}</div>'+
