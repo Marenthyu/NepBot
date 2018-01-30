@@ -556,9 +556,48 @@ def sendDisenchantAlert(channel, waifu, user):
             discordbody["embeds"][1]["color"] = int(config[colorKey])
         sendDiscordAlert(discordbody)
         
-def sendPromotionAlert(channel, waifu, user):
-    # TODO
-    pass
+def sendPromotionAlert(userid, waifuid, new_rarity):
+    with busyLock:
+        # check for duplicate alert and don't send it
+        # UNLESS this is a promotion to MAX rarity
+        if new_rarity != int(config["numNormalRarities"]) - 1:
+            with db.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM promotion_alerts_sent WHERE userid = %s AND waifuid = %s AND rarity >= %s", [userid, waifuid, new_rarity])
+                result = cur.fetchone()[0]
+                if result > 0:
+                    return
+        
+        # get data necessary for the alert and note that we sent it
+        # TODO maybe use display name instead
+        waifu = getWaifuById(waifuid)
+        with db.cursor() as cur:
+            cur.execute("SELECT name FROM users WHERE id = %s", [userid])
+            username = cur.fetchone()[0]
+            cur.execute("REPLACE INTO promotion_alerts_sent (userid, waifuid, rarity) VALUES(%s, %s, %s)", [userid, waifuid, new_rarity])
+            
+        # compile alert
+        discordbody = {"username": "Waifu TCG", "embeds": [
+            {
+                "title": "A waifu has been promoted!",
+                "color": int(config["rarity%dEmbedColor" % new_rarity])
+            },
+            {
+                "type": "rich",
+                "title": "{user} promoted {name} to {rarity} rarity!".format(user=username, name=waifu["name"], rarity=config["rarity%dName" % new_rarity]),
+                "color": int(config["rarity%dEmbedColor" % new_rarity]),
+                "footer": {
+                    "text": "Waifu TCG by Marenthyu"
+                },
+                "image": {
+                    "url": waifu["image"]
+                },
+                "provider": {
+                    "name": "Marenthyu",
+                    "url": "https://marenthyu.de"
+                }
+            }
+        ]}
+        sendDiscordAlert(discordbody)
         
 def naturalJoinNames(names):
     if len(names) == 1:
@@ -727,8 +766,8 @@ def giveCard(userid, id, rarity, amount=1, inPromotion=False):
         if not promoted:
             # if we make it this far with inPromotion=True, this is the maximum rarity this stack reached
             # so we should fire off the promoAlert now
-            if inPromotion:
-                pass
+            if inPromotion and rarity >= int(config["promotionAlertMinimumRarity"]):
+                threading.Thread(target=sendPromotionAlert, args=(userid, id, rarity)).start()
             # insert normally
             if currentAmount != 0:
                 cur.execute("UPDATE has_waifu SET amount = amount + %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [amount, userid, id, rarity])
