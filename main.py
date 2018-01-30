@@ -2613,6 +2613,8 @@ class NepBot(NepBotClass):
                                 prizeMultiplier = 1 / (math.log(7200000.0 / resultData["result"], 4) + 1)
                             else:
                                 prizeMultiplier = math.log(resultData["result"] / 7200000.0, 4) + 1
+                                
+                            
 
                             # calculate first run of prizes
                             prizes = []
@@ -2623,6 +2625,10 @@ class NepBot(NepBotClass):
 
                                 # apply multipliers
                                 prize *= prizeMultiplier
+                                
+                                # stop increasing the average payout beyond a certain participant cap
+                                if numEntries > int(config["betParticipantScalingCap"]):
+                                    prize *= (100*int(config["betParticipantScalingCap"]) + 60) / (100*numEntries + 60)
 
                                 if abs(winner["timedelta"]) < 10:
                                     # what a lucky SoB
