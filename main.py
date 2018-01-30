@@ -2020,8 +2020,10 @@ class NepBot(NepBotClass):
                             return
 
                     payup = ourid
-                    if have["rarity"] != want["rarity"]:
-                        if have["rarity"] >= int(config["numNormalRarities"]) or want["rarity"] >= int(config["numNormalRarities"]):
+                    firstSpecialRarity = int(config["numNormalRarities"])
+                    canTradeDirectly = (want["rarity"] == have["rarity"]) or (want["rarity"] >= firstSpecialRarity and have["rarity"] >= firstSpecialRarity)
+                    if not canTradeDirectly:
+                        if have["rarity"] >= firstSpecialRarity or want["rarity"] >= firstSpecialRarity:
                             self.message(channel, "Sorry, special-rarity cards can only be traded for other special-rarity cards.", isWhisper=isWhisper)
                             return
                         if len(args) != 4:
@@ -3151,11 +3153,11 @@ class NepBot(NepBotClass):
                             return
                             
                         # check the range
-                        de_value = int(config["rarity" + str(waifu['base_rarity']) + "Value"])
+                        de_value = int(config["rarity%dValue" % waifu['base_rarity']])
                         min_amount = de_value + 5
-                        max_amount = [100, 250, 500, 1000, 2000, 6000, 20000][waifu['base_rarity']]
+                        max_amount = int(config["rarity%dMaxBounty" % waifu['base_rarity']])
                         if amount < min_amount or amount > max_amount:
-                            self.message(channel, "%s, bounties for this waifu's base rarity (%s) must fall between %d and %d points." % (tags['display-name'], config["rarity" + str(waifu['base_rarity']) + "Name"], min_amount, max_amount), isWhisper)
+                            self.message(channel, "%s, bounties for this waifu's base rarity (%s) must fall between %d and %d points." % (tags['display-name'], config["rarity%dName" % waifu['base_rarity']], min_amount, max_amount), isWhisper)
                             cur.close()
                             return
                             
