@@ -2522,8 +2522,15 @@ class NepBot(NepBotClass):
                 
                 return
             if command == "promote":
-                attemptPromotions(41)
                 self.message(channel, "Promotion is now automatic when you gather enough copies of a waifu at the same rarity in your hand.", isWhisper)
+                return
+            if command == "recheckpromos" and sender in self.myadmins:
+                with db.cursor() as cur:
+                    cur.execute("SELECT DISTINCT waifuid FROM has_waifu WHERE amount >= 2")
+                    rows = cur.fetchall()
+                    ids = [row[0] for row in rows]
+                    attemptPromotions(*ids)
+                    self.message(channel, "Rechecked promotions for %d waifus" % len(ids))
                 return
             if command == "bet":
                 if len(args) < 1:
