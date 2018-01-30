@@ -731,50 +731,18 @@ def resetWeightings(*cards):
         cur.execute("UPDATE waifus SET normal_weighting = normal_weighting / %s WHERE id IN({0}) AND normal_weighting <= 1".format(inString), [float(config["weighting_increase_amount"])] + cards)
         cur.execute("UPDATE waifus SET normal_weighting = 1 WHERE id IN({0}) AND normal_weighting > 1".format(inString), cards)
 
-def giveCard(userid, id, rarity, amount=1, inPromotion=False):
+def giveCard(userid, id, rarity, amount=1):
     with db.cursor() as cur:
         cur.execute("SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
         currentAmount = cur.fetchone()[0]
-        # recursive promotion continues?
-        promoted = False
-        if inPromotion and rarity < int(config["numNormalRarities"]) - 1 and amount + currentAmount >= int(config["rarity%dPromoteAmount" % rarity]):
-            promoteAmount = int(config["rarity%dPromoteAmount" % rarity])
-            amountToMake = (amount + currentAmount) // promoteAmount
-            
-            # limit check?
-            newRarityLimit = int(config["rarity%dMax" % (rarity + 1)])
-            if newRarityLimit != 0:
-                cur.execute("SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = %s AND rarity >= %s", [id, rarity + 1])
-                currentOwned = cur.fetchone()[0]
-                amountToMake = max(min(amountToMake, newRarityLimit - currentOwned), 0)
-                
-            if amountToMake != 0:
-                promoted = True
-                leftAtCurrentRarity = (amount + currentAmount) - (amountToMake * promoteAmount)
-                
-                # fix quantity of current rarity
-                if leftAtCurrentRarity == 0 and currentAmount != 0:
-                    cur.execute("DELETE FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [userid, id, rarity])
-                elif leftAtCurrentRarity != currentAmount and currentAmount != 0:
-                    cur.execute("UPDATE has_waifu SET amount = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [leftAtCurrentRarity, userid, id, rarity])
-                elif leftAtCurrentRarity != 0 and currentAmount == 0:
-                    cur.execute("INSERT INTO has_waifu(userid, waifuid, rarity, amount) VALUES(%s, %s, %s, %s)", [userid, id, rarity, leftAtCurrentRarity])
-                    
-                # give cards at promoted rarity, calls this function again to allow recursive promotion
-                giveCard(userid, id, rarity + 1, amountToMake, True)
-            
-        if not promoted:
-            # if we make it this far with inPromotion=True, this is the maximum rarity this stack reached
-            # so we should fire off the promoAlert now
-            if inPromotion and rarity >= int(config["promotionAlertMinimumRarity"]):
-                threading.Thread(target=sendPromotionAlert, args=(userid, id, rarity)).start()
-            # insert normally
-            if currentAmount != 0:
-                cur.execute("UPDATE has_waifu SET amount = amount + %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [amount, userid, id, rarity])
-            else:
-                cur.execute("INSERT INTO has_waifu(userid, waifuid, rarity, amount) VALUES(%s, %s, %s, %s)", [userid, id, rarity, amount])
+        
+        if currentAmount != 0:
+            cur.execute("UPDATE has_waifu SET amount = amount + %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [amount, userid, id, rarity])
+        else:
+            cur.execute("INSERT INTO has_waifu(userid, waifuid, rarity, amount) VALUES(%s, %s, %s, %s)", [userid, id, rarity, amount])
                 
 def attemptPromotions(*cards):
+    promosDone = {}
     with db.cursor() as cur:
         for waifuid in cards:
             while True:
@@ -810,12 +778,24 @@ def attemptPromotions(*cards):
                             else:
                                 cur.execute("UPDATE has_waifu SET amount = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [leftAtCurrentRarity, userid, waifuid, rarity])
                                 
-                            # give cards at promoted rarity, giveCard itself will deal with recursive promotion
-                            giveCard(userid, waifuid, rarity + 1, amountToMake, True)
+                            # give card(s) at promoted rarity
+                            giveCard(userid, waifuid, rarity + 1, amountToMake)
+                            
+                            # update promosDone
+                            if userid not in promosDone:
+                                promosDone[userid] = {}
+                            if waifuid not in promosDone[userid] or promosDone[userid][waifuid] < rarity + 1:
+                                promosDone[userid][waifuid] = rarity + 1
                 
                 if len(usersThisCycle) == 0:
                     # nothing changed, we're done
                     break
+    
+    # promo alerts
+    for user in promosDone:
+        for waifu in promosDone[user]:
+            if promosDone[user][waifu] >= int(config["promotionAlertMinimumRarity"]):
+                threading.Thread(target=sendPromotionAlert, args=(user, waifu, promosDone[user][waifu])).start()
     
 def takeCard(userid, id, rarity, amount=1):
     with db.cursor() as cur:
