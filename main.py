@@ -1168,9 +1168,34 @@ class NepBot(NepBotClass):
                 except Exception:
                     logger.error("Error Reconnecting to DB. Skipping Timer Cycle.")
                     return
-                if int(config["last_weighting_update"]) < current_milli_time() - int(config["weighting_increase_cycle"]):
+                with db.cursor() as cur:
+                    # open packs?
+                    cur.execute("SELECT boosters_opened.id, boosters_opened.userid, users.name FROM boosters_opened JOIN users ON boosters_opened.userid = users.id WHERE status = 'open' AND created <= %s", [current_milli_time() - int(config["boosterTimeout"])])
+                    packsToClose = cur.fetchall()
+                    for pack in packsToClose:
+                        userid = pack[1]
+                        cur.execute("SELECT waifuid FROM boosters_cards WHERE boosterid = %s ORDER BY waifuid ASC", [pack[0]])
+                        cardIDs = [row[0] for row in cur.fetchall()]
+                        cards = [getWaifuById(card) for card in cardIDs]
+                        # keep the best cards
+                        cards.sort(key=lambda waifu: -waifu['base_rarity'])
+                        numKeep = int(min(max(handLimit(userid) - currentCards(userid), 0), len(cards)))
+                        keeps = cards[:numKeep]
+                        des = cards[numKeep:]
+                        logger.info("Expired pack for user %s (%d): keeping %s, disenchanting %s", pack[2], userid, str(keeps), str(des))
+                        for waifu in keeps:
+                            giveCard(userid, waifu['id'], waifu['base_rarity'])
+                        gottenpoints = 0
+                        for waifu in des:
+                            baseValue = int(config["rarity" + str(waifu['base_rarity']) + "Value"])
+                            profit = attemptBountyFill(self, waifu['id'])
+                            gottenpoints += baseValue + profit
+                        addPoints(userid, gottenpoints)
+                        attemptPromotions(*cardIDs)
+                        cur.execute("UPDATE boosters_opened SET status='closed', updated = %s WHERE id = %s", [current_milli_time(), pack[0]])
+                    
                     # increase weightings
-                    with db.cursor() as cur:
+                    if int(config["last_weighting_update"]) < current_milli_time() - int(config["weighting_increase_cycle"]):
                         logger.debug("Increasing card weightings...")
                         cur.execute("UPDATE waifus SET normal_weighting = normal_weighting * %s WHERE base_rarity < %s", [float(config["weighting_increase_amount"]), int(config["numNormalRarities"])])
                         config["last_weighting_update"] = str(current_milli_time())
