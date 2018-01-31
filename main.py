@@ -447,12 +447,7 @@ def sendDrawAlert(channel, waifu, user, discord=True):
     with busyLock:
         cur = db.cursor()
         # check for first time drop
-        first_time = False
-        if "id" in waifu:
-            cur.execute("SELECT COUNT(*) FROM drops WHERE waifuid=%s", [waifu["id"]])
-            pull_count = cur.fetchone()[0] or 0
-            if pull_count == 1:
-                first_time = True
+        first_time = "pulls" in waifu and waifu['pulls'] == 0
         message = "*{user}* drew {first_time}[*{rarity}*] {name}!".format(user=str(user),
                                                           rarity=str(config["rarity" + str(waifu["base_rarity"]) + "Name"]),
                                                           name=str(waifu["name"]),
@@ -649,9 +644,9 @@ def getWaifuById(id):
     except Exception:
         return None
     cur = db.cursor()
-    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup FROM waifus WHERE id=%s", [id])
+    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup, pulls, last_pull FROM waifus WHERE id=%s", [id])
     row = cur.fetchone()
-    ret = {"id":row[0], "name":row[1], "image":row[2], "base_rarity":row[3], "series":row[4], "can_lookup": row[5]}
+    ret = {"id":row[0], "name":row[1], "image":row[2], "base_rarity":row[3], "series":row[4], "can_lookup": row[5], "pulls": row[6], "last_pull": row[7]}
     cur.close()
     #print("Fetched Waifu from id: " + str(ret))
     return ret
@@ -725,11 +720,12 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
             else:
                 return result[0]
         
-def resetWeightings(*cards):
+def recordPullMetrics(*cards):
     with db.cursor() as cur:
         inString = ",".join(["%s"] * len(cards))
-        cur.execute("UPDATE waifus SET normal_weighting = normal_weighting / %s WHERE id IN({0}) AND normal_weighting <= 1".format(inString), [float(config["weighting_increase_amount"])] + cards)
-        cur.execute("UPDATE waifus SET normal_weighting = 1 WHERE id IN({0}) AND normal_weighting > 1".format(inString), cards)
+        pullTime = current_milli_time()
+        cur.execute("UPDATE waifus SET normal_weighting = normal_weighting / %s, pulls = pulls + 1, last_pull = %s WHERE id IN({0}) AND normal_weighting <= 1".format(inString), [float(config["weighting_increase_amount"]), pullTime] + list(cards))
+        cur.execute("UPDATE waifus SET normal_weighting = 1, pulls = pulls + 1, last_pull = %s WHERE id IN({0}) AND normal_weighting > 1".format(inString), [pullTime] + list(cards))
 
 def giveCard(userid, id, rarity, amount=1):
     with db.cursor() as cur:
@@ -988,7 +984,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             logDrop(str(userid), str(card), waifu['base_rarity'], "boosters.%s" % packname, channel, isWhisper)  
         
         cards.sort() 
-        resetWeightings(*cards)
+        recordPullMetrics(*cards)
 
         # pity pull data update
         cur.execute("UPDATE users SET pullScalingData = %s WHERE id = %s", [":".join(str(round(n)) for n in scalingData), userid])
@@ -1565,7 +1561,7 @@ class NepBot(NepBotClass):
                 freeAvailable = nextFree < current_milli_time()
                 if freeAvailable and currentCards(tags['user-id']) < limit:
                     row = getWaifuById(dropCard(bannedCards=getUniqueCards(tags['user-id'])))
-                    resetWeightings(row['id'])
+                    recordPullMetrics(row['id'])
                     logDrop(str(tags['user-id']), id, row['base_rarity'], "freewaifu", channel, isWhisper)
                     if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                         threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
@@ -1696,7 +1692,7 @@ class NepBot(NepBotClass):
                         tags['display-name']) + ', you bought a new Waifu for {price} points: [{id}][{rarity}] {name} from {series} - {link}'.format(
                         id=str(row['id']), rarity=config["rarity" + str(row['base_rarity']) + "Name"], name=row['name'], series=row['series'],
                         link=row['image'], price=str(price)), isWhisper=isWhisper)
-                    resetWeightings(row['id'])
+                    recordPullMetrics(row['id'])
                     giveCard(tags['user-id'], row['id'], row['base_rarity'])
                     logDrop(str(tags['user-id']), row['id'], rarity, "buy", channel, isWhisper)
                     if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
@@ -2107,7 +2103,12 @@ class NepBot(NepBotClass):
                                 ownerDescriptions.append(owner)
 
                         waifu["rarity"] = baseRarityName
-                        waifu["owned"] = (" - owned by " + ", ".join(ownerDescriptions)) if len(ownerDescriptions) > 0 else " (not currently owned)"
+                        if len(ownerDescriptions) > 0:
+                            waifu["owned"] = " - owned by " + ", ".join(ownerDescriptions)
+                        elif waifu["pulls"] > 0:
+                            waifu["owned"] = " (not currently owned)"
+                        else:
+                            waifu["owned"] = " (not dropped yet)"
 
                         self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}'.format(**waifu), isWhisper=isWhisper)
 
