@@ -1443,20 +1443,26 @@ class NepBot(NepBotClass):
             
         activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup", "alerts", "redeem", "wars", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway", "bounty"]
 
-        if sender not in blacklist and "bot" not in sender:
+        if sender not in blacklist and "bot" not in sender:      
             activitymap[sender] = 0
             activitymap[channelowner] = 0
             with busyLock:
-                cur = db.cursor()
-                cur.execute("SELECT name FROM users WHERE id = %s", [tags['user-id']])
-                user = cur.fetchone()
-                if user is None:
-                    cur.execute("INSERT INTO users (id, name, points) VALUE (%s, %s, %s)", [tags['user-id'], sender, 0])
-                    logger.info("%s didn't have an account, created it.", tags['display-name'])
-                elif user[0] != sender:
-                    logger.info("%s got a new name, changing it to: %s", user[0], sender)
-                    cur.execute("UPDATE users SET name = %s WHERE id = %s", [sender, tags['user-id']])
-                cur.close()
+                with db.cursor() as cur:
+                    # War?
+                    if int(config["emoteWarStatus"]) == 1:
+                        emoteWarEmotes = config["emoteWarEmotes"].split(',')
+                        for emote in emoteWarEmotes:
+                            if emote in message:
+                                cur.execute("UPDATE emoteWar SET `count` = `count` + 1 WHERE Name = %s", [emote])
+                    
+                    cur.execute("SELECT name FROM users WHERE id = %s", [tags['user-id']])
+                    user = cur.fetchone()
+                    if user is None:
+                        cur.execute("INSERT INTO users (id, name, points) VALUE (%s, %s, %s)", [tags['user-id'], sender, 0])
+                        logger.info("%s didn't have an account, created it.", tags['display-name'])
+                    elif user[0] != sender:
+                        logger.info("%s got a new name, changing it to: %s", user[0], sender)
+                        cur.execute("UPDATE users SET name = %s WHERE id = %s", [sender, tags['user-id']])
 
             if message.startswith("!"):
                 parts = message.split()
@@ -2221,17 +2227,17 @@ class NepBot(NepBotClass):
                     self.message(channel, "Disabled Horaro Auto-update.", isWhisper=isWhisper)
                 return
             if command == "war":
-                cur = db.cursor()
-                cur.execute("SELECT * FROM consoleWar")
-                r = cur.fetchall()
-                # msg = "Console War: "
-                msg = "THE CONSOLE WAR HAS BEEN DECIDED: "
-                for row in r:
-                    msg += "HDN" + str(row[0]) + " " + str(row[1]) + " "
-                msg += "IrisGrin 9001 Comfa 9001 Salutezume 9001"
-                self.message(channel, msg, isWhisper=isWhisper)
-                cur.close()
-                return
+                if int(config["emoteWarStatus"]) == 0:
+                    self.message(channel, "The War is not active right now.", isWhisper)
+                    return
+                with db.cursor() as cur:
+                    cur.execute("SELECT `Name`, `count` FROM emoteWar ORDER BY `count` DESC")
+                    r = cur.fetchall()
+                    msg = "Current War: " if int(config["emoteWarStatus"]) == 1 else "THE WAR HAS BEEN DECIDED: "
+                    for row in r:
+                        msg += str(row[0]) + " " + str(row[1]) + " "
+                    self.message(channel, msg, isWhisper=isWhisper)
+                    return
             if command == "nepjoin" and sender.lower() in self.myadmins:
                 if len(args) != 1:
                     self.message(channel, "Usage: !nepjoin <channelname>", isWhisper=isWhisper)
@@ -2286,6 +2292,7 @@ class NepBot(NepBotClass):
                     return
                     
                 cur = db.cursor()
+                # Are they a DeepDigger?
                 cur.execute("SELECT id, points, waifuid, boostername, type FROM tokens WHERE token=%s AND claimable=1", [args[0]])
                 redeemablerows = cur.fetchall()
                 

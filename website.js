@@ -441,6 +441,12 @@ function bootstrapbooster(req, res, query) {
     });
 }
 
+function teaser(req, res, qeury) {
+    res.writeHead(200, "naroHodo");
+    res.write("<html><head><title>A Secret</title></head><body><small>Your journey isn't yet over.</small><br /><img src='https://share.marenthyu.de/B0kVw3MU.gif' width='100%' height='99%' alt='SGV5LCB5b3UgZm91bmQgbWUhIENvbmdyYXR1bGF0aW9ucyENCklmIHlvdSdyZSB0aGUgZmlyc3QsIHRha2UgdGhpcyBwcmVzZW50LCB5b3Uga25vdyB3aGVyZSB0byByZWRlZW0gaXQ6IFBhcnROdW1lcm9Vbm8NClNvLCBzb21lb25lIHdhcyBoZXJlIGJlZm9yZSB5b3UuIERvIHRha2UgdGhlIHNlY29uZGFyeSBwcmljZSwgYnV0IGRvbid0IHRlbGwgdGhlIG90aGVycyA7KTogUGFydE51bWVyb1Vub1lPVVJFVE9PU0xPVw0KDQpCdXQgc2luY2Ugd2UncmUgdGFsa2luZyB0ZWFzaW5nLCBoZXJlJ3MgdGhlIGdlbmVyYWwgZ2lzdDoNCkxhdGVyIHRvZGF5LCB3ZSB3aWxsIGFubm91bmNlIG91ciBuZXcgcmFyaXR5LCBteXRoaWNhbCwgb2ZmaWNpYWxseSEgVGhlcmUncyBhIGxvdCBtb3JlIGNvbWluZywgYnV0IHN0YXJ0aW5nIHdpdGggdGhlIG9mZmljaWFsIGFubm91bmNlbWVudCwgIXByb21vdGUgd2lsbCBiZSBsb2NrZWQuDQpBcyB3ZSBpbnRyb2R1Y2UgYSBuZXcgd2F5IHRvIHByb21vdGUgYW55IHdhaWZ1IHRvIHRoZSBuZXh0IHJhcml0eSwgeW91J2xsIGJlIGFibGUgdG8gaGF2ZSBhIHdhaWZ1IG5vdCBvbmx5IG9uIHRoZWlyIGJhc2UgcmFyaXR5LCBidXQgYWxzbyBwcm9tb3RlIGl0IHVwIHRoZSByYXJpdHkgbGFkZGVyLg0KDQpJdCdsbCBiZSBmdW4hDQoNCk9oIGFuZCByZW1lbWJlcjogSXQgYWluJ3Qgb3ZlciB1bnRpbCB0aGUgQ3JlZGl0cyByb2xsLg0KDQpZb3UncmUgaGVyZSBhZ2Fpbj8gR29vZCEgVGhhdCdzIGdvb2QhIEJlIHNuZWFreSBhbmQgeW91IHdpbGwgbm90IGxldCB0aGUgb3RoZXJzIGtub3d+DQpDaGVjayB0aG9zZSBtZXNzYWdlcyBpIHNlbnQuDQoNCkFuZCByZW1lbWJlcjogTm90IGV2ZXJ5dGhpbmcgbWF5IGJlIGNsZWFyIGZyb20gdGhlIGJlZ2lubmluZywgYnV0IHdpdGggdGltZSwgeW91IHdpbGwgaGF2ZSBhbGwgdGhlIGNsdWVzLg=='/></body></head></html>");
+    res.end();
+}
+
 http.createServer(function (req, res) {
     let q = url.parse(req.url, true);
     try {
@@ -480,26 +486,6 @@ http.createServer(function (req, res) {
                 res.end();
                 break;
             }
-            case "take.png": {
-                res.writeHead(302, {'Location': 'https://share.marenthyu.de/take.png'});
-                res.end();
-                break;
-            }
-            case "discard.png": {
-                res.writeHead(302, {'Location': 'https://share.marenthyu.de/discard.png'});
-                res.end();
-                break;
-            }
-            case "particle2.png": {
-                res.writeHead(302, {'Location': 'https://share.marenthyu.de/particle2.png'});
-                res.end();
-                break;
-            }
-            case "copy.png": {
-                res.writeHead(302, {'Location': 'https://share.marenthyu.de/copy.png'});
-                res.end();
-                break;
-            }
             case "waifus-bootstrap.css": {
                 res.writeHead(200, {'Content-Type': 'text/css'});
                 res.write(bootstrapwaifucss);
@@ -514,6 +500,10 @@ http.createServer(function (req, res) {
             case "live": {
                 res.writeHead(410, 'Gone');
                 res.end();
+                break;
+            }
+            case "teasing": {
+                teaser(req, res, q.qeury);
                 break;
             }
             default: {
