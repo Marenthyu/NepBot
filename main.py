@@ -1587,7 +1587,7 @@ class NepBot(NepBotClass):
                 if freeAvailable and currentCards(tags['user-id']) < limit:
                     row = getWaifuById(dropCard(bannedCards=getUniqueCards(tags['user-id'])))
                     recordPullMetrics(row['id'])
-                    logDrop(str(tags['user-id']), id, row['base_rarity'], "freewaifu", channel, isWhisper)
+                    logDrop(str(tags['user-id']), row['id'], row['base_rarity'], "freewaifu", channel, isWhisper)
                     if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                         threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
                     self.message(channel, tags['display-name'] + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
