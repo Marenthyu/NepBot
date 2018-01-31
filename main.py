@@ -1837,19 +1837,12 @@ class NepBot(NepBotClass):
                     attemptPromotions(*cards)
                     
                     # compile the message to be sent in chat
-                    shortresponse = longresponse = "You take your booster pack and: "
+                    response = "You take your booster pack and: "
                     
                     if len(keepCards) > 0:
-                        longresponse += " keep " + ', '.join("[{id}] {name}".format(**x) for x in keepCards) + ";"
-                        shortresponse += " keep " + ', '.join(str(x['id']) for x in keepCards) + ";"
+                        response += " keep " + ', '.join(str(x['id']) for x in keepCards) + ";"
                     if len(deCards) > 0:
-                        longresponse += " disenchant " + ', '.join("[{id}] {name}".format(**x) for x in deCards)
-                        shortresponse += " disenchant " + ', '.join(str(x['id']) for x in deCards)
-                    
-                    if len(longresponse) <= 400:
-                        response = longresponse
-                    else:
-                        response = shortresponse
+                        response += " disenchant " + ', '.join(str(x['id']) for x in deCards)
                     
                     if ordersFilled > 0:
                         response += " (%d bounties filled);" % ordersFilled
