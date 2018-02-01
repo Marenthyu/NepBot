@@ -1593,8 +1593,8 @@ class NepBot(NepBotClass):
                     self.message(channel, tags['display-name'] + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
                         id=str(row['id']), rarity=config["rarity" + str(row['base_rarity']) + "Name"], name=row['name'], series=row['series'],
                         link=row['image']), isWhisper=isWhisper)
-                    giveCard(tags['user-id'], row[0], row['base_rarity'])
-                    attemptPromotions(row[0])
+                    giveCard(tags['user-id'], row['id'], row['base_rarity'])
+                    attemptPromotions(row['id'])
                     
                     cur.execute("UPDATE users SET lastFree = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
                 elif freeAvailable:
