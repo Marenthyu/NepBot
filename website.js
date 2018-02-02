@@ -243,7 +243,7 @@ function smartsetsdata(req, res, query) {
         if(setIDs.length > 0) {
             let bindArray = [user].concat(setIDs);
             let inBinds = "?, ".repeat(setIDs.length).substring(0, setIDs.length*3 - 2);
-            con.query("SELECT setID, a.name AS userName, waifus.id AS waifuID, waifus.Name AS waifuName, waifus.base_rarity AS waifuRarity, waifus.image AS waifuImage, waifus.series AS waifuSeries FROM set_cards LEFT JOIN (SELECT * FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.name = ?) AS a ON set_cards.cardID = a.waifuid JOIN waifus ON set_cards.cardID = waifus.id WHERE set_cards.setID IN("+inBinds+") ORDER BY waifuID", bindArray,
+            con.query("SELECT setID, a.name AS userName, waifus.id AS waifuID, waifus.Name AS waifuName, waifus.base_rarity AS waifuRarity, waifus.image AS waifuImage, waifus.series AS waifuSeries FROM set_cards LEFT JOIN (SELECT DISTINCT has_waifu.waifuid, users.name FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.name = ?) AS a ON set_cards.cardID = a.waifuid JOIN waifus ON set_cards.cardID = waifus.id WHERE set_cards.setID IN("+inBinds+") ORDER BY waifuID", bindArray,
             function(err, result2) {
                 if(err) throw err;
                 for(let row of result2) {
