@@ -1494,7 +1494,7 @@ class NepBot(NepBotClass):
                             cur.execute("UPDATE users SET lastActiveTimestamp = %s, lastActiveChannel = %s WHERE id = %s", [current_milli_time(), "$$whisper$$" if isWhisper else source, tags['user-id']])
                 self.do_command(command, parts[1:], target, source, tags, isWhisper=isWhisper)
         elif message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
-            self.message(source, "Bad Bot. No.")
+            self.message(source, "Bad Bot. No. (account banned from playing TCG)", isWhisper)
             return
 
     def message(self, channel, message, isWhisper=False):
