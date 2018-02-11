@@ -62,6 +62,7 @@ debugMode = False
 hdnoauth = None
 streamlabsclient = None
 twitchclientsecret = None
+bannedWords = []
 t = None
 # read config values from file (db login etc)
 try:
@@ -94,6 +95,8 @@ try:
         if name == "debugMode" and value == "True":
             logger.warning("Debug mode enabled, !as command is available")
             debugMode = True
+        if name == "bannedWords":
+            bannedWords = [word.lower() for word in value.split(",")]
     if dbpw is None:
         logger.error("Database password not set. Please add it to the config file, with 'dbpassword=<pw>'")
         sys.exit(1)
@@ -1462,7 +1465,7 @@ class NepBot(NepBotClass):
         if 'display-name' not in tags or not tags['display-name']:
             tags['display-name'] = sender
             
-        activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup", "alerts", "redeem", "wars", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway", "bounty"]
+        activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup", "alerts", "redeem", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway", "bounty", "emotewar", "wars", "war", "vote"]
 
         if sender not in blacklist and "bot" not in sender:      
             activitymap[sender] = 0
@@ -1692,7 +1695,10 @@ class NepBot(NepBotClass):
                 return
             if command == "buy":
                 if len(args) != 1:
-                    self.message(channel, "Usage: !buy <rarity> (So !buy uncommon for an uncommon)", isWhisper=isWhisper)
+                    if len(args) > 0 and args[0].lower() == "booster":
+                        self.message(channel, "%s -> Did you mean !booster buy?" % tags['display-name'], isWhisper)
+                    else:
+                        self.message(channel, "Usage: !buy <rarity> (So !buy uncommon for an uncommon)", isWhisper=isWhisper)
                     return
                 if currentCards(tags['user-id']) >= handLimit(tags['user-id']):
                     self.message(channel, "{sender}, you have too many cards to buy one! !disenchant some or upgrade your hand!".format(sender=str(tags['display-name'])), isWhisper=isWhisper)
@@ -2245,9 +2251,9 @@ class NepBot(NepBotClass):
                 else:
                     self.message(channel, "Disabled Horaro Auto-update.", isWhisper=isWhisper)
                 return
-            if command == "war":
+            if command == "emotewar":
                 if int(config["emoteWarStatus"]) == 0:
-                    self.message(channel, "The War is not active right now.", isWhisper)
+                    self.message(channel, "The Emote War is not active right now.", isWhisper)
                     return
                 with db.cursor() as cur:
                     cur.execute("SELECT `Name`, `count` FROM emoteWar ORDER BY `count` DESC")
@@ -2383,83 +2389,151 @@ class NepBot(NepBotClass):
                 cur.close()
                 return
             if command == "wars":
-                if (len(args) != 0 and len(args) != 4) or (len(args)==4 and args[0] != "vote"):
-                    self.message(channel, "Usage: !wars OR !wars vote <warID> <optionID> <points>", isWhisper=isWhisper)
+                with db.cursor() as cur:
+                    cur.execute("SELECT id, title FROM bidWars WHERE status = 'open'")
+                    allWars = "; ".join("%s (!war %s)" % (war[1], war[0]) for war in cur.fetchall())
+                    
+                    if len(allWars) == 0:
+                        self.message(channel, "%s, there are no bidwars currently open right now." % tags['display-name'], isWhisper)
+                    else:
+                        self.message(channel, "Current Bidwars: %s" % allWars, isWhisper)
+                    
                     return
-                cur = db.cursor()
-                try:
-                    cur.execute("SELECT id, name, neutralAmount FROM bidWars")
-                    wars = cur.fetchall()
-                    warlist = []
-                    for war in wars:
-                        warObject = {"id": war[0], "name": war[1], "options": [], "neutral":war[2]}
-                        cur.execute("SELECT optionID, optionName, optionAmount, isWinner FROM bidWarValues WHERE warID=%s",
-                                    (war[0]))
-                        opts = cur.fetchall()
-                        optArray = []
-                        for opt in opts:
-                            optArray.append({"id": opt[0], "name": opt[1], "amount": opt[2], "winner": opt[3]})
-                        warObject["options"] = optArray
-                        warlist.append(warObject)
-                    if len(args) == 0:
-                        cur.close()
-                        msg = "The following wars are going on: "
-                        for war in warlist:
-                            msg += "[{war[id]}]{war[name]}: [".format(war=war)
-                            for opt in war["options"]:
-                                msg += "[{opt[id]}] {opt[name]}: {opt[amount]}{lead}, ".format(opt=opt, lead=" (In the lead!)" if opt["winner"] == 1 else "")
-                            msg += "]; "
-                        self.message(channel, msg, isWhisper=isWhisper)
+                    
+            if command == "war":
+                if len(args) != 1:
+                    self.message(channel, "Usage: !war <id>", isWhisper)
+                    return
+                    
+                with db.cursor() as cur:
+                    cur.execute("SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s", [args[0]])
+                    war = cur.fetchone()
+                    
+                    if war is None:
+                        self.message(channel, "%s -> Invalid bidwar specified." % tags['display-name'], isWhisper)
                         return
-                    if int(args[3]) < 1:
-                        self.message(channel, "No. I wont exploit it. Shrug off!", isWhisper=isWhisper)
-                        cur.close()
+                        
+                    warid = war[0]
+                    title = war[1]
+                    status = war[2]
+                    openEntry = war[3] != 0
+                    openEntryMinimum = war[4]
+                    openEntryMaxLength = war[5]
+                        
+                    # get choices
+                    cur.execute("SELECT choice, amount FROM bidWarChoices WHERE warID = %s ORDER BY amount DESC, choice ASC", [warid])
+                    choices = cur.fetchall()
+                    
+                    # render
+                    if len(choices) == 0:
+                        if openEntry and status == 'open':
+                            self.message(channel, "The %s bidwar has no choices defined yet! Add your own for %d or more points with !vote %s <choice> <points>" % (title, openEntryMinimum, warid), isWhisper)
+                        else:
+                            # this bidwar was never setup properly, ignore it exists
+                            self.message(channel, "%s -> Invalid bidwar specified." % tags['display-name'], isWhisper)
                         return
-                    selectedWar = None
-                    for war in warlist:
-                        if str(war["id"]) == args[1]:
-                            selectedWar = war
-                            break
-
-                    if selectedWar is None:
-                        self.message(channel, "That war does not exist. Try again using a valid ID (Check !wars)", isWhisper=isWhisper)
-                        cur.close()
+                    
+                    if status == 'closed':
+                        # does the "first place" actually have any votes?
+                        if choices[0][1] == 0:
+                            # no, so this bid war hasn't started yet, don't let on it exists
+                            self.message(channel, "%s -> Invalid bidwar specified." % tags['display-name'], isWhisper)
+                        else:
+                            runnersup = ", ".join("%s (%d points)" % (choice[0], choice[1]) for choice in choices[1:])
+                            self.message(channel, "The %s bidwar is over! The winner was %s with %d points. Runners up: %s" % (title, choices[0][0], choices[0][1], runnersup), isWhisper)
+                    else:
+                        # open war
+                        choicesStr = ", ".join("%s (%d points)" % (choice[0], choice[1]) for choice in choices)
+                        msg = "The %s bidwar is currently open! Current votes: %s. !vote %s <choice> <points> to have your say." % (title, choicesStr, warid)
+                        if openEntry:
+                            msg += " You can add a new choice by contributing at least %d points (%d characters maximum)." % (openEntryMinimum, openEntryMaxLength)
+                        self.message(channel, msg, isWhisper)
+                        
+                    return
+                    
+            if command == "vote":
+                if len(args) < 3:
+                    self.message(channel, "Usage: !vote <warid> <choice> <points>", isWhisper)
+                    return
+                    
+                if channel != config["marathonChannel"] or isWhisper:
+                    self.message(channel, "You can only vote in wars in the HDNMarathon channel right now.", isWhisper)
+                    return
+                
+                with db.cursor() as cur:
+                    cur.execute("SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s", [args[0]])
+                    war = cur.fetchone()
+                    
+                    if war is None:
+                        self.message(channel, "%s -> Invalid bidwar specified." % tags['display-name'], isWhisper)
                         return
-                    selectedOption = None
-                    currentWinner = None
-                    for opt in selectedWar["options"]:
-                        if str(opt["id"]) == args[2]:
-                            selectedOption = opt
-                        if opt["winner"] == 1:
-                            currentWinner = opt
-
-                    if selectedOption is None:
-                        self.message(channel, "That option does not exist. Try again using a valid ID (Check !wars)", isWhisper=isWhisper)
-                        cur.close()
+                        
+                    warid = war[0]
+                    title = war[1]
+                    status = war[2]
+                    openEntry = war[3] != 0
+                    openEntryMinimum = war[4]
+                    openEntryMaxLength = war[5]
+                    
+                    if status == 'closed':
+                        self.message(channel, "%s -> That bidwar is currently closed." % tags['display-name'], isWhisper)
                         return
+                        
+                    # check their points entry
                     try:
-                        if not hasPoints(tags['user-id'], int(args[3])):
-                            self.message(channel, "Sorry, you do not have enough points to invest " + str(args[3]), isWhisper=isWhisper)
-                            return
-                    except Exception:
-                        cur.close()
-                        self.message(channel, "Sorry, but {} is not a valid number!".format(str(args[3])), isWhisper=isWhisper)
+                        points = int(args[-1])
+                    except ValueError:
+                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'], isWhisper)
                         return
-                    addPoints(tags['user-id'], -1 * int(args[3]))
-                    cur.execute("UPDATE bidWarValues SET optionAmount=optionAmount + %s WHERE optionID=%s AND warID=%s", (str(args[3]), str(args[2]), str(args[1])))
-                    if int(selectedOption["amount"]) + int(args[3]) > int(currentWinner["amount"]) + int(selectedWar["neutral"]):
-                        cur.execute("UPDATE bidWarValues SET isWinner='0' WHERE optionID=%s AND warID=%s",
-                                    (str(currentWinner["id"]), str(args[1])))
-                        cur.execute("UPDATE bidWarValues SET isWinner='1' WHERE optionID=%s AND warID=%s",
-                                    ( str(args[2]), str(args[1])))
-
-                    cur.close()
-                    self.message(channel, "Successfully voted to '{war[name]}' Option '{option[name]}' using {amount} points!".format(war=selectedWar, option=selectedOption, amount=str(args[3])), isWhisper=isWhisper)
+                        
+                    if points <= 0:
+                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'], isWhisper)
+                        return
+                        
+                    if not hasPoints(tags['user-id'], points):
+                        self.message(channel, "%s -> You don't have that many points!" % tags['display-name'], isWhisper)
+                        return
+                        
+                    cur.execute("SELECT choice, amount FROM bidWarChoices WHERE warID = %s ORDER BY amount DESC, choice ASC", [warid])
+                    choices = cur.fetchall()
+                    choiceslookup = [choice[0].lower() for choice in choices]
+                    theirchoice = " ".join(args[1:-1]).strip()
+                    theirchoiceL = theirchoice.lower()
+                    
+                    if theirchoiceL not in choiceslookup:
+                        # deal with custom choice entry
+                        if not openEntry:
+                            self.message(channel, "%s -> That isn't a valid choice for the %s bidwar." % (tags['display-name'], title), isWhisper)
+                            return
+                            
+                        for word in bannedWords:
+                            if word in theirchoiceL:
+                                self.message(channel, ".timeout %s 300" % sender, isWhisper)
+                                self.message(channel, "%s -> No vulgar choices allowed (warning)" % tags['display-name'], isWhisper)
+                                return
+                                
+                        if points < openEntryMinimum:
+                            self.message(channel, "%s -> You must contribute at least %d points to add a new choice to this bidwar!" % (tags['display-name'], openEntryMinimum), isWhisper)
+                            return
+                            
+                        if len(theirchoice) > openEntryMaxLength:
+                            self.message(channel, "%s -> The maximum length of a choice in the %s bidwar is %d characters." % (tags['display-name'], title, openEntryMaxLength), isWhisper)
+                            return
+                            
+                        # all clear, add it
+                        addPoints(tags['user-id'], -points)
+                        actionTime = current_milli_time()
+                        qargs = [warid, theirchoice, points, actionTime, tags['user-id'], actionTime, tags['user-id']]
+                        cur.execute("INSERT INTO bidWarChoices (warID, choice, amount, created, creator, lastVote, lastVoter) VALUES(%s, %s, %s, %s, %s, %s, %s)", qargs)
+                    else:
+                        # already existing choice, just vote for it
+                        addPoints(tags['user-id'], -points)
+                        qargs = [points, current_milli_time(), tags['user-id'], warid, theirchoiceL]
+                        cur.execute("UPDATE bidWarChoices SET amount = amount + %s, lastVote = %s, lastVoter = %s WHERE warID = %s AND choice = %s", qargs)
+                    
+                    self.message(channel, "%s -> Successfully added %d points to %s in the %s bidwar." % (tags['display-name'], points, theirchoice, title), isWhisper)
                     return
-                except Exception:
-                    self.message(channel, "Usage: !wars OR !wars vote <warID> <optionID> <points>", isWhisper=isWhisper)
-                    cur.close()
-                    return
+                
             if command == "upgrade":
                 user = tags['user-id']
                 limit = handLimit(user)
