@@ -126,6 +126,7 @@ admins = []
 activitymap = {}
 blacklist = []
 config = {}
+emotewaremotes = []
 revrarity = {}
 visiblepacks = ""
 validalertconfigvalues = []
@@ -138,13 +139,19 @@ time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-
 waifu_regex = None
 
 def loadConfig():
-    global revrarity, blacklist, visiblepacks, admins, validalertconfigvalues, waifu_regex
+    global revrarity, blacklist, visiblepacks, admins, validalertconfigvalues, waifu_regex, emotewaremotes
     with db.cursor() as curg:
         curg.execute("SELECT * FROM config")
         logger.info("Importing config from database")
         for row in curg.fetchall():
             config[row[0]] = row[1]
         logger.debug("Config: %s", str(config))
+        if int(config["emoteWarStatus"]) == 1:
+            # emote war active, get its emotes
+            curg.execute("SELECT name FROM emoteWar")
+            emotewaremotes = [row[0] for row in curg.fetchall()]
+        else:
+            emotewaremotes = []
         alertRarityRange = range(int(config["drawAlertMinimumRarity"]), int(config["numNormalRarities"]))
         validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound"] + ["rarity%dLength" % rarity for rarity in alertRarityRange] + ["rarity%dSound" % rarity for rarity in alertRarityRange]
         waifu_regex = re.compile('(\[(?P<id>[0-9]+?)])?(?P<name>.+?) *- *(?P<series>.+) *- *(?P<rarity>[0-'+str(int(config["numNormalRarities"])-1)+']) *- *(?P<link>.+?)$')
@@ -1474,10 +1481,9 @@ class NepBot(NepBotClass):
                 with db.cursor() as cur:
                     # War?
                     if int(config["emoteWarStatus"]) == 1:
-                        emoteWarEmotes = config["emoteWarEmotes"].split(',')
-                        for emote in emoteWarEmotes:
+                        for emote in emotewaremotes:
                             if emote in message:
-                                cur.execute("UPDATE emoteWar SET `count` = `count` + 1 WHERE Name = %s", [emote])
+                                cur.execute("UPDATE emoteWar SET `count` = `count` + 1 WHERE name = %s", [emote])
                     
                     cur.execute("SELECT name FROM users WHERE id = %s", [tags['user-id']])
                     user = cur.fetchone()
@@ -2257,7 +2263,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "The Emote War is not active right now.", isWhisper)
                     return
                 with db.cursor() as cur:
-                    cur.execute("SELECT `Name`, `count` FROM emoteWar ORDER BY `count` DESC")
+                    cur.execute("SELECT `name`, `count` FROM emoteWar ORDER BY `count` DESC")
                     r = cur.fetchall()
                     msg = "Current War: " if int(config["emoteWarStatus"]) == 1 else "THE WAR HAS BEEN DECIDED: "
                     for row in r:
