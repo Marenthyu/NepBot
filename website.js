@@ -502,6 +502,32 @@ function api(req, res, query) {
                 res.end();
             });
         }
+        else if (query.type === 'tracker') {
+            // All-in-one endpoint for the tracker
+            con.query("SELECT * FROM bidWars JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID WHERE bidWars.status = 'open' ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
+                if (err) throw err;
+                let wars = [];
+                let lastwarid = '';
+                let lastwar = null;
+                for(let row of result) {
+                    if(row.id !== lastwarid) {
+                        lastwarid = row.id;
+                        lastwar = {"id": row.id, "title": row.title, "status": row.status, "openEntry": row.openEntry != 0, "openEntryMinimum": row.openEntryMinimum, "openEntryMaxLength": row.openEntryMaxLength, "choices": []}
+                        wars.push(lastwar);
+                    }
+                    lastwar.choices.push({"choice": row.choice, "amount": row.amount, "created": row.created, "creator": row.creator, "lastVote": row.lastVote, "lastVoter": row.lastVoter})
+                }
+                con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function(err, result2) {
+                    if (err) throw err;
+                    con.query("SELECT * FROM emoteWar ORDER BY count DESC", function(err, result3) {
+                        if (err) throw err;
+                        res.writeHead(200, {'Content-Type': 'text/json'});
+                        res.write(JSON.stringify({"wars": wars, "incentives": result2, "emotewar": result3}));
+                        res.end();
+                    });
+                });
+            });
+        }
         else {
             res.writeHead(400, "Bad Request");
             res.end();
