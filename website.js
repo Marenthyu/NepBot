@@ -441,10 +441,73 @@ function bootstrapbooster(req, res, query) {
     });
 }
 
-function teaser(req, res, qeury) {
+function teaser(req, res, query) {
     res.writeHead(200, "naroHodo");
     res.write("<html><head><title>A Secret</title></head><body><small>Your journey isn't yet over.</small><br /><img src='https://share.marenthyu.de/B0kVw3MU.gif' width='100%' height='99%' alt='SGV5LCB5b3UgZm91bmQgbWUhIENvbmdyYXR1bGF0aW9ucyENCklmIHlvdSdyZSB0aGUgZmlyc3QsIHRha2UgdGhpcyBwcmVzZW50LCB5b3Uga25vdyB3aGVyZSB0byByZWRlZW0gaXQ6IFBhcnROdW1lcm9Vbm8NClNvLCBzb21lb25lIHdhcyBoZXJlIGJlZm9yZSB5b3UuIERvIHRha2UgdGhlIHNlY29uZGFyeSBwcmljZSwgYnV0IGRvbid0IHRlbGwgdGhlIG90aGVycyA7KTogUGFydE51bWVyb1Vub1lPVVJFVE9PU0xPVw0KDQpCdXQgc2luY2Ugd2UncmUgdGFsa2luZyB0ZWFzaW5nLCBoZXJlJ3MgdGhlIGdlbmVyYWwgZ2lzdDoNCkxhdGVyIHRvZGF5LCB3ZSB3aWxsIGFubm91bmNlIG91ciBuZXcgcmFyaXR5LCBteXRoaWNhbCwgb2ZmaWNpYWxseSEgVGhlcmUncyBhIGxvdCBtb3JlIGNvbWluZywgYnV0IHN0YXJ0aW5nIHdpdGggdGhlIG9mZmljaWFsIGFubm91bmNlbWVudCwgIXByb21vdGUgd2lsbCBiZSBsb2NrZWQuDQpBcyB3ZSBpbnRyb2R1Y2UgYSBuZXcgd2F5IHRvIHByb21vdGUgYW55IHdhaWZ1IHRvIHRoZSBuZXh0IHJhcml0eSwgeW91J2xsIGJlIGFibGUgdG8gaGF2ZSBhIHdhaWZ1IG5vdCBvbmx5IG9uIHRoZWlyIGJhc2UgcmFyaXR5LCBidXQgYWxzbyBwcm9tb3RlIGl0IHVwIHRoZSByYXJpdHkgbGFkZGVyLg0KDQpJdCdsbCBiZSBmdW4hDQoNCk9oIGFuZCByZW1lbWJlcjogSXQgYWluJ3Qgb3ZlciB1bnRpbCB0aGUgQ3JlZGl0cyByb2xsLg0KDQpZb3UncmUgaGVyZSBhZ2Fpbj8gR29vZCEgVGhhdCdzIGdvb2QhIEJlIHNuZWFreSBhbmQgeW91IHdpbGwgbm90IGxldCB0aGUgb3RoZXJzIGtub3d+DQpDaGVjayB0aG9zZSBtZXNzYWdlcyBpIHNlbnQuDQoNCkFuZCByZW1lbWJlcjogTm90IGV2ZXJ5dGhpbmcgbWF5IGJlIGNsZWFyIGZyb20gdGhlIGJlZ2lubmluZywgYnV0IHdpdGggdGltZSwgeW91IHdpbGwgaGF2ZSBhbGwgdGhlIGNsdWVzLg=='/></body></head></html>");
     res.end();
+}
+
+function api(req, res, query) {
+    // Authentication
+    let key = req.headers["x-waifus-api-key"];
+    if(!key) {
+        res.writeHead(401, "Unauthorized");
+        res.end();
+        return
+    }
+    con.query("SELECT * FROM api_keys WHERE `value` = ?", key, function(err, result) {
+        if (err) throw err;
+        if(result.length === 0) {
+            res.writeHead(401, "Unauthorized");
+            res.end();
+            return
+        }
+        if (!('type' in query)) {
+            res.writeHead(400, "Missing Parameter");
+            res.end();
+            return;
+        }
+        if(query.type === 'wars') {
+            con.query("SELECT * FROM bidWars JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID WHERE bidWars.status = 'open' ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
+                if (err) throw err;
+                let wars = [];
+                let lastwarid = '';
+                let lastwar = null;
+                for(let row of result) {
+                    if(row.id !== lastwarid) {
+                        lastwarid = row.id;
+                        lastwar = {"id": row.id, "title": row.title, "status": row.status, "openEntry": row.openEntry != 0, "openEntryMinimum": row.openEntryMinimum, "openEntryMaxLength": row.openEntryMaxLength, "choices": []}
+                        wars.push(lastwar);
+                    }
+                    lastwar.choices.push({"choice": row.choice, "amount": row.amount, "created": row.created, "creator": row.creator, "lastVote": row.lastVote, "lastVoter": row.lastVoter})
+                }
+                res.writeHead(200, {'Content-Type': 'text/json'});
+                res.write(JSON.stringify(wars));
+                res.end();
+            });
+        }
+        else if(query.type === 'incentives') {
+            con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function(err, result) {
+                if (err) throw err;
+                res.writeHead(200, {'Content-Type': 'text/json'});
+                res.write(JSON.stringify(result));
+                res.end();
+            });
+        }
+        else if(query.type === 'emotewar') {
+            con.query("SELECT * FROM emoteWar ORDER BY count DESC", function(err, result) {
+                if (err) throw err;
+                res.writeHead(200, {'Content-Type': 'text/json'});
+                res.write(JSON.stringify(result));
+                res.end();
+            });
+        }
+        else {
+            res.writeHead(400, "Bad Request");
+            res.end();
+            return;
+        }
+    });
 }
 
 http.createServer(function (req, res) {
@@ -503,7 +566,11 @@ http.createServer(function (req, res) {
                 break;
             }
             case "teasing": {
-                teaser(req, res, q.qeury);
+                teaser(req, res, q.query);
+                break;
+            }
+            case "api": {
+                api(req, res, q.query);
                 break;
             }
             default: {
