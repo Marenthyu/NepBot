@@ -2228,12 +2228,20 @@ class NepBot(NepBotClass):
                     "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
                     isWhisper=isWhisper)
                 return
-            if command == "togglehoraro" and sender.lower() in self.myadmins:
+            if command == "togglehoraro" and sender in self.myadmins:
                 self.autoupdate = not self.autoupdate
                 if self.autoupdate:
                     self.message(channel, "Enabled Horaro Auto-update.", isWhisper=isWhisper)
                 else:
                     self.message(channel, "Disabled Horaro Auto-update.", isWhisper=isWhisper)
+                return
+            if sender in self.myadmins and command in ["status", "title"] and isMarathonChannel:
+                updateTitle(" ".join(args))
+                self.message(channel, "%s -> Title updated to %s." % (tags['display-name'], " ".join(args)))
+                return
+            if sender in self.myadmins and command == "game" and isMarathonChannel:
+                updateGame(" ".join(args))
+                self.message(channel, "%s -> Game updated to %s." % (tags['display-name'], " ".join(args)))
                 return
             if command == "emotewar":
                 if int(config["emoteWarStatus"]) == 0:
@@ -3415,40 +3423,6 @@ class NepBot(NepBotClass):
                 # done
                 self.message(channel, "Successfully changed [%d] %s's base rarity to %s." % (waifu['id'], waifu['name'], config['rarity%dName' % rarity]), isWhisper)
                 return
-                    
-
-class HDNBot(pydle.Client):
-    instance = None
-    pw=None
-
-    def __init__(self):
-        super().__init__("hdnmarathon")
-        HDNBot.instance = self
-
-    def start(self, password):
-        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
-        self.pw = password
-        logger.info("Connecting hdn...")
-
-    def on_disconnect(self, expected):
-        logger.warning("HDN Disconnected, reconnecting....")
-        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=self.pw, reconnect=True)
-
-    def on_connect(self):
-        super().on_connect()
-        logger.info("HDN Joining")
-        #self.join("#marenthyu")
-        #self.join("#frankerfacezauthorizer")
-        #self.message("#hdnmarathon", "This is a test message")
-
-
-    def on_message(self, source, target, message):
-        logger.debug("message on #hdnmarathon: %s, %s, %s", str(source), str(target), message)
-
-
-
-
-
 
 curg = db.cursor()
 logger.info("Fetching channel list...")
@@ -3477,9 +3451,5 @@ b = NepBot(config, channels, admins)
 b.start(config["oauth"])
 
 logger.debug("past start")
-
-if hdnoauth:
-    hdnb = HDNBot()
-    hdnb.start(hdnoauth)
 
 pool.handle_forever()
