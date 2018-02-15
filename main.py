@@ -36,19 +36,8 @@ logger.addHandler(ch)
 logging.getLogger('tornado.application').addHandler(fh)
 logging.getLogger('tornado.application').addHandler(ch)
 
-games = ['Hyperdimension Neptunia Re;Birth1', 'Hyperdimension Neptunia Re;Birth2: Sisters Generation',
-         'Four Goddesses Online: Cyber Dimension Neptune', 'Hyperdimension Neptunia mk2',
-         'Hyperdimension Neptunia Victory', 'Megadimension Neptunia VII', 'Superdimension Neptune vs Sega Hard Girls',
-         'Hyperdimension Neptunia Re;Birth 3: V Century', 'Hyperdimension Neptunia: Producing Perfection',
-         'Hyperdimension Neptunia U: Action Unleashed', 'MegaTagmension Blanc + Neptune VS Zombies',
-         'Hyperdimension Neptunia']
-gamesdict = {"Opening SetUp":games[11], "Hyperdimension Neptunia Rebirth 1":games[0],
-             "Hyperdimension Neptunia Rebirth 2: Sister's Generation":games[1], "Four Goddess: Cyber Neptune":games[2],
-             "Hyperdimension Neptunia MK2":games[3], "Hyperdimension Neptunia Victory":games[4],
-             "Megadimension Neptunia Victory II":games[5], "Superdimension Neptune Vs Sega Hard Girls":games[6],
-             "Hyperdimension Neptunia Rebirth 2":games[1], "Hyperdimension Neptunia Rebirth 3":games[7],
-             "Hyperdimension Neptunia: Producing Perfection":games[8], "Hyperdimension Neptunia : Action Unleashed":games[9],
-             "MegaTagmension Blanc + Neptune VS Zombies":games[10]}
+gamesdict = {'Dark Rose Valkyrie': 'Black Rose Valkyrie', 'Megadimension Neptunia VIIR': 'Megadimension Neptunia VII'}
+
 ffzws = 'wss://andknuckles.frankerfacez.com'
 pool = pydle.ClientPool()
 current_milli_time = lambda: int(round(time.time() * 1000))
@@ -370,6 +359,7 @@ def updateBoth(game, title):
     myheaders = headers.copy()
     myheaders["Authorization"] = "OAuth " + str(hdnoauth).replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
+    myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
     body = {"channel": {"status": str(title), "game": str(game)}}
     # print("headers: " + str(myheaders))
     # print("body: " + str(body))
@@ -385,6 +375,7 @@ def updateTitle(title):
     myheaders = headers.copy()
     myheaders["Authorization"] = "OAuth " + str(hdnoauth).replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
+    myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
     body = {"channel":{"status":str(title)}}
     #print("headers: " + str(myheaders))
     #print("body: " + str(body))
@@ -400,6 +391,7 @@ def updateGame(game):
     myheaders = headers.copy()
     myheaders["Authorization"] = "OAuth " + str(hdnoauth).replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
+    myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
     body = {"channel":{"game":str(game)}}
     #print("headers: " + str(myheaders))
     #print("body: " + str(body))
@@ -410,9 +402,6 @@ def updateGame(game):
     except Exception:
         logger.error(str(r.status_code))
         logger.error(r.text)
-
-def setFollows(user):
-    MyClientProtocol.instance.setFollowButtons(user)
     
 def sendStreamlabsAlert(channel, data):
     # assumes busyLock is already reserved
@@ -1382,22 +1371,14 @@ class NepBot(NepBotClass):
                     current = current["data"]
                     game = current[0]
                     category = current[1]
-                    runners = []
-                    for runner in current[2:]:
-                        if runner != None:
-                            parts = str(runner).split("](")
-                            p = parts[0].replace("[", "")
-                            runners.append(p)
-                    title = "{comingup}HDN MARATHON - {game}{category}{runners} - !schedule".format(game=str(game),
-                                                                                                    category=(
-                                                                                                    " (" + str(
-                                                                                                        category) + ")") if category != None else "",
-                                                                                                    comingup="COMING UP: " if wasNone else "",
-                                                                                                    runners=(
-                                                                                                    " by " + ", ".join(
-                                                                                                        runners)) if runners != [] else "")
-                    updateBoth(str(gamesdict[str(game)]) if game in gamesdict.keys() else "Hyperdimension Neptunia", title=title)
-                    setFollows(runners)
+                    runners = [runner for runner in current[3:] if runner is not None]
+                    args = {"game": game}
+                    args["category"] = " (%s)" % category if category is not None else ""
+                    args["comingup"] = "COMING UP: " if wasNone else ""
+                    args["runners"] = (" by " + ", ".join(runners)) if len(runners) > 0 else ""
+                    title = "{comingup}HDNMarathon mk2 - {game}{category}{runners} - !schedule".format(**args)
+                    
+                    updateBoth(gamesdict[game] if game in gamesdict else game, title=title)
                 except Exception:
                     logger.warning("Error updating from Horaro. Skipping this cycle.")
                     logger.warning("Error: ", str(sys.exc_info()))
@@ -2247,10 +2228,6 @@ class NepBot(NepBotClass):
                     "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
                     isWhisper=isWhisper)
                 return
-            if command == "followtest" and sender.lower() in self.myadmins:
-                self.message(channel, "Attempting to set follow buttons to hdnmarathon and nepnepbot", isWhisper=isWhisper)
-                setFollows(["hdnmarathon", "nepnepbot"])
-                return
             if command == "togglehoraro" and sender.lower() in self.myadmins:
                 self.autoupdate = not self.autoupdate
                 if self.autoupdate:
@@ -3097,14 +3074,11 @@ class NepBot(NepBotClass):
                     self.message(channel, "Usage: !sets OR !sets rarity OR !sets claim", isWhisper=isWhisper)
                     return
             if command == "debug" and sender in self.myadmins:
-                v = []
-                for chan in self.channels:
-                    channelName = str(chan).replace("#", "")
-                    for viewer in self.channels[chan]['users']:
-                        v.append(viewer)
-                logger.debug(v)
-
-                self.message(channel, "Printed debug message", isWhisper=isWhisper)
+                if debugMode:
+                    updateBoth("Hyperdimension Neptunia", "Testing title updates.")
+                    self.message(channel, "Title and game updated for testing purposes")
+                else:
+                    self.message(channel, "Debug mode is off. Debug command disabled.")
                 return
             if command == "nepcord":
                 self.message(channel, "To join the discussion in the official Waifu TCG Discord Channel, go to %s/discord" % config["siteHost"], isWhisper=isWhisper)
