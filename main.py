@@ -753,7 +753,7 @@ def attemptPromotions(*cards):
         for waifuid in cards:
             while True:
                 usersThisCycle = []
-                cur.execute("SELECT userid, rarity, amount FROM has_waifu WHERE waifuid = %s AND amount > 1 ORDER BY rarity ASC, RAND() ASC", [waifuid])
+                cur.execute("SELECT userid, rarity, amount FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.waifuid = %s AND has_waifu.amount > 1 AND waifus.can_promote = 1 ORDER BY has_waifu.rarity ASC, RAND() ASC", [waifuid])
                 candidates = cur.fetchall()
                 for row in candidates:
                     if row[0] in usersThisCycle:
@@ -1803,27 +1803,22 @@ class NepBot(NepBotClass):
                         cur.close()
                         return
                     
-                    keeping = 0
                     for arg in selectArgs:
                         if not (arg.lower() == "keep" or arg.lower() == "disenchant"):
                             self.message(channel, "Sorry, but " + arg.lower() + " is not a valid option. Use keep or disenchant", isWhisper=isWhisper)
                             cur.close()
                             return
-                        if arg.lower() == "keep":
-                            keeping += 1
-                    
-                    if keeping + currentCards(tags['user-id']) > handLimit(tags['user-id']) and keeping != 0:
-                        self.message(channel, "You can't keep that many waifus! !disenchant some!", isWhisper=isWhisper)
-                        cur.close()
-                        return
                         
                     # check card info for rarities etc
                     keepCards = []
                     deCards = []
+                    keepingCount = 0
                     for i in range(len(cards)):
                         waifu = getWaifuById(cards[i])
                         if selectArgs[i].lower() == "keep":
                             keepCards.append(waifu)
+                            if waifu['base_rarity'] < int(config["numNormalRarities"]):
+                                keepingCount += 1
                         else:
                             # disenchant
                             if waifu['base_rarity'] >= int(config["disenchantRequireConfirmationRarity"]) and not hasConfirmed:
@@ -1831,6 +1826,11 @@ class NepBot(NepBotClass):
                                 self.message(channel, "%s, you are trying to disenchant one or more waifus of %s rarity or higher! If you are sure you want to do this, append \" yes\" to the end of your command." % (tags['display-name'], confirmRarityName), isWhisper)
                                 return
                             deCards.append(waifu)
+                            
+                    if keepingCount + currentCards(tags['user-id']) > handLimit(tags['user-id']) and keepingCount != 0:
+                        self.message(channel, "You can't keep that many waifus! !disenchant some!", isWhisper=isWhisper)
+                        cur.close()
+                        return
                             
                     # if we made it through the whole pack without tripping confirmation, we can actually do it now
                     for waifu in keepCards:
