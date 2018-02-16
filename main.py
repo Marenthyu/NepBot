@@ -14,6 +14,7 @@ import threading
 import math
 import functools
 from string import ascii_letters
+from collections import defaultdict
 
 import sys
 import re
@@ -36,7 +37,7 @@ logger.addHandler(ch)
 logging.getLogger('tornado.application').addHandler(fh)
 logging.getLogger('tornado.application').addHandler(ch)
 
-gamesdict = {'Dark Rose Valkyrie': 'Black Rose Valkyrie', 'Megadimension Neptunia VIIR': 'Megadimension Neptunia VII'}
+gamesdict = {'Dark Rose Valkyrie': 'Black Rose Valkyrie', 'Megadimension Neptunia VIIR': 'Megadimension Neptunia VII', 'Intro': 'Hyperdimension Neptunia'}
 
 ffzws = 'wss://andknuckles.frankerfacez.com'
 pool = pydle.ClientPool()
@@ -1062,6 +1063,7 @@ class NepBot(NepBotClass):
     nomodalerted = []
     addchannels = []
     leavechannels = []
+    emotecooldowns = {}
 
     def __init__(self, config, channels):
         super().__init__(config["username"])
@@ -1474,9 +1476,12 @@ class NepBot(NepBotClass):
                 with db.cursor() as cur:
                     # War?
                     if int(config["emoteWarStatus"]) == 1:
+                        if sender not in self.emotecooldowns:
+                            self.emotecooldowns[sender] = defaultdict(int)
                         for emote in emotewaremotes:
-                            if emote in message:
+                            if emote in message and self.emotecooldowns[sender][emote] <= current_milli_time() - 60000:
                                 cur.execute("UPDATE emoteWar SET `count` = `count` + 1 WHERE name = %s", [emote])
+                                self.emotecooldowns[sender][emote] = current_milli_time()
                     
                     cur.execute("SELECT name FROM users WHERE id = %s", [tags['user-id']])
                     user = cur.fetchone()
@@ -2269,6 +2274,7 @@ class NepBot(NepBotClass):
                     msg = "Current War: " if int(config["emoteWarStatus"]) == 1 else "THE WAR HAS BEEN DECIDED: "
                     for row in r:
                         msg += str(row[0]) + " " + str(row[1]) + " "
+                    msg += ". Spamming DOES NOT COUNT, spammers will get timed out."
                     self.message(channel, msg, isWhisper=isWhisper)
                     return
             if command == "nepjoin" and sender.lower() in superadmins:
