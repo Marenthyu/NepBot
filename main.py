@@ -2529,7 +2529,13 @@ class NepBot(NepBotClass):
             if command == "incentives" and (isMarathonChannel or isWhisper):
                 with db.cursor() as cur:
                     cur.execute("SELECT id, title, amount, required FROM incentives WHERE status = 'open'")
-                    allIncs = "; ".join("%s (%s) - %d/%d points" % (ic[1], ic[0], ic[2], ic[3]) for ic in cur.fetchall())
+                    incentives = []
+                    for ic in cur.fetchall():
+                        if ic[2] >= ic[3]:
+                            incentives.append("%s (%s) - MET!" % (ic[1], ic[0]))
+                        else:
+                            incentives.append("%s (%s) - %d/%d points" % (ic[1], ic[0], ic[2], ic[3]))
+                    allIncs = "; ".join(incentives)
                     
                     if len(allIncs) == 0:
                         self.message(channel, "%s, there are no incentives currently open right now." % tags['display-name'], isWhisper)

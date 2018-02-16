@@ -504,7 +504,7 @@ function api(req, res, query) {
         }
         else if (query.type === 'tracker') {
             // All-in-one endpoint for the tracker
-            con.query("SELECT * FROM bidWars JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID WHERE bidWars.status = 'open' ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
+            con.query("SELECT * FROM bidWars LEFT JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID WHERE bidWars.status = 'open' ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
                 if (err) throw err;
                 let wars = [];
                 let lastwarid = '';
@@ -515,7 +515,9 @@ function api(req, res, query) {
                         lastwar = {"id": row.id, "title": row.title, "status": row.status, "openEntry": row.openEntry != 0, "openEntryMinimum": row.openEntryMinimum, "openEntryMaxLength": row.openEntryMaxLength, "choices": []}
                         wars.push(lastwar);
                     }
-                    lastwar.choices.push({"choice": row.choice, "amount": row.amount, "created": row.created, "creator": row.creator, "lastVote": row.lastVote, "lastVoter": row.lastVoter})
+                    if(row.choice !== null) {
+                        lastwar.choices.push({"choice": row.choice, "amount": row.amount, "created": row.created, "creator": row.creator, "lastVote": row.lastVote, "lastVoter": row.lastVoter})
+                    }
                 }
                 con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function(err, result2) {
                     if (err) throw err;
