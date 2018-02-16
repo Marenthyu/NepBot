@@ -2679,7 +2679,7 @@ class NepBot(NepBotClass):
                 if len(args) < 1:
                     self.message(channel, "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results", isWhisper)
                     return
-                canManageBets = str(tags["badges"]).find("broadcaster") > -1 or sender in superadmins
+                canManageBets = str(tags["badges"]).find("broadcaster") > -1 or sender in superadmins or (sender in admins and isMarathonChannel)
                 match = time_regex.fullmatch(args[0])
                 if match:
                     bet = match.groupdict()
@@ -2813,7 +2813,7 @@ class NepBot(NepBotClass):
                                 self.message(channel, message, isWhisper)
                         cur.close()
                         return
-                    elif sender in superadmins and subcmd == "payout":
+                    elif subcmd == "payout" and (sender in superadmins or (sender in admins and isMarathonChannel)):
                         # pay out most recent bet in this channel
                         cur = db.cursor()
                         cur.execute("SELECT COALESCE(MAX(paidAt), 0) FROM bets WHERE channel = %s LIMIT 1", [channel])
