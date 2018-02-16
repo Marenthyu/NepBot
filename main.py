@@ -1379,12 +1379,21 @@ class NepBot(NepBotClass):
                     args["category"] = " (%s)" % category if category is not None else ""
                     args["comingup"] = "COMING UP: " if wasNone else ""
                     args["runners"] = (" by " + ", ".join(runners)) if len(runners) > 0 else ""
-                    title = "{comingup}HDNMarathon mk2 - {game}{category}{runners} - !schedule".format(**args)
+                    title = "{comingup}HDNMarathon mk2 - {game}{category}{runners} - !mk2 in chat".format(**args)
                     
                     updateBoth(gamesdict[game] if game in gamesdict else game, title=title)
                 except Exception:
                     logger.warning("Error updating from Horaro. Skipping this cycle.")
                     logger.warning("Error: ", str(sys.exc_info()))
+                    
+            if config["marathonHelpAutopost"] == 'on':
+                nextPost = int(config["marathonHelpAutopostLast"]) + int(config["marathonHelpAutopostPeriod"])*1000
+                if nextPost <= current_milli_time():
+                    self.message(config["marathonChannel"], config["marathonHelpCommandText"], False)
+                    config["marathonHelpAutopostLast"] = str(current_milli_time())
+                    with busyLock:
+                        with db.cursor() as cur:
+                            cur.execute("UPDATE config SET value = %s WHERE name = 'marathonHelpAutopostLast'", [config["marathonHelpAutopostLast"]])
 
         if t is None:
             timer()
@@ -1518,10 +1527,14 @@ class NepBot(NepBotClass):
             self.do_command(args[1][1:].lower(), args[2:], args[0].lower(), channel, {'display-name': args[0], 'user-id': userid}, isWhisper)
             return
         with busyLock:
+            if command == config["marathonHelpCommand"] and isMarathonChannel:
+                self.message(channel, config["marathonHelpCommandText"], isWhisper)
+                return
             if command == "quit" and sender in superadmins:
                 logger.info("Quitting from admin command.")
                 pool.disconnect(client=self, expected=True)
                 # sys.exit(0)
+                return
             if command == "checkhand":
                 #print("Checking hand for " + sender)
                 cards = getHand(tags['user-id'])
@@ -2386,12 +2399,24 @@ class NepBot(NepBotClass):
             if command == "wars":
                 with db.cursor() as cur:
                     cur.execute("SELECT id, title FROM bidWars WHERE status = 'open'")
-                    allWars = "; ".join("%s (!war %s)" % (war[1], war[0]) for war in cur.fetchall())
                     
-                    if len(allWars) == 0:
+                    wars = []
+                    warnum = 0
+                    for war in cur.fetchall():
+                        warnum += 1
+                        wars.append("%s%s (!war %s)" % ("; " if warnum > 1 else "", war[1], war[0]))
+                    
+                    if len(wars) == 0:
                         self.message(channel, "%s, there are no bidwars currently open right now." % tags['display-name'], isWhisper)
                     else:
-                        self.message(channel, "Current Bidwars: %s" % allWars, isWhisper)
+                        messages = ["Current Bidwars: "]
+                        for war in wars:
+                            if len(messages[-1]) + len(war) > 400:
+                                messages.append(war)
+                            else:
+                                messages[-1] += war
+                        for message in messages:
+                            self.message(channel, message, isWhisper)
                     
                     return
                     
@@ -2533,17 +2558,26 @@ class NepBot(NepBotClass):
                 with db.cursor() as cur:
                     cur.execute("SELECT id, title, amount, required FROM incentives WHERE status = 'open'")
                     incentives = []
+                    incnum = 0
                     for ic in cur.fetchall():
+                        incnum += 1
                         if ic[2] >= ic[3]:
-                            incentives.append("%s (%s) - MET!" % (ic[1], ic[0]))
+                            incentives.append("%s%s (%s) - MET!" % ("; " if incnum > 1 else "", ic[1], ic[0]))
                         else:
-                            incentives.append("%s (%s) - %d/%d points" % (ic[1], ic[0], ic[2], ic[3]))
-                    allIncs = "; ".join(incentives)
+                            incentives.append("%s%s (%s) - %d/%d points" % ("; " if incnum > 1 else "", ic[1], ic[0], ic[2], ic[3]))
                     
-                    if len(allIncs) == 0:
+                    if len(incentives) == 0:
                         self.message(channel, "%s, there are no incentives currently open right now." % tags['display-name'], isWhisper)
                     else:
-                        self.message(channel, "Current Open Incentives: %s. !donate <id> <points> to contribute to an incentive (id is the text in brackets)" % allIncs, isWhisper)
+                        incentives.append(". !donate <id> <points> to contribute to an incentive (id is the text in brackets)")
+                        messages = ["Current Open Incentives: "]
+                        for inc in incentives:
+                            if len(messages[-1]) + len(inc) > 400:
+                                messages.append(inc)
+                            else:
+                                messages[-1] += inc
+                        for message in messages:
+                            self.message(channel, message, isWhisper)
                     
                     return
                     
