@@ -112,6 +112,7 @@ except Exception:
 
 db = pymysql.connect(host=dbhost, user=dbuser, passwd=dbpw, db=dbname, autocommit="True", charset="utf8mb4")
 admins = []
+superadmins = []
 activitymap = {}
 blacklist = []
 config = {}
@@ -128,7 +129,7 @@ time_regex = re.compile('(?P<hours>[0-9]*):(?P<minutes>[0-9]{2}):(?P<seconds>[0-
 waifu_regex = None
 
 def loadConfig():
-    global revrarity, blacklist, visiblepacks, admins, validalertconfigvalues, waifu_regex, emotewaremotes
+    global revrarity, blacklist, visiblepacks, admins, superadmins, validalertconfigvalues, waifu_regex, emotewaremotes
     with db.cursor() as curg:
         curg.execute("SELECT * FROM config")
         logger.info("Importing config from database")
@@ -147,11 +148,15 @@ def loadConfig():
         logger.debug("Alert config values: %s", str(validalertconfigvalues))
         logger.debug("Waifu regex: %s", str(waifu_regex))
         logger.info("Fetching admin list...")
-        curg.execute("SELECT * FROM admins")
+        curg.execute("SELECT name, super FROM admins")
         admins = []
+        superadmins = []
         for row in curg.fetchall():
             admins.append(row[0])
+            if row[1] != 0:
+                superadmins.append(row[0])
         logger.debug("Admins: %s", str(admins))
+        logger.debug("SuperAdmins: %s", str(superadmins))
         revrarity = {config["rarity" + str(i) + "Name"]:i for i in range(int(config["numNormalRarities"]) + int(config["numSpecialRarities"]))}
         curg.execute("SELECT name FROM blacklist")
         rows = curg.fetchall()
@@ -1051,7 +1056,6 @@ NepBotClass = pydle.featurize(pydle.Client, PrivMessageTagSupport)
 class NepBot(NepBotClass):
     config = {}
     mychannels = []
-    myadmins = []
     instance = None
     autoupdate = False
     pw = None
@@ -1059,10 +1063,9 @@ class NepBot(NepBotClass):
     addchannels = []
     leavechannels = []
 
-    def __init__(self, config, channels, admins):
+    def __init__(self, config, channels):
         super().__init__(config["username"])
         self.config = config
-        self.myadmins = admins
         self.mychannels = channels
         NepBot.instance = self
 
@@ -1500,7 +1503,7 @@ class NepBot(NepBotClass):
     def do_command(self, command, args, sender, channel, tags, isWhisper=False):
         logger.debug("Got command: %s with arguments %s", command, str(args))
         isMarathonChannel = channel == config['marathonChannel'] and not isWhisper
-        if command == "as" and debugMode and sender in self.myadmins:
+        if command == "as" and debugMode and sender in superadmins:
             if len(args) < 2 or len(args[1]) == 0:
                 self.message(channel, "Usage: !as <user> <command>", isWhisper)
                 return
@@ -1515,7 +1518,7 @@ class NepBot(NepBotClass):
             self.do_command(args[1][1:].lower(), args[2:], args[0].lower(), channel, {'display-name': args[0], 'user-id': userid}, isWhisper)
             return
         with busyLock:
-            if command == "quit" and sender in self.myadmins:
+            if command == "quit" and sender in superadmins:
                 logger.info("Quitting from admin command.")
                 pool.disconnect(client=self, expected=True)
                 # sys.exit(0)
@@ -2124,7 +2127,7 @@ class NepBot(NepBotClass):
 
                         self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}'.format(**waifu), isWhisper=isWhisper)
 
-                        if sender not in self.myadmins:
+                        if sender not in superadmins:
                             useInfoCommand(tags['user-id'], channel, isWhisper)
                     except Exception:
                         self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
@@ -2228,18 +2231,18 @@ class NepBot(NepBotClass):
                     "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
                     isWhisper=isWhisper)
                 return
-            if command == "togglehoraro" and sender in self.myadmins:
+            if command == "togglehoraro" and sender in admins:
                 self.autoupdate = not self.autoupdate
                 if self.autoupdate:
                     self.message(channel, "Enabled Horaro Auto-update.", isWhisper=isWhisper)
                 else:
                     self.message(channel, "Disabled Horaro Auto-update.", isWhisper=isWhisper)
                 return
-            if sender in self.myadmins and command in ["status", "title"] and isMarathonChannel:
+            if sender in admins and command in ["status", "title"] and isMarathonChannel:
                 updateTitle(" ".join(args))
                 self.message(channel, "%s -> Title updated to %s." % (tags['display-name'], " ".join(args)))
                 return
-            if sender in self.myadmins and command == "game" and isMarathonChannel:
+            if sender in admins and command == "game" and isMarathonChannel:
                 updateGame(" ".join(args))
                 self.message(channel, "%s -> Game updated to %s." % (tags['display-name'], " ".join(args)))
                 return
@@ -2255,7 +2258,7 @@ class NepBot(NepBotClass):
                         msg += str(row[0]) + " " + str(row[1]) + " "
                     self.message(channel, msg, isWhisper=isWhisper)
                     return
-            if command == "nepjoin" and sender.lower() in self.myadmins:
+            if command == "nepjoin" and sender.lower() in superadmins:
                 if len(args) != 1:
                     self.message(channel, "Usage: !nepjoin <channelname>", isWhisper=isWhisper)
                     return
@@ -2281,7 +2284,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "Tried joining, failed. Tell Marenthyu the following: " + str(sys.exc_info()), isWhisper=isWhisper)
                     logger.error("Error Joining channel %s: %s", chan, str(sys.exc_info()))
                     return
-            if command == "nepleave" and (sender in self.myadmins or ("#" + sender) == str(channel)):
+            if command == "nepleave" and (sender in superadmins or ("#" + sender) == str(channel)):
                 if len(args) > 0:
                     self.message(channel, "nepleave doesn't take in argument. Type it in the channel to leave.", isWhisper=isWhisper)
                     return
@@ -2298,7 +2301,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "Tried to leave but failed D:", isWhisper=isWhisper)
                     logger.error("Error leaving %s: %s", channel, str(sys.exc_info()))
                     return
-            if command == "reload" and sender in self.myadmins:
+            if command == "reload" and sender in superadmins:
                 #print("in reload command")
                 loadConfig()
                 self.message(channel, "Config reloaded.", isWhisper=isWhisper)
@@ -2616,7 +2619,7 @@ class NepBot(NepBotClass):
                 self.message(channel, "Usage: !upgrade - checks your limit and the price for an upgrade; !upgrade buy - buys an additional slot for your hand", isWhisper=isWhisper)
                 return
             if command == "announce":
-                if not (sender in self.myadmins):
+                if not (sender in superadmins):
                     self.message(channel, "Admin Only Command.", isWhisper=isWhisper)
                     return
                 if len(args) < 1:
@@ -2657,14 +2660,14 @@ class NepBot(NepBotClass):
                         self.message(channel, "Multiple results (Use !lookup for more details): " + ", ".join(
                             map(lambda waifu: str(waifu['id']), result)), isWhisper=isWhisper)
                     
-                    if sender not in self.myadmins:
+                    if sender not in superadmins:
                         useInfoCommand(tags['user-id'], channel, isWhisper)
                 
                 return
             if command == "promote":
                 self.message(channel, "Promotion is now automatic when you gather enough copies of a waifu at the same rarity in your hand.", isWhisper)
                 return
-            if command == "recheckpromos" and sender in self.myadmins:
+            if command == "recheckpromos" and sender in superadmins:
                 with db.cursor() as cur:
                     cur.execute("SELECT DISTINCT waifuid FROM has_waifu WHERE amount >= 2")
                     rows = cur.fetchall()
@@ -2676,7 +2679,7 @@ class NepBot(NepBotClass):
                 if len(args) < 1:
                     self.message(channel, "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results", isWhisper)
                     return
-                canManageBets = str(tags["badges"]).find("broadcaster") > -1 or sender in self.myadmins
+                canManageBets = str(tags["badges"]).find("broadcaster") > -1 or sender in superadmins
                 match = time_regex.fullmatch(args[0])
                 if match:
                     bet = match.groupdict()
@@ -2810,7 +2813,7 @@ class NepBot(NepBotClass):
                                 self.message(channel, message, isWhisper)
                         cur.close()
                         return
-                    elif sender in self.myadmins and subcmd == "payout":
+                    elif sender in superadmins and subcmd == "payout":
                         # pay out most recent bet in this channel
                         cur = db.cursor()
                         cur.execute("SELECT COALESCE(MAX(paidAt), 0) FROM bets WHERE channel = %s LIMIT 1", [channel])
@@ -2926,7 +2929,7 @@ class NepBot(NepBotClass):
                                      "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
                                      isWhisper)
                     return
-            if command == "import" and sender in self.myadmins:
+            if command == "import" and sender in superadmins:
                 if len(args) != 1:
                     self.message(channel, "Usage: !import url", isWhisper)
                     return
@@ -3087,7 +3090,7 @@ class NepBot(NepBotClass):
                 else:
                     self.message(channel, "Usage: !sets OR !sets rarity OR !sets claim", isWhisper=isWhisper)
                     return
-            if command == "debug" and sender in self.myadmins:
+            if command == "debug" and sender in superadmins:
                 if debugMode:
                     updateBoth("Hyperdimension Neptunia", "Testing title updates.")
                     self.message(channel, "Title and game updated for testing purposes")
@@ -3122,7 +3125,7 @@ class NepBot(NepBotClass):
                     cur.close()
                     return
                 
-                if sender not in self.myadmins:
+                if sender not in superadmins:
                     return
                 subcmd = args[0].lower()
                 if subcmd == 'open':
@@ -3209,7 +3212,7 @@ class NepBot(NepBotClass):
                                 self.message(channel, "Bounties cannot be placed on special waifus.", isWhisper)
                                 return
                             
-                            if sender not in self.myadmins:
+                            if sender not in superadmins:
                                 useInfoCommand(tags['user-id'], channel, isWhisper)
                             
                             with db.cursor() as cur:
@@ -3379,7 +3382,7 @@ class NepBot(NepBotClass):
                     except Exception:
                         self.message(channel, "Usage: !bounty cancel <ID>", isWhisper=isWhisper)
                         return
-            if command == "raritychange" and sender in self.myadmins:
+            if command == "raritychange" and sender in superadmins:
                 if len(args) < 2:
                     self.message(channel, "Usage: !raritychange <ID> <rarity>", isWhisper)
                     return
@@ -3453,7 +3456,7 @@ try:
 except Exception:
     twitchid = 0
 config["twitchid"] = str(twitchid)
-b = NepBot(config, channels, admins)
+b = NepBot(config, channels)
 b.start(config["oauth"])
 
 logger.debug("past start")
