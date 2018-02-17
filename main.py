@@ -1292,6 +1292,7 @@ class NepBot(NepBotClass):
                             pointGain = int(config["passivePoints"])
                             if viewer in activitymap and viewer in validactivity:
                                 pointGain += max(10 - int(activitymap[viewer]), 0)
+                            pointGain = int(pointGain * float(config["pointsMultiplier"]))
                             updateData.append((pointGain, viewer))
                             
                         with busyLock:
@@ -1346,6 +1347,7 @@ class NepBot(NepBotClass):
                         pointGain = int(config["passivePoints"])
                         if viewer in activitymap and viewer in validactivity:
                             pointGain += max(10 - int(activitymap[viewer]), 0)
+                        pointGain = int(pointGain * float(config["pointsMultiplier"]))
                         updateData.append((pointGain, viewer))
                         
                     with busyLock:
