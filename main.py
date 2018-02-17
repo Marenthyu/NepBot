@@ -2861,7 +2861,7 @@ class NepBot(NepBotClass):
                         cur.execute("SELECT COALESCE(MAX(paidAt), 0) FROM bets WHERE channel = %s LIMIT 1", [channel])
                         lastPayout = cur.fetchone()[0]
                         currTime = current_milli_time()
-                        if lastPayout > currTime - 79200000:
+                        if lastPayout > currTime - 79200000 and not isMarathonChannel:
                             a = datetime.timedelta(milliseconds=lastPayout + 79200000 - currTime, microseconds=0)
                             datestring = "{0}".format(a).split(".")[0]
                             self.message(channel, "Bet payout may be used again in this channel in %s." % datestring, isWhisper)
@@ -2895,6 +2895,9 @@ class NepBot(NepBotClass):
                                 prizeMultiplier = 1 / (math.log(7200000.0 / resultData["result"], 4) + 1)
                             else:
                                 prizeMultiplier = math.log(resultData["result"] / 7200000.0, 4) + 1
+                                
+                            if isMarathonChannel:
+                                prizeMultiplier *= 1.5
                                 
                             
 
