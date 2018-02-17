@@ -1377,7 +1377,7 @@ class NepBot(NepBotClass):
                         wasNone = True
                     current = current["data"]
                     game = current[0]
-                    category = current[1]
+                    category = current[2]
                     runners = [runner for runner in current[3:] if runner is not None]
                     args = {"game": game}
                     args["category"] = " (%s)" % category if category is not None else ""
