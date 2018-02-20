@@ -340,9 +340,13 @@ def attemptBountyFill(bot, waifuid):
             giveCard(order[1], waifuid, order[5])
             bot.message('#%s' % order[2], "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (waifuid, order[4], order[3]), True)
             cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s", [current_milli_time(), order[0]])
+            # alert people with lower bounties but above the cap?
+            rarity_cap = int(config["rarity"+str(order[5])+"MaxBounty"])
+            cur.execute("SELECT users.name FROM bounties JOIN users ON bounties.userid = users.id WHERE bounties.waifuid = %s AND bounties.status = 'open' AND bounties.amount > %s", [waifuid, rarity_cap])
+            for userrow in cur.fetchall():
+                bot.message('#%s' % userrow[0], "A higher bounty for [%d] %s than yours was filled, so you can now cancel yours and get full points back provided you don't change it." % (waifuid, order[4]), True)
             # give the disenchanter appropriate profit
             base_value = int(config["rarity"+str(order[5])+"Value"])
-            rarity_cap = int(config["rarity"+str(order[5])+"MaxBounty"])
             if order[3] > rarity_cap:
                 return (order[3] - rarity_cap)//4 + (rarity_cap - base_value)//2
             else:
@@ -3407,7 +3411,7 @@ class NepBot(NepBotClass):
                             if amount > rarity_cap:
                                 amount_refund = (amount - rarity_cap)//2 + rarity_cap
                                 msgargs = (tags['display-name'], amount_refund, waifu['id'], amount)
-                                self.message(channel, '%s, are you sure you want to place a bounty above the normal cap for that waifu\'s rarity? If you cancel it, you will only receive %d points back. Enter "!bounty %d %d yes" if you are sure.' % msgargs, isWhisper)
+                                self.message(channel, '%s, are you sure you want to place a bounty above the normal cap for that waifu\'s rarity? If you cancel it, you will only receive %d points back unless a higher bounty than yours is filled. Enter "!bounty %d %d yes" if you are sure.' % msgargs, isWhisper)
                                 cur.close()
                                 return
                                 
@@ -3453,14 +3457,18 @@ class NepBot(NepBotClass):
                         
                         # check for a current order
                         cur = db.cursor()
-                        cur.execute("SELECT id, amount FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'", [tags['user-id'], waifu['id']])
+                        cur.execute("SELECT id, amount, created, updated FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'", [tags['user-id'], waifu['id']])
                         myorderinfo = cur.fetchone()
+                        bounty_time = myorderinfo[3] if myorderinfo[3] is not None else myorderinfo[2]
                         
                         if myorderinfo is not None:
                             cur.execute("UPDATE bounties SET status = 'cancelled', updated = %s WHERE id = %s", [current_milli_time(), myorderinfo[0]])
                             # penalise them?
                             rarity_cap = int(config["rarity%dMaxBounty" % waifu['base_rarity']])
-                            if myorderinfo[1] > rarity_cap:
+                            # free cancel after direct outbid was met?
+                            cur.execute("SELECT COUNT(*) FROM bounties WHERE waifuid = %s AND status='filled' AND updated > %s", [waifu['id'], bounty_time])
+                            free_cancel = cur.fetchone()[0] > 0
+                            if myorderinfo[1] > rarity_cap and not free_cancel:
                                 refund = (myorderinfo[1] - rarity_cap)//2 + rarity_cap
                                 addPoints(tags['user-id'], refund)
                                 self.message(channel, "%s, you cancelled your bounty for [%d] %s and received only %d points back since it was above cap." % (tags['display-name'], waifu['id'], waifu['name'], refund), isWhisper)
