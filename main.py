@@ -3372,12 +3372,16 @@ class NepBot(NepBotClass):
                             
                         # outbidding?
                         outbidding = highest_other_bid != 0 and amount > highest_other_bid and old_bounty < highest_other_bid
+                        minimum_outbid = max(highest_other_bid//20, 5)
                         if outbidding:
-                            minimum_outbid = max(highest_other_bid//20, 5)
                             if amount < highest_other_bid + minimum_outbid:
                                 self.message(channel, "%s, you must place a bounty of at least %d points to outbid the current highest bid of %d points." % (tags['display-name'], highest_other_bid + minimum_outbid, highest_other_bid), isWhisper)
                                 cur.close()
                                 return
+                        elif amount < old_bounty and highest_other_bid + minimum_outbid > amount and amount > highest_other_bid:
+                            self.message(channel, "%s, the lowest you can reduce your bounty to is %d points due to the bid of %d points below it." % (tags['display-name'], highest_other_bid + minimum_outbid, highest_other_bid))
+                            cur.close()
+                            return
                             
                         # check for duplicate amount
                         cur.execute("SELECT COUNT(*) FROM bounties WHERE waifuid = %s AND status = 'open' AND amount = %s", [waifu['id'], amount])
@@ -3395,7 +3399,7 @@ class NepBot(NepBotClass):
                                 if myorderinfo is None:
                                     self.message(channel, '%s, are you sure you want to place a bounty for lower than the current highest bid (%d points)? Enter "!bounty %d %d yes" if you are sure.' % msgargs, isWhisper)
                                 else:
-                                    self.message(channel, '%s, are you sure you want to change your bounty to a lower amount than the current highest bid (%d points)? Enter "!bounty %d %d yes" if you are sure.' % msgargs, isWhisper)
+                                    self.message(channel, '%s, are you sure you want to change your bounty to a lower amount than the current other highest bid (%d points)? Enter "!bounty %d %d yes" if you are sure.' % msgargs, isWhisper)
                                 cur.close()
                                 return
                                 
