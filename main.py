@@ -331,23 +331,25 @@ def upgradeHand(userid, gifted=False):
     
 def attemptBountyFill(bot, waifuid):
     # return profit from the bounty
-    cur = db.cursor()
-    cur.execute("SELECT bounties.id, bounties.userid, users.name, bounties.amount, waifus.name, waifus.base_rarity FROM bounties JOIN users ON bounties.userid = users.id JOIN waifus ON bounties.waifuid = waifus.id WHERE bounties.waifuid = %s AND bounties.status = 'open' ORDER BY bounties.amount DESC LIMIT 1", [waifuid])
-    order = cur.fetchone()
-    
-    if order is not None:
-        # fill their order instead of actually disenchanting
-        giveCard(order[1], waifuid, order[5])
-        bot.message('#%s' % order[2], "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (waifuid, order[4], order[3]), True)
-        cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s", [current_milli_time(), order[0]])
-        cur.close()
-        # give the disenchanter 50% profit
-        base_value = int(config["rarity"+str(order[5])+"Value"])
-        return max(math.floor((order[3] - base_value)*0.5), 2)
-    else:
-        # no bounty
-        cur.close()
-        return 0
+    with db.cursor() as cur:
+        cur.execute("SELECT bounties.id, bounties.userid, users.name, bounties.amount, waifus.name, waifus.base_rarity FROM bounties JOIN users ON bounties.userid = users.id JOIN waifus ON bounties.waifuid = waifus.id WHERE bounties.waifuid = %s AND bounties.status = 'open' ORDER BY bounties.amount DESC LIMIT 1", [waifuid])
+        order = cur.fetchone()
+        
+        if order is not None:
+            # fill their order instead of actually disenchanting
+            giveCard(order[1], waifuid, order[5])
+            bot.message('#%s' % order[2], "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (waifuid, order[4], order[3]), True)
+            cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s", [current_milli_time(), order[0]])
+            # give the disenchanter appropriate profit
+            base_value = int(config["rarity"+str(order[5])+"Value"])
+            rarity_cap = int(config["rarity"+str(order[5])+"MaxBounty"])
+            if order[3] > rarity_cap:
+                return (order[3] - rarity_cap)//4 + (rarity_cap - base_value)//2
+            else:
+                return max(math.floor((order[3] - base_value)*0.5), 2)
+        else:
+            # no bounty
+            return 0
 
 def getHoraro():
     "https://horaro.org/-/api/v1/schedules/3911mu51ljb1wf7a5e/ticker"
@@ -3313,9 +3315,9 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !bounty <ID> <amount>", isWhisper)
                         return
                         
-                    if not followsme(tags['user-id']):
-                        self.message(channel, "%s, you must follow the bot to use bounties so you can be sent a whisper if your order is filled." % tags['display-name'], isWhisper)
-                        return
+                    #if not followsme(tags['user-id']):
+                    #    self.message(channel, "%s, you must follow the bot to use bounties so you can be sent a whisper if your order is filled." % tags['display-name'], isWhisper)
+                    #    return
                     
                     try:
                         waifu = getWaifuById(args[1])
@@ -3339,6 +3341,7 @@ class NepBot(NepBotClass):
                             return
                             
                         # check for affordability
+                        old_bounty = 0 if myorderinfo is None else myorderinfo[1]
                         points_delta = amount if myorderinfo is None else amount - myorderinfo[1]
                         
                         if points_delta > 0 and not hasPoints(tags['user-id'], points_delta):
@@ -3356,13 +3359,25 @@ class NepBot(NepBotClass):
                             return
                             
                         # check the range
+                        cur.execute("SELECT COALESCE(MAX(amount), 0) FROM bounties WHERE userid != %s AND waifuid = %s AND status = 'open'", [tags['user-id'], waifu['id']])
+                        highest_other_bid = cur.fetchone()[0]
                         de_value = int(config["rarity%dValue" % waifu['base_rarity']])
                         min_amount = de_value + 5
-                        max_amount = int(config["rarity%dMaxBounty" % waifu['base_rarity']])
+                        rarity_cap = int(config["rarity%dMaxBounty" % waifu['base_rarity']])
+                        max_amount = max(rarity_cap, highest_other_bid*6//5)
                         if amount < min_amount or amount > max_amount:
-                            self.message(channel, "%s, bounties for this waifu's base rarity (%s) must fall between %d and %d points." % (tags['display-name'], config["rarity%dName" % waifu['base_rarity']], min_amount, max_amount), isWhisper)
+                            self.message(channel, "%s, your bounty for this waifu must fall between %d and %d points." % (tags['display-name'], min_amount, max_amount), isWhisper)
                             cur.close()
                             return
+                            
+                        # outbidding?
+                        outbidding = highest_other_bid != 0 and amount > highest_other_bid and old_bounty < highest_other_bid
+                        if outbidding:
+                            minimum_outbid = max(highest_other_bid//20, 5)
+                            if amount < highest_other_bid + minimum_outbid:
+                                self.message(channel, "%s, you must place a bounty of at least %d points to outbid the current highest bid of %d points." % (tags['display-name'], highest_other_bid + minimum_outbid, highest_other_bid), isWhisper)
+                                cur.close()
+                                return
                             
                         # check for duplicate amount
                         cur.execute("SELECT COUNT(*) FROM bounties WHERE waifuid = %s AND status = 'open' AND amount = %s", [waifu['id'], amount])
@@ -3372,12 +3387,11 @@ class NepBot(NepBotClass):
                             cur.close()
                             return
                             
-                        # check for placing a bid that has already been outbid without confirmation
+                        # actions that require confirmation first
                         if len(args) < 4 or args[3].lower() != 'yes':
-                            cur.execute("SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM bounties WHERE userid != %s AND waifuid = %s AND status='open' AND amount > %s", [tags['user-id'], waifu['id'], amount])
-                            higher_bids = cur.fetchone()
-                            if higher_bids[0] > 0:
-                                msgargs = (tags['display-name'], higher_bids[1], waifu['id'], amount)
+                            # check for placing a bounty that has already been outbid
+                            if highest_other_bid > amount:
+                                msgargs = (tags['display-name'], highest_other_bid, waifu['id'], amount)
                                 if myorderinfo is None:
                                     self.message(channel, '%s, are you sure you want to place a bounty for lower than the current highest bid (%d points)? Enter "!bounty %d %d yes" if you are sure.' % msgargs, isWhisper)
                                 else:
@@ -3385,18 +3399,41 @@ class NepBot(NepBotClass):
                                 cur.close()
                                 return
                                 
+                            # check for placing a bounty above regular cap
+                            if amount > rarity_cap:
+                                amount_refund = (amount - rarity_cap)//2 + rarity_cap
+                                msgargs = (tags['display-name'], amount_refund, waifu['id'], amount)
+                                self.message(channel, '%s, are you sure you want to place a bounty above the normal cap for that waifu\'s rarity? If you cancel it, you will only receive %d points back. Enter "!bounty %d %d yes" if you are sure.' % msgargs, isWhisper)
+                                cur.close()
+                                return
+                                
                         # if it passed all of those checks it should be good to go.
-                        addPoints(tags['user-id'], -points_delta)
+                        # penalize them for reducing a bounty above regular cap?
+                        if points_delta < 0 and old_bounty > rarity_cap:
+                            change_above_cap = min(-points_delta, old_bounty - rarity_cap)
+                            addPoints(tags['user-id'], change_above_cap//2 + (-points_delta - change_above_cap))
+                        else:
+                            addPoints(tags['user-id'], -points_delta)
+                        
                         if myorderinfo is None:
                             cur.execute("INSERT INTO bounties (userid, waifuid, amount, status, created) VALUES(%s, %s, %s, 'open', %s)", [tags['user-id'], waifu['id'], amount, current_milli_time()])
                             self.message(channel, "%s, you placed a new bounty on [%d] %s for %d points." % (tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
                         else:
                             cur.execute("UPDATE bounties SET amount = %s, updated = %s WHERE id = %s", [amount, current_milli_time(), myorderinfo[0]])
                             self.message(channel, "%s, you updated your bounty on [%d] %s to %d points." % (tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
+                            
+                        # outbid message?
+                        if outbidding:
+                            # attempt to whisper for outbid
+                            cur.execute("SELECT users.name FROM bounties JOIN users ON bounties.userid=users.id WHERE bounties.waifuid = %s AND bounties.amount = %s LIMIT 1", [waifu['id'], highest_other_bid])
+                            other_bidder = cur.fetchone()
+                            if other_bidder is not None:
+                                self.message('#%s' % other_bidder[0], "Your bounty on [%d] %s has been outbid. The new highest bounty is %d points." % (waifu['id'], waifu['name'], amount), True)
                         cur.close()
                         return
                         
-                    except Exception:
+                    except Exception as exc:
+                        raise exc
                         self.message(channel, "Usage: !bounty <ID> <amount>", isWhisper=isWhisper)
                         return
                         
@@ -3417,8 +3454,15 @@ class NepBot(NepBotClass):
                         
                         if myorderinfo is not None:
                             cur.execute("UPDATE bounties SET status = 'cancelled', updated = %s WHERE id = %s", [current_milli_time(), myorderinfo[0]])
-                            addPoints(tags['user-id'], myorderinfo[1])
-                            self.message(channel, "%s, you cancelled your bounty for [%d] %s and received your %d points back." % (tags['display-name'], waifu['id'], waifu['name'], myorderinfo[1]), isWhisper)
+                            # penalise them?
+                            rarity_cap = int(config["rarity%dMaxBounty" % waifu['base_rarity']])
+                            if myorderinfo[1] > rarity_cap:
+                                refund = (myorderinfo[1] - rarity_cap)//2 + rarity_cap
+                                addPoints(tags['user-id'], refund)
+                                self.message(channel, "%s, you cancelled your bounty for [%d] %s and received only %d points back since it was above cap." % (tags['display-name'], waifu['id'], waifu['name'], refund), isWhisper)
+                            else:
+                                addPoints(tags['user-id'], myorderinfo[1])
+                                self.message(channel, "%s, you cancelled your bounty for [%d] %s and received your %d points back." % (tags['display-name'], waifu['id'], waifu['name'], myorderinfo[1]), isWhisper)
                         else:
                             self.message(channel, "%s, you don't have an active bounty for that waifu!" % tags['display-name'], isWhisper)
                         cur.close()
