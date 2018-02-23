@@ -577,6 +577,11 @@ http.createServer(function (req, res) {
                 res.end();
                 break;
             }
+            case "fixes": {
+                res.writeHead(302, {'Location': 'https://goo.gl/forms/ymaZWjM6ZyGl2DXj2'});
+                res.end();
+                break;
+            }
             case "waifus-bootstrap.css": {
                 res.writeHead(200, {'Content-Type': 'text/css'});
                 res.write(bootstrapwaifucss);
