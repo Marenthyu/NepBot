@@ -23,16 +23,16 @@ let dbuser = null;
 let dbhost = null;
 for(let line of cfglines) {
     let lineparts = line.split("=");
-    if(lineparts[0] == "dbpassword") {
+    if(lineparts[0] === "dbpassword") {
         dbpw = lineparts[1];
     }
-    else if(lineparts[0] == "database") {
+    else if(lineparts[0] === "database") {
         dbname = lineparts[1];
     }
-    else if(lineparts[0] == "dbuser") {
+    else if(lineparts[0] === "dbuser") {
         dbuser = lineparts[1];
     }
-    else if(lineparts[0] == "dbhost") {
+    else if(lineparts[0] === "dbhost") {
         dbhost = lineparts[1];
     }
 }
@@ -107,9 +107,9 @@ let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '{NAME}<br />'+
     '{SERIES}'+
     '</div>'+
-    '</div>'
-let bootstraphandamtholder = '<div class="amount-holder rarity-{RARITY}">x{AMOUNT}</div>'
-let bootstraphandpromoholder = '<div class="promotion-holder rarity-{RARITY}">{STARS}</div>'
+    '</div>';
+let bootstraphandamtholder = '<div class="amount-holder rarity-{RARITY}">x{AMOUNT}</div>';
+let bootstraphandpromoholder = '<div class="promotion-holder rarity-{RARITY}">{STARS}</div>';
 let bootstrapboostertpl = fs.readFileSync('bootstrapboostertemplate.htm', 'utf8');
 let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-body card-body-tcg">' +
@@ -127,7 +127,7 @@ let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '{SERIES}'+
     '</div>'+
     '</div>'+
-    '</div>'
+    '</div>';
 let smartsetstpl = fs.readFileSync('smartsets.htm', 'utf8');
 let bootstrapwaifucss = fs.readFileSync('waifus-bootstrap.css', 'utf8');
 
@@ -165,7 +165,7 @@ function smartsets(req, res, query) {
     res.writeHead(200, {'Content-Type': 'text/html'});
     res.write(response);
     res.end();
-    return;
+
 }
 
 function smartsetsdata(req, res, query) {
@@ -180,7 +180,7 @@ function smartsetsdata(req, res, query) {
         return;
     }
     
-    if(query.type == 'progress') {
+    if(query.type === 'progress') {
         if(!('user' in query)) {
             res.writeHead(400, "Missing Parameter");
             res.write("Missing Parameter");
@@ -188,7 +188,7 @@ function smartsetsdata(req, res, query) {
             return;
         }
     }
-    else if(query.type != 'allsets') {
+    else if(query.type !== 'allsets') {
         if(!('q' in query)) {
             res.writeHead(400, "Missing Parameter");
             res.write("Missing Parameter");
@@ -205,23 +205,23 @@ function smartsetsdata(req, res, query) {
     
     let sets_query = "";
     let parameter = "";
-    if(query.type == 'setname') {
+    if(query.type === 'setname') {
         sets_query = "SELECT id, name, reward FROM sets WHERE name LIKE (?) AND claimed_by IS NULL";
         parameter = "%"+query.q+"%";
     }
-    else if(query.type == 'waifuname') {
+    else if(query.type === 'waifuname') {
         sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.name LIKE(?) AND claimed_by IS NULL";
         parameter = "%"+query.q+"%";
     }
-    else if(query.type == 'waifuseries') {
+    else if(query.type === 'waifuseries') {
         sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.series LIKE(?) AND claimed_by IS NULL";
         parameter = "%"+query.q+"%";
     }
-    else if(query.type == 'progress') {
+    else if(query.type === 'progress') {
         sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward FROM set_cards JOIN sets ON set_cards.setID = sets.id LEFT JOIN has_waifu ON set_cards.cardID = has_waifu.waifuid JOIN users ON has_waifu.userid = users.id WHERE users.name = ? AND claimed_by IS NULL";
         parameter = query.user;
     }
-    else if(query.type == 'allsets') {
+    else if(query.type === 'allsets') {
         sets_query = "SELECT id, name, reward FROM sets WHERE claimed_by IS NULL";
         parameter = null;
     }
@@ -247,7 +247,7 @@ function smartsetsdata(req, res, query) {
             function(err, result2) {
                 if(err) throw err;
                 for(let row of result2) {
-                    let waifu = {id: row.waifuID, name: row.waifuName, rarity: getRarityName(row.waifuRarity), image: row.waifuImage, series: row.waifuSeries, owned: row.userName !== null}
+                    let waifu = {id: row.waifuID, name: row.waifuName, rarity: getRarityName(row.waifuRarity), image: row.waifuImage, series: row.waifuSeries, owned: row.userName !== null};
                     setsById[row.setID].cards.push(waifu);
                     setsById[row.setID].totalCards += 1;
                     if(waifu.owned) {
@@ -263,20 +263,20 @@ function smartsetsdata(req, res, query) {
                 }
                 response.sets.sort(
                 function(a, b) {
-                    let aValue = a.cardsOwned == 0 ? 9999999 : a.totalCards - a.cardsOwned;
-                    let bValue = b.cardsOwned == 0 ? 9999999 : b.totalCards - b.cardsOwned;
-                    return (aValue != bValue) ? aValue - bValue : a.name.localeCompare(b.name);
+                    let aValue = a.cardsOwned === 0 ? 9999999 : a.totalCards - a.cardsOwned;
+                    let bValue = b.cardsOwned === 0 ? 9999999 : b.totalCards - b.cardsOwned;
+                    return (aValue !== bValue) ? aValue - bValue : a.name.localeCompare(b.name);
                 });
                 res.write(JSON.stringify(response));
                 res.end();
-                return;
+
             })
         }
         else {
             res.writeHead(200, {'Content-Type': 'text/json'});
             res.write(JSON.stringify({count: 0, sets: []}));
             res.end();
-            return;
+
         }
     })
 }
@@ -389,7 +389,7 @@ function bootstraphand(req, res, query) {
         let cards = '';
         for (let row of result) {
             let card = bootstraphandcard;
-            card = card.replace(/{AMOUNTHOLDER}/g, row.amount > 1 ? bootstraphandamtholder : '')
+            card = card.replace(/{AMOUNTHOLDER}/g, row.amount > 1 ? bootstraphandamtholder : '');
             card = card.replace(/{PROMOTEDHOLDER}/g, row.rarity > row.base_rarity ? bootstraphandpromoholder : '');
             if(row.rarity > row.base_rarity) {
                 card = card.replace(/{STARS}/g, "★".repeat(row.rarity - row.base_rarity));
@@ -476,7 +476,7 @@ function api(req, res, query) {
                 for(let row of result) {
                     if(row.id !== lastwarid) {
                         lastwarid = row.id;
-                        lastwar = {"id": row.id, "title": row.title, "status": row.status, "openEntry": row.openEntry != 0, "openEntryMinimum": row.openEntryMinimum, "openEntryMaxLength": row.openEntryMaxLength, "choices": []}
+                        lastwar = {"id": row.id, "title": row.title, "status": row.status, "openEntry": row.openEntry !== 0, "openEntryMinimum": row.openEntryMinimum, "openEntryMaxLength": row.openEntryMaxLength, "choices": []};
                         wars.push(lastwar);
                     }
                     lastwar.choices.push({"choice": row.choice, "amount": row.amount, "created": row.created, "creator": row.creator, "lastVote": row.lastVote, "lastVoter": row.lastVoter})
@@ -512,7 +512,7 @@ function api(req, res, query) {
                 for(let row of result) {
                     if(row.id !== lastwarid) {
                         lastwarid = row.id;
-                        lastwar = {"id": row.id, "title": row.title, "status": row.status, "openEntry": row.openEntry != 0, "openEntryMinimum": row.openEntryMinimum, "openEntryMaxLength": row.openEntryMaxLength, "choices": []}
+                        lastwar = {"id": row.id, "title": row.title, "status": row.status, "openEntry": row.openEntry !== 0, "openEntryMinimum": row.openEntryMinimum, "openEntryMaxLength": row.openEntryMaxLength, "choices": []};
                         wars.push(lastwar);
                     }
                     if(row.choice !== null) {
@@ -533,7 +533,7 @@ function api(req, res, query) {
         else {
             res.writeHead(400, "Bad Request");
             res.end();
-            return;
+
         }
     });
 }
