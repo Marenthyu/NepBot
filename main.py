@@ -1230,13 +1230,13 @@ class NepBot(NepBotClass):
             
             while len(channelids) > 0:
                 currentSlice = channelids[:100]
-                with requests.get("https://api.twitch.tv/helix/streams", headers=headers, params={"type": "live", "user_id": currentSlice}) as response:
-                    data = response.json()["data"]
-                    for element in data:
-                        chanName = idtoname[str(element["user_id"])]
-                        isLive[chanName] = True
-                        logger.debug("%s is live!", idtoname[str(element["user_id"])])
-                        viewerCount[chanName] = element["viewer_count"]
+                response = requests.get("https://api.twitch.tv/helix/streams", headers=headers, params={"type": "live", "user_id": currentSlice})
+                data = response.json()["data"]
+                for element in data:
+                    chanName = idtoname[str(element["user_id"])]
+                    isLive[chanName] = True
+                    logger.debug("%s is live!", idtoname[str(element["user_id"])])
+                    viewerCount[chanName] = element["viewer_count"]
                 channelids = channelids[100:]
 
             logger.debug("Catching all viewers...")
