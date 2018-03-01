@@ -9,46 +9,46 @@ body {
 
 .id-holder {
 	position: absolute;
-	bottom: 0px;
-	left: 0px;
+	bottom: 0;
+	left: 0;
 	padding: 2px 5px 2px 5px;
-	border-radius: 0px 8px 0px 0px;
+	border-radius: 0 8px 0 0;
 	font-size: 120%;
 }
 
 .rarity-holder {
 	position: absolute;
-	bottom: 0px;
-	right: 0px;
+	bottom: 0;
+	right: 0;
 	text-transform: uppercase;
 	padding: 2px 5px 2px 5px;
-	border-radius: 8px 0px 0px 0px;
+	border-radius: 8px 0 0 0;
 	font-size: 120%;
 }
 
 .amount-holder {
     position: absolute;
-    top: 0px;
-    left: 0px;
+    top: 0;
+    left: 0;
     padding: 2px 5px 2px 5px;
-    border-radius: 0px 0px 8px 0px;
+    border-radius: 0 0 8px 0;
 	font-size: 150%;
 }
 
 .promotion-holder {
     position: absolute;
-    top: 0px;
-    right: 0px;
+    top: 0;
+    right: 0;
     padding: 2px 5px 2px 5px;
-    border-radius: 0px 0px 0px 8px;
+    border-radius: 0 0 0 8px;
 	font-size: 120%;
 }
 
 .invisible-space-holder {
     position: absolute;
-    bottom: 0px;
-    left: 0px;
-    right: 0px;
+    bottom: 0;
+    left: 0;
+    right: 0;
 }
 
 .rarity-common {
@@ -157,4 +157,21 @@ body {
 
 .btn-set {
     margin-bottom: 10px;
+}
+
+.badge-img {
+    height: 50px;
+}
+
+.badge {
+    margin: 0.5rem;
+    display: inline-block;
+    min-width: 170px;
+    border: 1px solid rgba(0,0,0,.125);
+    border-radius: .25rem;
+}
+
+.badge-inf {
+    margin-top: 3px;
+    background:  rgb(237, 237, 237);
 }

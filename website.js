@@ -21,23 +21,23 @@ let dbpw = null;
 let dbname = null;
 let dbuser = null;
 let dbhost = null;
-for(let line of cfglines) {
+for (let line of cfglines) {
     let lineparts = line.split("=");
-    if(lineparts[0] === "dbpassword") {
+    if (lineparts[0] === "dbpassword") {
         dbpw = lineparts[1];
     }
-    else if(lineparts[0] === "database") {
+    else if (lineparts[0] === "database") {
         dbname = lineparts[1];
     }
-    else if(lineparts[0] === "dbuser") {
+    else if (lineparts[0] === "dbuser") {
         dbuser = lineparts[1];
     }
-    else if(lineparts[0] === "dbhost") {
+    else if (lineparts[0] === "dbhost") {
         dbhost = lineparts[1];
     }
 }
 
-if(dbpw === null || dbname === null || dbuser === null || dbhost === null) {
+if (dbpw === null || dbname === null || dbuser === null || dbhost === null) {
     process.exit(1);
     return;
 }
@@ -55,7 +55,18 @@ con.connect(function (err) {
     console.log("Connected!");
 });
 
-let rarities = {0: "common", 1: "uncommon", 2: "rare", 3: "super", 4: "ultra", 5: "legendary", 6: "mythical", 7: "god", 8: "special", 9: "promo"};
+let rarities = {
+    0: "common",
+    1: "uncommon",
+    2: "rare",
+    3: "super",
+    4: "ultra",
+    5: "legendary",
+    6: "mythical",
+    7: "god",
+    8: "special",
+    9: "promo"
+};
 let sethead = "<!DOCTYPE html>\n" +
     "<html lang=\"en\">\n" +
     "<head>\n" +
@@ -96,56 +107,65 @@ let downloading = 0;
 let bootstraphandtpl = fs.readFileSync('bootstraphandtemplate.htm', 'utf8');
 let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-body card-body-tcg">' +
-    '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />'+
-    '<div class="id-holder rarity-{RARITY}">{ID}</div>'+
-    '<div class="invisible-space-holder">&nbsp;</div>'+
-    '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>'+
-    '{AMOUNTHOLDER}'+
-    '{PROMOTEDHOLDER}'+
-    '</div>'+
-    '<div class="card-footer text-center">'+
-    '{NAME}<br />'+
-    '{SERIES}'+
-    '</div>'+
+    '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />' +
+    '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
+    '<div class="invisible-space-holder">&nbsp;</div>' +
+    '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>' +
+    '{AMOUNTHOLDER}' +
+    '{PROMOTEDHOLDER}' +
+    '</div>' +
+    '<div class="card-footer text-center">' +
+    '{NAME}<br />' +
+    '{SERIES}' +
+    '</div>' +
     '</div>';
 let bootstraphandamtholder = '<div class="amount-holder rarity-{RARITY}">x{AMOUNT}</div>';
 let bootstraphandpromoholder = '<div class="promotion-holder rarity-{RARITY}">{STARS}</div>';
 let bootstrapboostertpl = fs.readFileSync('bootstrapboostertemplate.htm', 'utf8');
 let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-body card-body-tcg">' +
-    '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />'+
-    '<div class="id-holder rarity-{RARITY}">{ID}</div>'+
-    '<div class="invisible-space-holder">&nbsp;</div>'+
-    '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>'+
-    '</div>'+
-    '<div class="card-footer text-center">'+
-    '<div class="keep-box">'+
-    '<input type="checkbox" onchange="update()" /><br />Keep?'+
-    '</div>'+
-    '<div class="card-info">'+
-    '{NAME}<br />'+
-    '{SERIES}'+
-    '</div>'+
-    '</div>'+
+    '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />' +
+    '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
+    '<div class="invisible-space-holder">&nbsp;</div>' +
+    '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>' +
+    '</div>' +
+    '<div class="card-footer text-center">' +
+    '<div class="keep-box">' +
+    '<input type="checkbox" onchange="update()" /><br />Keep?' +
+    '</div>' +
+    '<div class="card-info">' +
+    '{NAME}<br />' +
+    '{SERIES}' +
+    '</div>' +
+    '</div>' +
+    '</div>';
+let badgetemplate = '' +
+    '<div class="badge">' +
+    '<img class="badge-img rounded-circle" src="{IMAGE}" title="{NAME}"/><br/>' +
+    '<div class="badge-inf">' +
+    '{NAME}<br/>' +
+    '{DESCRIPTION}' +
+    '</div>' +
     '</div>';
 let smartsetstpl = fs.readFileSync('smartsets.htm', 'utf8');
 let bootstrapwaifucss = fs.readFileSync('waifus-bootstrap.css', 'utf8');
+let profiletpl = fs.readFileSync('profiletemplate.html', 'utf8');
 
 let entityMap = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-  '/': '&#x2F;',
-  '`': '&#x60;',
-  '=': '&#x3D;'
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+    '/': '&#x2F;',
+    '`': '&#x60;',
+    '=': '&#x3D;'
 };
 
 function escapeHtml(string) {
-  return String(string).replace(/[&<>"'`=\/]/g, function (s) {
-    return entityMap[s];
-  });
+    return String(string).replace(/[&<>"'`=\/]/g, function (s) {
+        return entityMap[s];
+    });
 }
 
 function getRarityName(number) {
@@ -179,49 +199,49 @@ function smartsetsdata(req, res, query) {
         res.end();
         return;
     }
-    
-    if(query.type === 'progress') {
-        if(!('user' in query)) {
+
+    if (query.type === 'progress') {
+        if (!('user' in query)) {
             res.writeHead(400, "Missing Parameter");
             res.write("Missing Parameter");
             res.end();
             return;
         }
     }
-    else if(query.type !== 'allsets') {
-        if(!('q' in query)) {
+    else if (query.type !== 'allsets') {
+        if (!('q' in query)) {
             res.writeHead(400, "Missing Parameter");
             res.write("Missing Parameter");
             res.end();
             return;
         }
-        if(query.q.length < 3) {
+        if (query.q.length < 3) {
             res.writeHead(400, "Bad Request");
             res.write("Query string too short");
             res.end();
             return;
         }
     }
-    
+
     let sets_query = "";
     let parameter = "";
-    if(query.type === 'setname') {
+    if (query.type === 'setname') {
         sets_query = "SELECT id, name, reward FROM sets WHERE name LIKE (?) AND claimed_by IS NULL";
-        parameter = "%"+query.q+"%";
+        parameter = "%" + query.q + "%";
     }
-    else if(query.type === 'waifuname') {
+    else if (query.type === 'waifuname') {
         sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.name LIKE(?) AND claimed_by IS NULL";
-        parameter = "%"+query.q+"%";
+        parameter = "%" + query.q + "%";
     }
-    else if(query.type === 'waifuseries') {
+    else if (query.type === 'waifuseries') {
         sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.series LIKE(?) AND claimed_by IS NULL";
-        parameter = "%"+query.q+"%";
+        parameter = "%" + query.q + "%";
     }
-    else if(query.type === 'progress') {
+    else if (query.type === 'progress') {
         sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward FROM set_cards JOIN sets ON set_cards.setID = sets.id LEFT JOIN has_waifu ON set_cards.cardID = has_waifu.waifuid JOIN users ON has_waifu.userid = users.id WHERE users.name = ? AND claimed_by IS NULL";
         parameter = query.user;
     }
-    else if(query.type === 'allsets') {
+    else if (query.type === 'allsets') {
         sets_query = "SELECT id, name, reward FROM sets WHERE claimed_by IS NULL";
         parameter = null;
     }
@@ -232,53 +252,67 @@ function smartsetsdata(req, res, query) {
         return;
     }
     con.query(sets_query, parameter,
-    function(err, result) {
-        if(err) throw err;
-        let setsById = {};
-        let setIDs = [];
-        for(let row of result) {
-            setsById[row.id] = {id: row.id, name: row.name, reward: row.reward, totalCards: 0, cardsOwned: 0, cards: []};
-            setIDs.push(row.id);
-        }
-        if(setIDs.length > 0) {
-            let bindArray = [user].concat(setIDs);
-            let inBinds = "?, ".repeat(setIDs.length).substring(0, setIDs.length*3 - 2);
-            con.query("SELECT setID, a.name AS userName, waifus.id AS waifuID, waifus.Name AS waifuName, waifus.base_rarity AS waifuRarity, waifus.image AS waifuImage, waifus.series AS waifuSeries FROM set_cards LEFT JOIN (SELECT DISTINCT has_waifu.waifuid, users.name FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.name = ?) AS a ON set_cards.cardID = a.waifuid JOIN waifus ON set_cards.cardID = waifus.id WHERE set_cards.setID IN("+inBinds+") ORDER BY waifuID", bindArray,
-            function(err, result2) {
-                if(err) throw err;
-                for(let row of result2) {
-                    let waifu = {id: row.waifuID, name: row.waifuName, rarity: getRarityName(row.waifuRarity), image: row.waifuImage, series: row.waifuSeries, owned: row.userName !== null};
-                    setsById[row.setID].cards.push(waifu);
-                    setsById[row.setID].totalCards += 1;
-                    if(waifu.owned) {
-                        setsById[row.setID].cardsOwned += 1;
-                    }
-                }
-                // Build actual response
+        function (err, result) {
+            if (err) throw err;
+            let setsById = {};
+            let setIDs = [];
+            for (let row of result) {
+                setsById[row.id] = {
+                    id: row.id,
+                    name: row.name,
+                    reward: row.reward,
+                    totalCards: 0,
+                    cardsOwned: 0,
+                    cards: []
+                };
+                setIDs.push(row.id);
+            }
+            if (setIDs.length > 0) {
+                let bindArray = [user].concat(setIDs);
+                let inBinds = "?, ".repeat(setIDs.length).substring(0, setIDs.length * 3 - 2);
+                con.query("SELECT setID, a.name AS userName, waifus.id AS waifuID, waifus.Name AS waifuName, waifus.base_rarity AS waifuRarity, waifus.image AS waifuImage, waifus.series AS waifuSeries FROM set_cards LEFT JOIN (SELECT DISTINCT has_waifu.waifuid, users.name FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.name = ?) AS a ON set_cards.cardID = a.waifuid JOIN waifus ON set_cards.cardID = waifus.id WHERE set_cards.setID IN(" + inBinds + ") ORDER BY waifuID", bindArray,
+                    function (err, result2) {
+                        if (err) throw err;
+                        for (let row of result2) {
+                            let waifu = {
+                                id: row.waifuID,
+                                name: row.waifuName,
+                                rarity: getRarityName(row.waifuRarity),
+                                image: row.waifuImage,
+                                series: row.waifuSeries,
+                                owned: row.userName !== null
+                            };
+                            setsById[row.setID].cards.push(waifu);
+                            setsById[row.setID].totalCards += 1;
+                            if (waifu.owned) {
+                                setsById[row.setID].cardsOwned += 1;
+                            }
+                        }
+                        // Build actual response
+                        res.writeHead(200, {'Content-Type': 'text/json'});
+                        let response = {count: 0, sets: []};
+                        for (let setID in setsById) {
+                            response.count += 1;
+                            response.sets.push(setsById[setID]);
+                        }
+                        response.sets.sort(
+                            function (a, b) {
+                                let aValue = a.cardsOwned === 0 ? 9999999 : a.totalCards - a.cardsOwned;
+                                let bValue = b.cardsOwned === 0 ? 9999999 : b.totalCards - b.cardsOwned;
+                                return (aValue !== bValue) ? aValue - bValue : a.name.localeCompare(b.name);
+                            });
+                        res.write(JSON.stringify(response));
+                        res.end();
+
+                    })
+            }
+            else {
                 res.writeHead(200, {'Content-Type': 'text/json'});
-                let response = {count: 0, sets: []};
-                for(let setID in setsById) {
-                    response.count += 1;
-                    response.sets.push(setsById[setID]);
-                }
-                response.sets.sort(
-                function(a, b) {
-                    let aValue = a.cardsOwned === 0 ? 9999999 : a.totalCards - a.cardsOwned;
-                    let bValue = b.cardsOwned === 0 ? 9999999 : b.totalCards - b.cardsOwned;
-                    return (aValue !== bValue) ? aValue - bValue : a.name.localeCompare(b.name);
-                });
-                res.write(JSON.stringify(response));
+                res.write(JSON.stringify({count: 0, sets: []}));
                 res.end();
 
-            })
-        }
-        else {
-            res.writeHead(200, {'Content-Type': 'text/json'});
-            res.write(JSON.stringify({count: 0, sets: []}));
-            res.end();
-
-        }
-    })
+            }
+        })
 }
 
 function claimedsets(req, res, query) {
@@ -391,7 +425,7 @@ function bootstraphand(req, res, query) {
             let card = bootstraphandcard;
             card = card.replace(/{AMOUNTHOLDER}/g, row.amount > 1 ? bootstraphandamtholder : '');
             card = card.replace(/{PROMOTEDHOLDER}/g, row.rarity > row.base_rarity ? bootstraphandpromoholder : '');
-            if(row.rarity > row.base_rarity) {
+            if (row.rarity > row.base_rarity) {
                 card = card.replace(/{STARS}/g, "★".repeat(row.rarity - row.base_rarity));
             }
             else {
@@ -450,14 +484,14 @@ function teaser(req, res, query) {
 function api(req, res, query) {
     // Authentication
     let key = req.headers["x-waifus-api-key"];
-    if(!key) {
+    if (!key) {
         res.writeHead(401, "Unauthorized");
         res.end();
         return
     }
-    con.query("SELECT * FROM api_keys WHERE `value` = ?", key, function(err, result) {
+    con.query("SELECT * FROM api_keys WHERE `value` = ?", key, function (err, result) {
         if (err) throw err;
-        if(result.length === 0) {
+        if (result.length === 0) {
             res.writeHead(401, "Unauthorized");
             res.end();
             return
@@ -467,35 +501,50 @@ function api(req, res, query) {
             res.end();
             return;
         }
-        if(query.type === 'wars') {
+        if (query.type === 'wars') {
             con.query("SELECT * FROM bidWars JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID WHERE bidWars.status = 'open' ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
                 if (err) throw err;
                 let wars = [];
                 let lastwarid = '';
                 let lastwar = null;
-                for(let row of result) {
-                    if(row.id !== lastwarid) {
+                for (let row of result) {
+                    if (row.id !== lastwarid) {
                         lastwarid = row.id;
-                        lastwar = {"id": row.id, "title": row.title, "status": row.status, "openEntry": row.openEntry !== 0, "openEntryMinimum": row.openEntryMinimum, "openEntryMaxLength": row.openEntryMaxLength, "choices": []};
+                        lastwar = {
+                            "id": row.id,
+                            "title": row.title,
+                            "status": row.status,
+                            "openEntry": row.openEntry !== 0,
+                            "openEntryMinimum": row.openEntryMinimum,
+                            "openEntryMaxLength": row.openEntryMaxLength,
+                            "choices": []
+                        };
                         wars.push(lastwar);
                     }
-                    lastwar.choices.push({"choice": row.choice, "amount": row.amount, "created": row.created, "creator": row.creator, "lastVote": row.lastVote, "lastVoter": row.lastVoter})
+                    lastwar.choices.push({
+                        "choice": row.choice,
+                        "amount": row.amount,
+                        "created": row.created,
+                        "creator": row.creator,
+                        "lastVote": row.lastVote,
+                        "lastVoter": row.lastVoter
+                    })
                 }
                 res.writeHead(200, {'Content-Type': 'text/json'});
                 res.write(JSON.stringify(wars));
                 res.end();
             });
         }
-        else if(query.type === 'incentives') {
-            con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function(err, result) {
+        else if (query.type === 'incentives') {
+            con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result) {
                 if (err) throw err;
                 res.writeHead(200, {'Content-Type': 'text/json'});
                 res.write(JSON.stringify(result));
                 res.end();
             });
         }
-        else if(query.type === 'emotewar') {
-            con.query("SELECT * FROM emoteWar ORDER BY count DESC", function(err, result) {
+        else if (query.type === 'emotewar') {
+            con.query("SELECT * FROM emoteWar ORDER BY count DESC", function (err, result) {
                 if (err) throw err;
                 res.writeHead(200, {'Content-Type': 'text/json'});
                 res.write(JSON.stringify(result));
@@ -509,19 +558,34 @@ function api(req, res, query) {
                 let wars = [];
                 let lastwarid = '';
                 let lastwar = null;
-                for(let row of result) {
-                    if(row.id !== lastwarid) {
+                for (let row of result) {
+                    if (row.id !== lastwarid) {
                         lastwarid = row.id;
-                        lastwar = {"id": row.id, "title": row.title, "status": row.status, "openEntry": row.openEntry !== 0, "openEntryMinimum": row.openEntryMinimum, "openEntryMaxLength": row.openEntryMaxLength, "choices": []};
+                        lastwar = {
+                            "id": row.id,
+                            "title": row.title,
+                            "status": row.status,
+                            "openEntry": row.openEntry !== 0,
+                            "openEntryMinimum": row.openEntryMinimum,
+                            "openEntryMaxLength": row.openEntryMaxLength,
+                            "choices": []
+                        };
                         wars.push(lastwar);
                     }
-                    if(row.choice !== null) {
-                        lastwar.choices.push({"choice": row.choice, "amount": row.amount, "created": row.created, "creator": row.creator, "lastVote": row.lastVote, "lastVoter": row.lastVoter})
+                    if (row.choice !== null) {
+                        lastwar.choices.push({
+                            "choice": row.choice,
+                            "amount": row.amount,
+                            "created": row.created,
+                            "creator": row.creator,
+                            "lastVote": row.lastVote,
+                            "lastVoter": row.lastVoter
+                        })
                     }
                 }
-                con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function(err, result2) {
+                con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result2) {
                     if (err) throw err;
-                    con.query("SELECT * FROM emoteWar ORDER BY count DESC", function(err, result3) {
+                    con.query("SELECT * FROM emoteWar ORDER BY count DESC", function (err, result3) {
                         if (err) throw err;
                         res.writeHead(200, {'Content-Type': 'text/json'});
                         res.write(JSON.stringify({"wars": wars, "incentives": result2, "emotewar": result3}));
@@ -537,6 +601,40 @@ function api(req, res, query) {
         }
     });
 }
+
+function profile(req, res, query) {
+    if (!('user' in query)) {
+        res.writeHead(400, "Missing Parameter");
+        res.end();
+        return;
+    }
+    con.query("SELECT profileDescription FROM users WHERE users.name = ?", query.user, function(err, resultOuter) {
+        if (err) throw err;
+        if (resultOuter.length === 0) {
+            res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
+            res.write("404 - User not found.");
+            res.end();
+            return;
+        }
+        con.query("SELECT badges.name, badges.description, badges.image FROM has_badges JOIN badges ON has_badges.badgeID =" +
+            " badges.id JOIN users ON has_badges.userID = users.id WHERE users.name = ?", query.user, function (err, result) {
+            if (err) throw err;
+            res.writeHead(200, {'Content-Type': 'text/html'});
+            let badges = '';
+            for (let row of result) {
+                let badge = badgetemplate;
+                badge = badge.replace(/{DESCRIPTION}/g, row.description);
+                badge = badge.replace(/{IMAGE}/g, row.image);
+                badge = badge.replace(/{NAME}/g, row.name);
+                badges += badge;
+            }
+            res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{USERNAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)));
+            res.end();
+        });
+    });
+
+}
+
 
 http.createServer(function (req, res) {
     let q = url.parse(req.url, true);
@@ -606,6 +704,10 @@ http.createServer(function (req, res) {
                 api(req, res, q.query);
                 break;
             }
+            case "profile": {
+                profile(req, res, q.query);
+                break;
+            }
             default: {
                 res.writeHead(404, {'Content-Type': 'text/html'});
                 res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
@@ -613,7 +715,7 @@ http.createServer(function (req, res) {
             }
         }
     } catch (err) {
-        res.writeHead(500, "Internal Server Error", {"Content-Type":"text/html"});
+        res.writeHead(500, "Internal Server Error", {"Content-Type": "text/html"});
         res.write("Something went wrong. Sorry. Blame Marenthyu! Tell him this: " + err.toString());
         res.end();
         console.log(err.toString());
