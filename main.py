@@ -2340,7 +2340,7 @@ class NepBot(NepBotClass):
                     
                 cur = db.cursor()
                 # Are they a DeepDigger?
-                cur.execute("SELECT id, points, waifuid, boostername, type FROM tokens WHERE token=%s AND claimable=1", [args[0]])
+                cur.execute("SELECT id, points, waifuid, boostername, type FROM tokens WHERE token=%s AND claimable=1 AND (only_redeemable_by IS NULL OR only_redeemable_by = %s) AND (not_redeemable_by IS NULL OR not_redeemable_by != %s)", [args[0], tags['user-id'], tags['user-id']])
                 redeemablerows = cur.fetchall()
                 
                 if len(redeemablerows) == 0:
