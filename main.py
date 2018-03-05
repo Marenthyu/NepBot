@@ -3237,6 +3237,186 @@ class NepBot(NepBotClass):
                     self.message(channel, "Picked %d winners for the giveaway: %s!" % (num_winners, winner_names), isWhisper)
                     cur.close()
                     return
+            if command == "raffle":
+                with db.cursor() as cur:
+                    cur.execute("SELECT id, status, ticket_price, max_tickets FROM raffles ORDER BY id DESC LIMIT 1")
+                    raffle_info = cur.fetchone()
+                    
+                    if len(args) == 0:
+                        # check for info
+                        if raffle_info is None or raffle_info[1] == 'done':
+                            self.message(channel, "No raffle is open at this time.", isWhisper)
+                            return
+                        else:
+                            cur.execute("SELECT num_tickets, num_winners, won_grand FROM raffle_tickets WHERE raffleid = %s AND userid = %s", [raffle_info[0], tags['user-id']])
+                            my_tickets = cur.fetchone()
+                            
+                            if raffle_info[1] == 'open':
+                                if my_tickets is None:
+                                    self.message(channel, "There is a raffle currently open. You can buy up to %d tickets for %d points each using !raffle buy <amount>. You don't have any tickets right now." % (raffle_info[3], raffle_info[2]), isWhisper)
+                                elif my_tickets[0] < raffle_info[3]:
+                                    self.message(channel, "There is a raffle currently open. You have bought %d tickets so far. You can buy up to %d more for %d points each using !raffle buy <amount>." % (my_tickets[0], raffle_info[3] - my_tickets[0], raffle_info[2]), isWhisper)
+                                else:
+                                    self.message(channel, "There is a raffle currently open. You are already at the limit of %d tickets." % (raffle_info[3]), isWhisper)
+                            else:
+                                # raffle in process of drawing
+                                if my_tickets is None:
+                                    self.message(channel, "The current raffle is in the process of being drawn. Unfortunately, you didn't buy any tickets! Try again next raffle.")
+                                else:
+                                    if my_tickets[2] != 0:
+                                        self.message(channel, "The current raffle is in the process of being drawn. So far you have won %d minor prizes and a grand prize from your %d tickets!" % (my_tickets[1] - 1, my_tickets[0]))
+                                    else:
+                                        self.message(channel, "The current raffle is in the process of being drawn. So far, you have won %d minor prizes and no grand prize from your %d tickets." % (my_tickets[1], my_tickets[0]))
+                                        
+                            return
+                        
+                    subcmd = args[0].lower()
+                    if subcmd == 'buy':
+                        if raffle_info[1] != 'open':
+                            self.message(channel, "Raffle ticket purchases aren't open right now. Use !raffle to check the overall status.")
+                            return
+                        
+                        if len(args) < 2:
+                            self.message(channel, "Usage: !raffle buy <amount>", isWhisper)
+                            return
+                            
+                        try:
+                            tickets = int(args[1])
+                            assert tickets >= 0
+                        except Exception:
+                            self.message(channel, "Invalid amount of tickets specified.", isWhisper)
+                            return
+                            
+                        cur.execute("SELECT num_tickets, num_winners, won_grand FROM raffle_tickets WHERE raffleid = %s AND userid = %s", [raffle_info[0], tags['user-id']])
+                        my_tickets = cur.fetchone()
+                        
+                        can_buy = raffle_info[3] if my_tickets is None else raffle_info[3] - my_tickets[0]
+                        cost = tickets * raffle_info[2]
+                        
+                        if tickets > can_buy:
+                            if can_buy == 0:
+                                self.message(channel, "%s, you're already at the maximum of %d tickets for this raffle. Please wait for the drawing." % (tags['display-name'], raffle_info[3]), isWhisper)
+                            else:
+                                self.message(channel, "%s, you can only buy %d more tickets for this raffle. Please adjust your purchase." % (tags['display-name'], can_buy), isWhisper)
+                            return
+                            
+                        if not hasPoints(tags['user-id'], cost):
+                            self.message(channel, "%s, you don't have the %d points required to buy %d tickets." % (tags['display-name'], cost, tickets), isWhisper)
+                            return
+                            
+                        # okay, buy the tickets
+                        addPoints(tags['user-id'], -cost)
+                        if my_tickets is None:
+                            cur.execute("INSERT INTO raffle_tickets (raffleid, userid, num_tickets, created) VALUES(%s, %s, %s, %s)", [raffle_info[0], tags['user-id'], tickets, current_milli_time()])
+                        else:
+                            cur.execute("UPDATE raffle_tickets SET num_tickets = num_tickets + %s, updated = %s WHERE raffleid = %s AND userid = %s", [tickets, current_milli_time(), raffle_info[0], tags['user-id']])
+                            
+                        self.message(channel, "%s, you successfully bought %d raffle tickets for %d points." % (tags['display-name'], tickets, cost), isWhisper)
+                        return
+                    
+                    if sender not in superadmins:
+                        self.message(channel, "Usage: !raffle / !raffle buy <amount>", isWhisper)
+                        return
+                    
+                    if subcmd == 'open':
+                        if raffle_info is not None and raffle_info[1] != 'done':
+                            self.message(channel, "There is already an incomplete raffle right now.", isWhisper)
+                            return
+                        if len(args) < 3:
+                            self.message(channel, "Usage: !raffle open <points per ticket> <max tickets>", isWhisper)
+                            return
+                        try:
+                            points_per_ticket = int(args[1])
+                            max_tickets = int(args[2])
+                            assert max_tickets > 0 and max_tickets < 100
+                            assert points_per_ticket >= 100
+                        except Exception:
+                            self.message(channel, "Invalid arguments. Usage: !raffle open <points per ticket> <max tickets>", isWhisper)
+                            return
+                        
+                        # create a new raffle
+                        cur.execute("INSERT INTO raffles (opened, creator, status, ticket_price, max_tickets) VALUES(%s, %s, 'open', %s, %s)", [current_milli_time(), tags['user-id'], points_per_ticket, max_tickets])
+                        self.message(channel, "Started a new raffle!", isWhisper)
+                        cur.close()
+                        return
+                    
+                    if subcmd == 'close':
+                        if raffle_info is None or raffle_info[1] != 'open':
+                            self.message(channel, "There is not an open raffle right now.", isWhisper)
+                            return
+                        cur.execute("UPDATE raffles SET closed = %s, status = 'drawing' WHERE id = %s", [current_milli_time(), raffle_info[0]])
+                        self.message(channel, "Closed ticket purchases for the current raffle!", isWhisper)
+                        return
+                        
+                    if subcmd == 'complete':
+                        if raffle_info is None or raffle_info[1] != 'drawing':
+                            self.message(channel, "There is not a raffle in the process of drawing right now.", isWhisper)
+                            return
+                        cur.execute("UPDATE raffles SET status = 'done' WHERE id = %s", [current_milli_time(), raffle_info[0]])
+                        self.message(channel, "Closed drawing for the current raffle!", isWhisper)
+                        return
+                        
+                    if subcmd == 'pick' or subcmd == 'draw':
+                        if raffle_info is None or raffle_info[1] != 'drawing':
+                            self.message(channel, "There is not a raffle in the process of drawing right now.", isWhisper)
+                            return
+                            
+                        if len(args) < 2:
+                            self.message(channel, "Usage: !raffle pick <amount of winners>", isWhisper)
+                            return
+                            
+                        winners = []
+                        
+                        try:
+                            num_winners = int(args[1])
+                            assert num_winners > 0
+                        except Exception:
+                            self.message(channel, "Usage: !raffle pick <amount of winners>", isWhisper)
+                            return
+                            
+                        for i in range(num_winners):
+                            cur.execute("SELECT raffle_tickets.userid, users.name FROM raffle_tickets INNER JOIN users ON raffle_tickets.userid = users.id WHERE raffle_tickets.raffleid = %s AND raffle_tickets.num_winners < raffle_tickets.num_tickets ORDER BY -LOG(1-RAND())/(num_tickets - num_winners) LIMIT 1", [raffle_info[0]])
+                            winner = cur.fetchone()
+                            if winner is None:
+                                # completely out of non-winning tickets
+                                break
+                            
+                            # add their name to the winner list
+                            winners.append(winner[1])
+                            
+                            # update their ticket entry
+                            cur.execute("UPDATE raffle_tickets SET num_winners = num_winners + 1, updated = %s WHERE raffleid = %s AND userid = %s", [current_milli_time(), raffle_info[0], winner[0]])
+                            
+                        if len(winners) == 0:
+                            self.message(channel, "Drew no new minor prize winners - the system is out of non-winning tickets!", isWhisper)
+                        elif len(winners) < num_winners:
+                            self.message(channel, "Drew %d minor prize winners (truncated) - %s !" % (len(winners), ", ".join(winners)), isWhisper)
+                        else:
+                            self.message(channel, "Drew %d minor prize winners - %s !" % (len(winners), ", ".join(winners)), isWhisper)
+                        
+                        return
+                        
+                    if subcmd == 'pickgrand' or subcmd == 'drawgrand':
+                        if raffle_info is None or raffle_info[1] != 'drawing':
+                            self.message(channel, "There is not a raffle in the process of drawing right now.", isWhisper)
+                            return
+                            
+                        if len(args) >= 2:
+                            self.message(channel, "!raffle drawgrand only draws one winner at once.", isWhisper)
+                            return
+                            
+                        cur.execute("SELECT raffle_tickets.userid, users.name FROM raffle_tickets INNER JOIN users ON raffle_tickets.userid = users.id WHERE raffle_tickets.raffleid = %s AND raffle_tickets.num_winners < raffle_tickets.num_tickets AND raffle_tickets.won_grand = 0 ORDER BY -LOG(1-RAND())/(num_tickets - num_winners) LIMIT 1", [raffle_info[0]])
+                        winner = cur.fetchone()
+                        if winner is None:
+                            # completely out of non-winning tickets
+                            self.message(channel, "Could not draw a new grand prize winner as there are no applicable users left!", isWhisper)
+                            return
+                        
+                        # update their ticket entry
+                        cur.execute("UPDATE raffle_tickets SET num_winners = num_winners + 1, won_grand = 1, updated = %s WHERE raffleid = %s AND userid = %s", [current_milli_time(), raffle_info[0], winner[0]])
+                        
+                        self.message(channel, "Drew a new grand prize winner: %s!" % winner[1])
+                        return
             if command == "bounty":
                 if len(args) == 0:
                     self.message(channel, "Usage: !bounty <ID> <amount> / !bounty list / !bounty check <ID> / !bounty cancel <ID>", isWhisper=isWhisper)
