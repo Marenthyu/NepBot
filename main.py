@@ -2340,16 +2340,11 @@ class NepBot(NepBotClass):
                     
                 cur = db.cursor()
                 # Are they a DeepDigger?
-                cur.execute("SELECT id, points, waifuid, boostername, type FROM tokens WHERE token=%s AND claimable=1 AND (only_redeemable_by IS NULL OR only_redeemable_by = %s) AND (not_redeemable_by IS NULL OR not_redeemable_by != %s)", [args[0], tags['user-id'], tags['user-id']])
+                cur.execute("SELECT id, points, waifuid, boostername, type FROM tokens WHERE token=%s AND claimable=1 AND (only_redeemable_by IS NULL OR only_redeemable_by = %s) AND (not_redeemable_by IS NULL OR not_redeemable_by != %s) LIMIT 1", [args[0], tags['user-id'], tags['user-id']])
                 redeemablerows = cur.fetchall()
                 
                 if len(redeemablerows) == 0:
                     self.message(channel, "Unknown token.", isWhisper)
-                    cur.close()
-                    return
-                    
-                if len(redeemablerows) > 1:
-                    self.message(channel, "Go tell an admin that token %s is broken (duplicate token name)." % args[0], isWhisper)
                     cur.close()
                     return
                     
