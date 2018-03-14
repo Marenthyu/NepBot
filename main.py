@@ -3608,7 +3608,7 @@ class NepBot(NepBotClass):
                         # outbid message?
                         if outbidding:
                             # attempt to whisper for outbid
-                            cur.execute("SELECT users.name FROM bounties JOIN users ON bounties.userid=users.id WHERE bounties.waifuid = %s AND bounties.amount = %s LIMIT 1", [waifu['id'], highest_other_bid])
+                            cur.execute("SELECT users.name FROM bounties JOIN users ON bounties.userid=users.id WHERE bounties.waifuid = %s AND bounties.amount = %s AND bounties.status = 'open' LIMIT 1", [waifu['id'], highest_other_bid])
                             other_bidder = cur.fetchone()
                             if other_bidder is not None:
                                 self.message('#%s' % other_bidder[0], "Your bounty on [%d] %s has been outbid. The new highest bounty is %d points." % (waifu['id'], waifu['name'], amount), True)
