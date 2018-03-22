@@ -1537,7 +1537,7 @@ class NepBot(NepBotClass):
                         self.message(channel, "User not found.")
                         return
                     userid = row[0]
-            self.do_command(args[1][1:].lower(), args[2:], args[0].lower(), channel, {'display-name': args[0], 'user-id': userid}, isWhisper)
+            self.do_command(args[1][1:].lower(), args[2:], args[0].lower(), channel, {'display-name': args[0], 'user-id': userid, 'badges': []}, isWhisper)
             return
         with busyLock:
             if command == config["marathonHelpCommand"] and isMarathonChannel:
@@ -2750,6 +2750,8 @@ class NepBot(NepBotClass):
                     return
                 else:
                     subcmd = str(args[0]).lower()
+                    betPrizeNames = {config["betPrizeTier%dToken" % tier]:config["betPrizeTier%dName" % tier] for tier in range(1, 8)}
+                    
                     if canManageBets and subcmd == "open":
                         if openBet(channel):
                             self.message(channel, "Bets are now open! Use !bet HH:MM:SS(.ms) to submit your bet!")
@@ -2903,71 +2905,82 @@ class NepBot(NepBotClass):
                             
 
                             # calculate first run of prizes
-                            prizes = []
+                            prizes = defaultdict(list)
                             place = 0
                             for winner in resultData["winners"]:
                                 place += 1
-                                prize = 120 * (numEntries + 1 - place) + 40 * numEntries
-
-                                # apply multipliers
-                                prize *= prizeMultiplier
                                 
-                                # stop increasing the average payout beyond a certain participant cap
-                                if numEntries > int(config["betParticipantScalingCap"]):
-                                    prize *= (100*int(config["betParticipantScalingCap"]) + 60) / (100*numEntries + 60)
-
-                                if abs(winner["timedelta"]) < 10:
-                                    # what a lucky SoB
-                                    prize *= 10
-                                elif abs(winner["timedelta"]) < 1000:
-                                    # 3x multiplier for within a second
-                                    prize *= 3
-                                elif abs(winner["timedelta"]) < 60000 and resultData["result"] > 3600000:
-                                    # 1.5x multiplier if within 1 minute, only if run was longer than 1hr
-                                    prize *= 1.5
-
-                                # make our prizes nice, also set a minimum prize of 50 per place
-                                roundNum = 100.0 if prize > 5000 else 50.0
-                                prize = max(int(round(prize/roundNum)*roundNum), 50 * (numEntries + 1 - place))
-
-                                prizes.append(prize)
-                                addPoints(winner["id"], prize)
-                                cur.execute("UPDATE placed_bets SET prize = %s WHERE betid = %s AND userid = %s", [prize, betRow[0], winner["id"]])
-
-                            paidOut = sum(prizes)
+                                if abs(winner["timedelta"]) < 10 and resultData["result"] >= 1800000:
+                                    prizeTier = 7
+                                elif abs(winner["timedelta"]) < 1000 and resultData["result"] >= 1800000:
+                                    prizeTier = 6
+                                else:
+                                    prizeTier = 1
+                                    
+                                    if place == 1:
+                                        prizeTier += 1
+                                    if place <= 3 and numEntries >= 10:
+                                        prizeTier += 1
+                                    if place <= numEntries//2:
+                                        prizeTier += 1
+                                    if abs(winner["timedelta"]) < 60000 and resultData["result"] >= 3600000:
+                                        prizeTier += 1
+                                    if isMarathonChannel and prizeTier < 5:
+                                        prizeTier += 1
+                                
+                                prizeToken = config["betPrizeTier%dToken" % prizeTier]
+                                prizePack = config["betPrizeTier%dBooster" % prizeTier]
+                                prizeName = config["betPrizeTier%dName" % prizeTier]
+                                
+                                prizes[prizeToken].append(winner["name"])
+                                cur.execute("INSERT INTO tokens (token, boostername, claimable, bet_prize, type, only_redeemable_by) VALUES(%s, %s, 1, 1, 'single', %s)", [prizeToken, prizePack, winner["id"]])
+                                cur.execute("UPDATE placed_bets SET prizeToken = %s WHERE betid = %s AND userid = %s", [prizeToken, betRow[0], winner["id"]])
                                 
                             # broadcaster prize
-                            # run length in hours * 500, capped to match first place prize
-                            # minimum = 1/2 of first place prize
-                            bcPrize = min(max(resultData["result"] / 7200.0, max(prizes) / 2.0, 50), max(prizes), resultData["result"] / 2400.0)
-                            bcPrize = int(round(bcPrize / 50.0) * 50)
+                            # run length in hours * 500, rounded to nearest 50
+                            bcPrize = max(int(round(resultData["result"] / 360000.0) * 50), 50)
                             
                             cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
-                            paidOut += bcPrize
-                            
-                            cur.execute("UPDATE bets SET status = 'paid', totalPaid = %s, paidBroadcaster = %s, paidAt = %s WHERE id = %s", [paidOut, bcPrize, current_milli_time(), betRow[0]])
+                            cur.execute("UPDATE bets SET status = 'paid', paidBroadcaster = %s, paidAt = %s WHERE id = %s", [bcPrize, current_milli_time(), betRow[0]])
 
-                            # take away points from the bot account
-                            cur.execute("UPDATE users SET points = points - %s WHERE name = %s", [paidOut, config["username"]])
-
-                            messages = ["Paid out %d total points in prizes. Payouts: " % paidOut]
-                            for i in range(numEntries):
-                                msg = "{name} ({place}) - {points} points; ".format(name=resultData["winners"][i]["name"], place=formatRank(i+1), points=prizes[i])
+                            messages = ["Paid out the following prizes: "]
+                            for prizeToken in prizes:
+                                msg = betPrizeNames[prizeToken] + " - " + ", ".join(prizes[prizeToken]) + "; "
                                 if len(messages[-1] + msg) > 400:
                                     messages.append(msg)
                                 else:
                                     messages[-1] += msg
 
-                            if bcPrize > 0:
-                                msg = "{name} (broadcaster) - {points} points".format(name=channel[1:], points=bcPrize)
-                                if len(messages[-1] + msg) > 400:
-                                    messages.append(msg)
-                                else:
-                                    messages[-1] += msg
+                            msgBC = "{points} points - {name} (broadcaster)".format(name=channel[1:], points=bcPrize)
+                            if len(messages[-1] + msgBC) > 400:
+                                messages.append(msgBC)
+                            else:
+                                messages[-1] += msgBC
 
                             for message in messages:
                                 self.message(channel, message, isWhisper)
+                                
+                            # alert each person individually as well
+                            # sent after the messages to the channel itself deliberately
+                            for prizeToken in prizes:
+                                for winnerName in prizes[prizeToken]:
+                                    whisperArgs = (betPrizeNames[prizeToken], channel[1:], prizeToken)
+                                    self.message('#'+winnerName, "You won a %s from the bet in %s's channel. Redeem it in any chat with !redeem %s" % whisperArgs, True)
 
+                        cur.close()
+                        return
+                    elif subcmd == "packs":
+                        # check any packs they might have left to claim
+                        cur = db.cursor()
+                        cur.execute("SELECT token, COUNT(*) FROM tokens WHERE claimable = 1 AND bet_prize = 1 AND only_redeemable_by = %s GROUP BY token", [tags['user-id']])
+                        prizes = cur.fetchall()
+                        
+                        if len(prizes) > 0:
+                            prizeStr = ", ".join("%s%s (!redeem %s)" % (betPrizeNames[row[0]], " x%d" % row[1] if row[1] > 1 else "", row[0]) for row in prizes)
+                            self.message(channel, "%s, you have the following unclaimed bet prizes: %s" % (tags['display-name'], prizeStr), isWhisper)
+                        else:
+                            self.message(channel, "%s, you have no unclaimed bet prizes right now. Participate in more bets to earn free packs!" % tags['display-name'], isWhisper)
+                        
                         cur.close()
                         return
                     else:
