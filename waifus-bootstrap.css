@@ -175,3 +175,12 @@ body {
     margin-top: 3px;
     background:  rgb(237, 237, 237);
 }
+
+.row {
+    padding-left: 2rem;
+    padding-right: 2rem;
+}
+
+.col-favourite {
+    min-width: 24%;
+}

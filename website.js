@@ -403,6 +403,24 @@ function claimedsets(req, res, query) {
         })
 }
 
+function getCardHtml(template, row) {
+    template = template.replace(/{AMOUNTHOLDER}/g, row.amount > 1 ? bootstraphandamtholder : '');
+    template = template.replace(/{PROMOTEDHOLDER}/g, row.rarity > row.base_rarity ? bootstraphandpromoholder : '');
+    if (row.rarity > row.base_rarity) {
+        template = template.replace(/{STARS}/g, "★".repeat(row.rarity - row.base_rarity));
+    }
+    else {
+        template = template.replace(/{STARS}/g, "");
+    }
+    template = template.replace(/{ID}/g, row.id.toString());
+    template = template.replace(/{IMAGE}/g, row.image.toString());
+    template = template.replace(/{NAME}/g, row.Name.toString());
+    template = template.replace(/{SERIES}/g, row.series.toString());
+    template = template.replace(/{RARITY}/g, getRarityName(row.rarity));
+    template = template.replace(/{AMOUNT}/g, row.amount.toString());
+    return template;
+}
+
 function bootstraphand(req, res, query) {
     if (!('user' in query)) {
         res.writeHead(400, "Missing Parameter");
@@ -423,20 +441,7 @@ function bootstraphand(req, res, query) {
         let cards = '';
         for (let row of result) {
             let card = bootstraphandcard;
-            card = card.replace(/{AMOUNTHOLDER}/g, row.amount > 1 ? bootstraphandamtholder : '');
-            card = card.replace(/{PROMOTEDHOLDER}/g, row.rarity > row.base_rarity ? bootstraphandpromoholder : '');
-            if (row.rarity > row.base_rarity) {
-                card = card.replace(/{STARS}/g, "★".repeat(row.rarity - row.base_rarity));
-            }
-            else {
-                card = card.replace(/{STARS}/g, "");
-            }
-            card = card.replace(/{ID}/g, row.id.toString());
-            card = card.replace(/{IMAGE}/g, row.image.toString());
-            card = card.replace(/{NAME}/g, row.Name.toString());
-            card = card.replace(/{SERIES}/g, row.series.toString());
-            card = card.replace(/{RARITY}/g, getRarityName(row.rarity));
-            card = card.replace(/{AMOUNT}/g, row.amount.toString());
+            card = getCardHtml(card, row);
             cards += card;
         }
         res.write(bootstraphandtpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user));
@@ -608,7 +613,7 @@ function profile(req, res, query) {
         res.end();
         return;
     }
-    con.query("SELECT profileDescription FROM users WHERE users.name = ?", query.user, function(err, resultOuter) {
+    con.query("SELECT profileDescription, favourite FROM users WHERE users.name = ?", query.user, function(err, resultOuter) {
         if (err) throw err;
         if (resultOuter.length === 0) {
             res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
@@ -628,8 +633,22 @@ function profile(req, res, query) {
                 badge = badge.replace(/{NAME}/g, row.name);
                 badges += badge;
             }
-            res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{USERNAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)));
-            res.end();
+            con.query("SELECT waifus.id, waifus.Name, waifus.image, waifus.base_rarity, waifus.series FROM waifus WHERE id = ?", resultOuter[0].favourite, function(err, resultInner) {
+                if (err) throw err;
+
+                let row = resultInner[0];
+
+                row.amount = 1;
+                row.rarity = row.base_rarity;
+
+                let card = bootstraphandcard;
+
+                card = getCardHtml(card, row);
+
+                res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{USERNAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card));
+                res.end();
+            });
+
         });
     });
 
