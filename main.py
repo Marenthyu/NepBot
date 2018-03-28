@@ -2061,6 +2061,8 @@ class NepBot(NepBotClass):
                         except ValueError:
                             self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
                             return
+                            
+                    
 
                     payup = ourid
                     firstSpecialRarity = int(config["numNormalRarities"])
@@ -2085,6 +2087,9 @@ class NepBot(NepBotClass):
                             return
                         if want["rarity"] < have["rarity"]:
                             payup = otherid
+                    elif points > 0:
+                        self.message(channel, "You cannot attach points on same-rarity trades.", isWhisper)
+                        return
                             
                     # cancel any old trades with this pairing
                     cur.execute("UPDATE trades SET status = 'cancelled', updated = %s WHERE fromid = %s AND toid = %s AND status = 'open'", [current_milli_time(), ourid, otherid])
