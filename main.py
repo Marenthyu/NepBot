@@ -1282,24 +1282,32 @@ class NepBot(NepBotClass):
                 # process all users
                 logger.debug("Caught users, giving points and creating accounts, amount to do = %d" % len(doneusers))
                 newUsers = []
+                maxPointsInactive = int(config["maxPointsInactive"])
+                overflowPoints = 0
                 
                 while len(doneusers) > 0:
                     currentSlice = doneusers[:100]
                     with busyLock:
                         cur = db.cursor()
-                        cur.execute("SELECT name FROM users WHERE name IN(%s)" % ",".join(["%s"] * len(currentSlice)), currentSlice)
+                        cur.execute("SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(["%s"] * len(currentSlice)), currentSlice)
                         foundUsersData = cur.fetchall()
                         cur.close()
                     foundUsers = [row[0] for row in foundUsersData]
                     newUsers += [user for user in currentSlice if user not in foundUsers]
                     if len(foundUsers) > 0:
                         updateData = []
-                        for viewer in foundUsers:
+                        for viewerInfo in foundUsersData:
                             pointGain = int(config["passivePoints"])
-                            if viewer in activitymap and viewer in validactivity:
-                                pointGain += max(10 - int(activitymap[viewer]), 0)
+                            if viewerInfo[0] in activitymap and viewerInfo[0] in validactivity:
+                                pointGain += max(10 - int(activitymap[viewerInfo[0]]), 0)
                             pointGain = int(pointGain * float(config["pointsMultiplier"]))
-                            updateData.append((pointGain, viewer))
+                            if viewerInfo[2] is None:
+                                maxPointGain = max(maxPointsInactive - viewerInfo[1], 0)
+                                if pointGain > maxPointGain:
+                                    overflowPoints += pointGain - maxPointGain
+                                    pointGain = maxPointGain
+                            if pointGain > 0:
+                                updateData.append((pointGain, viewerInfo[0]))
                             
                         with busyLock:
                             cur = db.cursor()
@@ -1307,6 +1315,13 @@ class NepBot(NepBotClass):
                             cur.close()
                             
                     doneusers = doneusers[100:]
+                    
+                if overflowPoints > 0:
+                    logger.debug("Paying %d overflow points to the bot account" % overflowPoints)
+                    with busyLock:
+                        cur = db.cursor()
+                        cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [overflowPoints, config["username"]])
+                        cur.close()
                     
                 # now deal with user names that aren't already in the DB
                 if len(newUsers) > 10000:
