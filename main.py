@@ -398,6 +398,45 @@ def attemptBountyFill(bot, waifuid):
             # no bounty
             return 0
 
+def setFavourite(userid, waifu):
+    with db.cursor() as cur:
+        cur.execute("UPDATE users SET favourite=%s WHERE id = %s", [waifu, userid])
+
+def setDescription(userid, newDesc):
+    with db.cursor() as cur:
+        cur.execute("UPDATE users SET profileDescription=%s WHERE id = %s", [newDesc, userid])
+
+def getBadgeByID(id):
+    logger.debug("Getting badge for id %s", id)
+    try:
+        id = int(id)
+        if id < 1 or id > maxBadgeID():
+            logger.debug("ID was smaller than 1 or bigger than max.")
+            return None
+    except ValueError:
+        logger.debug("ValueError, not an int")
+        return None
+    cur = db.cursor()
+    cur.execute("SELECT id, name, description, image FROM badges WHERE id=%s",
+                [id])
+    row = cur.fetchone()
+    ret = {"id": row[0], "name": row[1], "image": row[3], "description":row[2]}
+    cur.close()
+    logger.debug("Fetched Badge from id: %s", ret)
+    return ret
+
+def giveBadge(userid, badge):
+    badgeObj = getBadgeByID(badge)
+    if badgeObj is None:
+        return False
+    else:
+        try:
+            with db.cursor() as cur:
+                cur.execute("INSERT INTO has_badges(userID, badgeID) VALUE (%s, %s)", [userid, badge])
+        except:
+            logger.debug("Had an error.")
+            return False
+        return True
 
 def getHoraro():
     "https://horaro.org/-/api/v1/schedules/3911mu51ljb1wf7a5e/ticker"
@@ -760,6 +799,12 @@ def maxWaifuID():
     cur.close()
     return ret
 
+def maxBadgeID():
+    cur = db.cursor()
+    cur.execute("SELECT MAX(id) FROM badges")
+    ret = int(cur.fetchone()[0])
+    cur.close()
+    return ret
 
 def getUniqueCards(userid):
     with db.cursor() as cur:
@@ -1024,13 +1069,6 @@ class CantAffordBoosterException(Exception):
         super(CantAffordBoosterException, self).__init__()
         self.cost = cost
 
-def setFavourite(userid, waifu):
-    with db.cursor() as cur:
-        cur.execute("UPDATE users SET favourite=%s WHERE id = %s", [waifu, userid])
-
-def setDescription(userid, newDesc):
-    with db.cursor() as cur:
-        cur.execute("UPDATE users SET profileDescription=%s WHERE id = %s", [newDesc, userid])
 
 def openBooster(userid, username, channel, isWhisper, packname, buying=True):
     with db.cursor() as cur:
@@ -2684,7 +2722,7 @@ class NepBot(NepBotClass):
 
                 cur = db.cursor()
                 # Are they a DeepDigger?
-                cur.execute("SELECT id, points, waifuid, boostername, type FROM tokens WHERE token=%s AND claimable=1",
+                cur.execute("SELECT id, points, waifuid, boostername, type, badgeID FROM tokens WHERE token=%s AND claimable=1",
                             [args[0]])
                 redeemablerows = cur.fetchall()
 
@@ -2752,11 +2790,20 @@ class NepBot(NepBotClass):
                 if redeemdata[1] != 0:
                     addPoints(tags['user-id'], redeemdata[1])
                     received.append("%d points" % redeemdata[1])
+                
+                # badge?
+                if redeemdata[5] is not None:
+                    badge = getBadgeByID(redeemdata[5])
+                    success = giveBadge(tags['user-id'], badge["id"])
+                    if success:
+                        received.append("A shiny new Badge: %s" % badge["name"])
+                    else:
+                        received.append("An invalid badge, or a badge you already had: %s" % badge["name"])
 
                 cur.execute(
-                    "INSERT INTO tokens_claimed (tokenid, userid, points, waifuid, boostername, boosterid, timestamp) VALUES(%s, %s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO tokens_claimed (tokenid, userid, points, waifuid, boostername, boosterid, timestamp, badgeID) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)",
                     [redeemdata[0], tags['user-id'], redeemdata[1], redeemdata[2], redeemdata[3], packid,
-                     current_milli_time()])
+                     current_milli_time(), redeemdata[5]])
 
                 # single use?
                 if redeemdata[4] == 'single':
