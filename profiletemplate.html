@@ -1,0 +1,53 @@
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{USERNAME}'s profile - Waifu TCG</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css"
+          integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+            integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+            crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+            integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+            crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js"
+            integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4"
+            crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/waifus-bootstrap.css">
+</head>
+<body>
+<div class='container-fluid'>
+    <h2>{USERNAME}
+        <small><a class="btn btn-primary" href="/hand?user={USERNAME}">Show Hand</a><br/></small>
+    </h2>
+    <hr>
+    <div class="row">
+        <div class="col">
+            <h3>Badges</h3>
+            <br/>
+            {BADGES}
+        </div>
+        <div class="col">
+            <h3>Description</h3>
+            <br/>
+            {DESCRIPTION}
+            <br/>
+            <small>Change with !profile description &lt;new description&gt;</small>
+            <br/><br/>
+
+        </div>
+        <div class="col-auto col-favourite">
+            <h3>Favourite</h3>
+            <br/>
+            {FAVOURITE}<br/>
+            <small>Change with !profile favourite &lt;id&gt;</small>
+            <br/>
+        </div>
+    </div>
+    <hr>
+
+</div>
+<br/>
+<i>All images (c) to their original Artists. No Copyright claimed from the owner of this Website.</i>
+</body>
+</html>
