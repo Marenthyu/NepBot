@@ -1077,11 +1077,11 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
 
         if buying:
             cur.execute(
-                "SELECT listed, cost, numCards, guaranteedSCrarity, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
+                "SELECT listed, buyable, cost, numCards, guaranteedSCrarity, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
                 [packname])
         else:
             cur.execute(
-                "SELECT listed, cost, numCards, guaranteedSCrarity, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s",
+                "SELECT listed, buyable, cost, numCards, guaranteedSCrarity, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s",
                 [packname])
 
         packinfo = cur.fetchone()
@@ -1090,11 +1090,12 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             raise InvalidBoosterException()
 
         listed = packinfo[0]
-        cost = packinfo[1]
-        numCards = packinfo[2]
-        minSCRarity = packinfo[3]
-        useEventWeightings = packinfo[4] != 0
-        normalChances = packinfo[5:]
+        buyable = packinfo[1]
+        cost = packinfo[2]
+        numCards = packinfo[3]
+        minSCRarity = packinfo[4]
+        useEventWeightings = packinfo[5] != 0
+        normalChances = packinfo[6:]
 
         if buying:
             if not hasPoints(userid, cost):
@@ -1122,7 +1123,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             # scale chances of the card appropriately
             currentChances = list(normalChances)
             guaranteedRarity = 0
-            if listed:
+            if listed and buyable:
                 for rarity in range(maxScalingRarity, minScalingRarity - 1, -1):
                     scaleIdx = rarity - minScalingRarity
                     if scalingData[scaleIdx] >= scalingThresholds[scaleIdx] * 2:
@@ -1166,7 +1167,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                 alertwaifus.append(waifu)
 
-            if buying and listed:
+            if listed and buyable:
                 for r in range(numScalingRarities):
                     if r + minScalingRarity != waifu['base_rarity']:
                         scalingData[r] += cost / numCards
