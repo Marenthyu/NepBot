@@ -3219,7 +3219,7 @@ class NepBot(NepBotClass):
             if command == "bet":
                 if len(args) < 1:
                     self.message(channel,
-                                 "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
+                                 "Usage: !bet <time> OR !bet status OR !bet packs OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
                                  isWhisper)
                     return
                 canManageBets = str(tags["badges"]).find("broadcaster") > -1 or sender in superadmins or (
