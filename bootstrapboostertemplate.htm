@@ -15,6 +15,28 @@
 </div>
 <div id="output"><input type="text" onClick="this.select();document.execCommand('copy');" readonly id="textField" value="Click a checkbox to update this to the command to use to keep/disenchant the corresponding waifu" style="width: 75%"/></div>
 <i>All images (c) to their original Artists. No Copyright claimed from the owner of this Website.</i>
+<script>
+function update() {
+	let elements = document.querySelectorAll('[type="checkbox"]');
+	textField = document.getElementById("textField");
+	
+    actionString = "";
+	for (index = 0, len = elements.length; index < len; ++index) {
+		if (elements[index].checked) {
+			actionString += "k";
+		} else {
+			actionString += "d";
+		}
+	}
+    if(actionString.indexOf("k") == -1) {
+        textField.value = "!booster trash";
+    }
+    else {
+        textField.value = "!booster select "+actionString;
+    }
+}
+setTimeout(update, 5000);
+</script>
 </div>
 </body>
 </html>
