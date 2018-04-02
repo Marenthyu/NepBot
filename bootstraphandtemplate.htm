@@ -15,28 +15,5 @@
 </div>
 <i>All images (c) to their original Artists. No Copyright claimed from the owner of this Website.</i>
 </div>
-<script>
-// Create date from input value
-var inputDate = new Date("2018-04-01");
-
-// Get today's date
-var todaysDate = new Date();
-
-// call setHours to take the time out of the comparison
-if(inputDate.setHours(0,0,0,0) == todaysDate.setHours(0,0,0,0)) {
-    setTimeout(function(){
-	var all = document.getElementsByTagName("img");
-
-	for (var i=0, max=all.length; i < max; i++) {
-		all[i].setAttribute("src", "http://content.invisioncic.com/r237714/monthly_2017_05/tumblr_nm3a9vrHa41tv4cyio1_400.thumb.gif.4ff8e0540ddaac03431a341d09945a3c.gif");
-	}
-	}, 10000);
-	setTimeout(function(){
-		window.location = "https://youtu.be/DLzxrzFCyOs";
-
-	}, 35000);
-}
-
-</script>
 </body>
 </html>
