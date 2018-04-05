@@ -2515,7 +2515,7 @@ class NepBot(NepBotClass):
 
                         ownerDescriptions = []
                         for owner in ownerData:
-                            if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner]:
+                            if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner] or ownedByOwner[owner] > 1:
                                 # verbose
                                 if ownedByOwner[owner] > 1:
                                     ownerDescriptions.append(owner + " (" + ", ".join(
