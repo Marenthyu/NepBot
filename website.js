@@ -480,6 +480,41 @@ function bootstrapbooster(req, res, query) {
     });
 }
 
+function pullfeed(req, res, query) {
+    
+    con.query("SELECT drops.rarity, drops.source, drops.channel, drops.timestamp, waifus.id AS waifuID, waifus.Name as waifuName, waifus.series AS waifuSeries, users.name AS username "+
+    "FROM drops JOIN waifus ON drops.waifuid = waifus.id JOIN users ON drops.userid = users.id WHERE drops.rarity >= 4 ORDER BY drops.id DESC LIMIT 100", function(err, result) {
+        if(err) throw err;
+        res.writeHead(200, {'Content-Type': 'text/html'});
+        for(let row of result) {
+            res.write("["+new Date(row.timestamp).toLocaleString("en-US")+"] ");
+            res.write(row.username+" pulled <code>["+row.waifuID+"]["+getRarityName(row.rarity)+"] "+row.waifuName+" from "+row.waifuSeries+"</code>");
+            if(row.source == 'freewaifu') {
+                res.write(" as a free waifu");
+            }
+            else if(row.source == 'buy') {
+                res.write(" using <code>!buy</code>");
+            }
+            else if(row.source.toString().startsWith("boosters.")) {
+                res.write(" from a "+row.source.substring(9)+" booster");
+            }
+            else {
+                res.write(" from a mysterious unknown source");
+            }
+            
+            if(row.channel == '$$whisper$$') {
+                res.write(" via whisper.");
+            }
+            else {
+                res.write(" in "+row.channel.substring(1)+"&#39;s channel.");
+            }
+            res.write("<br />");
+        }
+        res.end();
+    });
+    
+}
+
 function teaser(req, res, query) {
     res.writeHead(200, "naroHodo");
     res.write("<html><head><title>A Secret</title></head><body><small>Your journey isn't yet over.</small><br /><img src='https://share.marenthyu.de/B0kVw3MU.gif' width='100%' height='99%' alt='SGV5LCB5b3UgZm91bmQgbWUhIENvbmdyYXR1bGF0aW9ucyENCklmIHlvdSdyZSB0aGUgZmlyc3QsIHRha2UgdGhpcyBwcmVzZW50LCB5b3Uga25vdyB3aGVyZSB0byByZWRlZW0gaXQ6IFBhcnROdW1lcm9Vbm8NClNvLCBzb21lb25lIHdhcyBoZXJlIGJlZm9yZSB5b3UuIERvIHRha2UgdGhlIHNlY29uZGFyeSBwcmljZSwgYnV0IGRvbid0IHRlbGwgdGhlIG90aGVycyA7KTogUGFydE51bWVyb1Vub1lPVVJFVE9PU0xPVw0KDQpCdXQgc2luY2Ugd2UncmUgdGFsa2luZyB0ZWFzaW5nLCBoZXJlJ3MgdGhlIGdlbmVyYWwgZ2lzdDoNCkxhdGVyIHRvZGF5LCB3ZSB3aWxsIGFubm91bmNlIG91ciBuZXcgcmFyaXR5LCBteXRoaWNhbCwgb2ZmaWNpYWxseSEgVGhlcmUncyBhIGxvdCBtb3JlIGNvbWluZywgYnV0IHN0YXJ0aW5nIHdpdGggdGhlIG9mZmljaWFsIGFubm91bmNlbWVudCwgIXByb21vdGUgd2lsbCBiZSBsb2NrZWQuDQpBcyB3ZSBpbnRyb2R1Y2UgYSBuZXcgd2F5IHRvIHByb21vdGUgYW55IHdhaWZ1IHRvIHRoZSBuZXh0IHJhcml0eSwgeW91J2xsIGJlIGFibGUgdG8gaGF2ZSBhIHdhaWZ1IG5vdCBvbmx5IG9uIHRoZWlyIGJhc2UgcmFyaXR5LCBidXQgYWxzbyBwcm9tb3RlIGl0IHVwIHRoZSByYXJpdHkgbGFkZGVyLg0KDQpJdCdsbCBiZSBmdW4hDQoNCk9oIGFuZCByZW1lbWJlcjogSXQgYWluJ3Qgb3ZlciB1bnRpbCB0aGUgQ3JlZGl0cyByb2xsLg0KDQpZb3UncmUgaGVyZSBhZ2Fpbj8gR29vZCEgVGhhdCdzIGdvb2QhIEJlIHNuZWFreSBhbmQgeW91IHdpbGwgbm90IGxldCB0aGUgb3RoZXJzIGtub3d+DQpDaGVjayB0aG9zZSBtZXNzYWdlcyBpIHNlbnQuDQoNCkFuZCByZW1lbWJlcjogTm90IGV2ZXJ5dGhpbmcgbWF5IGJlIGNsZWFyIGZyb20gdGhlIGJlZ2lubmluZywgYnV0IHdpdGggdGltZSwgeW91IHdpbGwgaGF2ZSBhbGwgdGhlIGNsdWVzLg=='/></body></head></html>");
@@ -725,6 +760,10 @@ http.createServer(function (req, res) {
             }
             case "profile": {
                 profile(req, res, q.query);
+                break;
+            }
+            case "pullfeed": {
+                pullfeed(req, res, q.query);
                 break;
             }
             default: {
