@@ -1010,6 +1010,18 @@ def parseRarity(input):
     if rarity < 0 or rarity >= int(config["numNormalRarities"]) + int(config["numSpecialRarities"]):
         raise ValueError(input)
     return rarity
+    
+def parseBetTime(input):
+    match = time_regex.fullmatch(input)
+    if not match:
+        return None
+        
+    bet = match.groupdict()
+    if bet["ms"] is None:
+        bet["ms"] = "0"
+    ms = int(bet["ms"] + ("0" * max(3 - len(bet["ms"]), 0)))
+    total = int(bet["hours"]) * 3600000 + int(bet["minutes"]) * 60000 + int(bet["seconds"]) * 1000 + ms
+    return {"hours": total//3600000, "minutes": (total//60000) % 60, "seconds": (total//1000) % 60, "ms": total % 1000, "total": total}
 
 
 class CardNotInHandException(Exception):
@@ -3224,29 +3236,22 @@ class NepBot(NepBotClass):
                                  "Usage: !bet <time> OR !bet status OR !bet packs OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
                                  isWhisper)
                     return
-                canManageBets = str(tags["badges"]).find("broadcaster") > -1 or sender in superadmins or (
-                            sender in admins and isMarathonChannel)
-                match = time_regex.fullmatch(args[0])
-                if match:
-                    bet = match.groupdict()
-                    ms = 0
-                    if bet["ms"] is None:
-                        bet["ms"] = "0"
-                    while len(bet["ms"]) < 3:
-                        bet["ms"] = bet["ms"] + "0"
-                    ms = int(bet["ms"])
-                    betms = int(bet["hours"]) * 3600000 + int(bet["minutes"]) * 60000 + int(bet["seconds"]) * 1000 + ms
+                canAdminBets = sender in superadmins or (sender in admins and isMarathonChannel)
+                canManageBets = canAdminBets or str(tags["badges"]).find("broadcaster") > -1 
+                
+                bet = parseBetTime(args[0])
+                if bet:
                     if sender == channel[1:]:
                         self.message(channel, "You can't bet in your own channel, sorry!", isWhisper)
                         return
-                    open = placeBet(channel, tags["user-id"], betms)
+                    open = placeBet(channel, tags["user-id"], bet["total"])
                     if open:
                         self.message(channel,
                                      "Successfully entered {name}'s bet: {h}h {min}min {s}s {ms}ms".format(
                                          h=bet["hours"],
                                          min=bet["minutes"],
                                          s=bet["seconds"],
-                                         ms=str(betms % 1000),
+                                         ms=bet["ms"],
                                          name=tags['display-name']),
                                      isWhisper)
                     else:
@@ -3392,7 +3397,90 @@ class NepBot(NepBotClass):
                                 self.message(channel, message, isWhisper)
                         cur.close()
                         return
-                    elif subcmd == "payout" and (sender in superadmins or (sender in admins and isMarathonChannel)):
+                    elif subcmd == "forcereset" and canAdminBets:
+                        # change a started bet to open, preserving all current bets made
+                        with db.cursor() as cur:
+                            cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                                        [channel])
+                            betRow = cur.fetchone()
+                            
+                            if betRow is None or betRow[1] != 'started':
+                                self.message(channel, "There is no bet in progress in this channel.", isWhisper)
+                            else:
+                                cur.execute("UPDATE bets SET status = 'open', startTime = NULL WHERE id = %s", [betRow[0]])
+                                self.message(channel, "Reset the bet in progress in this channel to open status.", isWhisper)
+                        return
+                    elif subcmd == "changetime" and canAdminBets:
+                        # change the completion time of a completed bet
+                        if len(args) < 2:
+                            self.message(channel, "Usage: !bet changetime <time> (same format as !bet)", isWhisper)
+                            return
+                            
+                        ctdata = parseBetTime(args[1])
+                        if not ctdata:
+                            self.message(channel, "Usage: !bet changetime <time> (same format as !bet)", isWhisper)
+                            return
+                        
+                        with db.cursor() as cur:
+                            cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                                        [channel])
+                            betRow = cur.fetchone()
+                            
+                            if betRow is None or betRow[1] != 'completed':
+                                self.message(channel, "There is no just-completed bet in this channel.", isWhisper)
+                            else:
+                                cur.execute("UPDATE bets SET endTime = startTime + %s WHERE id = %s", [ctdata["total"], betRow[0]])
+                                self.message(channel,
+                                     "Successfully changed end time to: {h}h {min}min {s}s {ms}ms".format(
+                                         h=ctdata["hours"],
+                                         min=ctdata["minutes"],
+                                         s=ctdata["seconds"],
+                                         ms=ctdata["ms"]),
+                                     isWhisper)
+                        return
+                    elif subcmd == "forceenter" and canAdminBets:
+                        # enter another user into a bet
+                        if len(args) < 3:
+                            self.message(channel, "Usage: !bet forceenter <username> <time>", isWhisper)
+                            return
+                            
+                        tdata = parseBetTime(args[2])
+                        if not tdata:
+                            self.message(channel, "Usage: !bet forceenter <username> <time>", isWhisper)
+                            return
+                        
+                        enteruser = args[1].strip().lower()
+                        
+                        if enteruser == sender:
+                            self.message(channel, "You can't force-enter your own time, pls.", isWhisper)
+                            return
+                            
+                        with db.cursor() as cur:
+                            cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                                        [channel])
+                            betRow = cur.fetchone()
+                            
+                            if betRow is None or betRow[1] not in ("open", "started"):
+                                self.message(channel, "There is not a bet in this channel that is eligible for force-entries.", isWhisper)
+                            else:
+                                # check username
+                                cur.execute("SELECT id FROM users WHERE name = %s", [enteruser])
+                                enteridrow = cur.fetchone()
+                                if enteridrow is None:
+                                    self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
+                                    return
+                                enterid = int(enteridrow[0])
+                                cur.execute("REPLACE INTO placed_bets (betid, userid, bet, updated) VALUE (%s, %s, %s, %s)", [betRow[0], enterid, tdata["total"], current_milli_time()])
+                                self.message(channel,
+                                     "Successfully entered {user}'s bet: {h}h {min}min {s}s {ms}ms".format(
+                                         h=tdata["hours"],
+                                         min=tdata["minutes"],
+                                         s=tdata["seconds"],
+                                         ms=tdata["ms"],
+                                         user=enteruser),
+                                     isWhisper)
+                        return
+                    elif subcmd == "payout" and canAdminBets:
                         # pay out most recent bet in this channel
                         cur = db.cursor()
                         cur.execute("SELECT COALESCE(MAX(paidAt), 0) FROM bets WHERE channel = %s LIMIT 1", [channel])
