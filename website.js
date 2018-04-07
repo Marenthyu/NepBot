@@ -67,6 +67,15 @@ let rarities = {
     8: "special",
     9: "promo"
 };
+let pfhead = "<!DOCTYPE html>\n" +
+    "<html lang=\"en\">\n" +
+    "<head>\n" +
+    "    <meta charset=\"UTF-8\">\n" +
+    "    <title>Waifu TCG Pull Feed</title>\n" +
+    "</head>\n" +
+    "<body>\n";
+let pffoot = "</body>\n" +
+    "</html>";
 let sethead = "<!DOCTYPE html>\n" +
     "<html lang=\"en\">\n" +
     "<head>\n" +
@@ -485,7 +494,8 @@ function pullfeed(req, res, query) {
     con.query("SELECT drops.rarity, drops.source, drops.channel, drops.timestamp, waifus.id AS waifuID, waifus.Name as waifuName, waifus.series AS waifuSeries, users.name AS username "+
     "FROM drops JOIN waifus ON drops.waifuid = waifus.id JOIN users ON drops.userid = users.id WHERE drops.rarity >= 4 ORDER BY drops.id DESC LIMIT 100", function(err, result) {
         if(err) throw err;
-        res.writeHead(200, {'Content-Type': 'text/html'});
+        res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+        res.write(pfhead);
         for(let row of result) {
             res.write("["+new Date(row.timestamp).toLocaleString("en-US")+"] ");
             res.write(row.username+" pulled <code>["+row.waifuID+"]["+getRarityName(row.rarity)+"] "+row.waifuName+" from "+row.waifuSeries+"</code>");
@@ -510,6 +520,7 @@ function pullfeed(req, res, query) {
             }
             res.write("<br />");
         }
+        res.write(pffoot);
         res.end();
     });
     
