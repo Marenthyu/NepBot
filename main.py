@@ -4538,7 +4538,9 @@ class NepBot(NepBotClass):
                         return
                     setDescription(tags["user-id"], newDesc)
                     self.message(channel, tags["display-name"] + ", successfully updated your profile description!", isWhisper)
-
+            if command == "fixwaifu":
+                self.message(channel, "To submit changes/fixes for any waifu, please go to %s/fixes" % config["siteHost"], isWhisper)
+                return
 
 
 
