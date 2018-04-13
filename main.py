@@ -994,9 +994,14 @@ def formatRank(rankNum):
         return "%drd" % rankNum
 
 
+memes = ["🤔", "🏆", "✌", "🌲", "🍀", "🖐", "👌", "🤑", "🤣", "🎄"]
 def formatTimeDelta(ms):
     baseRepr = str(datetime.timedelta(milliseconds=ms, microseconds=0))
-    return baseRepr[:-3] if "." in baseRepr else baseRepr
+    output = baseRepr[:-3] if "." in baseRepr else baseRepr
+    if "memeMode" in config and config["memeMode"] == "meme":
+        for i in range(10):
+            output = output.replace(str(i), memes[i])
+    return output
 
 
 def parseRarity(input):
@@ -4365,7 +4370,6 @@ class NepBot(NepBotClass):
                         return
 
                     except Exception as exc:
-                        raise exc
                         self.message(channel, "Usage: !bounty <ID> <amount>", isWhisper=isWhisper)
                         return
 
