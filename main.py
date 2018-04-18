@@ -121,8 +121,11 @@ emotewaremotes = []
 revrarity = {}
 visiblepacks = ""
 validalertconfigvalues = []
+discordhooks = []
 
 busyLock = threading.Lock()
+discordLock = threading.Lock()
+streamlabsLock = threading.Lock()
 streamlabsauthurl = "https://www.streamlabs.com/api/v1.0/authorize?client_id=" + streamlabsclient + "&redirect_uri=https://marenthyu.de/cgi-bin/waifucallback.cgi&response_type=code&scope=alerts.create&state="
 streamlabsalerturl = "https://streamlabs.com/api/v1.0/alerts"
 alertheaders = {"Content-Type": "application/json",
@@ -132,7 +135,7 @@ waifu_regex = None
 
 
 def loadConfig():
-    global revrarity, blacklist, visiblepacks, admins, superadmins, validalertconfigvalues, waifu_regex, emotewaremotes
+    global revrarity, blacklist, visiblepacks, admins, superadmins, validalertconfigvalues, waifu_regex, emotewaremotes, discordhooks
     with db.cursor() as curg:
         curg.execute("SELECT * FROM config")
         logger.info("Importing config from database")
@@ -176,6 +179,12 @@ def loadConfig():
         curg.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
         packrows = curg.fetchall()
         visiblepacks = "/".join(row[0] for row in packrows)
+        
+        # discord hooks
+        with discordLock:
+            curg.execute("SELECT url FROM discordHooks ORDER BY priority DESC")
+            discrows = curg.fetchall()
+            discordhooks = [row[0] for row in discrows]
 
 
 def checkAndRenewAppAccessToken():
@@ -506,44 +515,37 @@ def updateGame(game):
 
 
 def sendStreamlabsAlert(channel, data):
-    # assumes busyLock is already reserved
-    cur = db.cursor()
     if '#' in channel:
         channel = channel[1:]
-    cur.execute("SELECT alertkey FROM channels WHERE name = %s LIMIT 1", [channel])
-    tokenRow = cur.fetchone()
+    
+    with busyLock:
+        with db.cursor() as cur:
+            cur.execute("SELECT alertkey FROM channels WHERE name = %s LIMIT 1", [channel])
+            tokenRow = cur.fetchone()
+    
     if tokenRow is not None and tokenRow[0] is not None:
         data['access_token'] = tokenRow[0]
-        try:
-            req = requests.post(streamlabsalerturl, headers=alertheaders, json=data)
-            if req.status_code != 200:
-                logger.debug("response for streamlabs alert: %s; %s", str(req.status_code), str(req.text))
-        except Exception:
-            logger.error("Tried to send a Streamlabs alert to %s, but failed." % channel)
-            logger.error("Error: %s", str(sys.exc_info()))
-
-    cur.close()
+        with streamlabsLock:
+            try:
+                req = requests.post(streamlabsalerturl, headers=alertheaders, json=data)
+                if req.status_code != 200:
+                    logger.debug("response for streamlabs alert: %s; %s", str(req.status_code), str(req.text))
+            except Exception:
+                logger.error("Tried to send a Streamlabs alert to %s, but failed." % channel)
+                logger.error("Error: %s", str(sys.exc_info()))
 
 
 def sendDiscordAlert(data):
-    # assumes busyLock is already reserved
-    cur = db.cursor()
-    cur.execute("SELECT url FROM discordHooks")
-    discordhooks = cur.fetchall()
-
-    for row in discordhooks:
-        url = row[0]
-        req2 = requests.post(
-            url,
-            json=data)
-        while req2.status_code == 429:
-            time.sleep((req2.headers["Retry-After"] / 1000) + 1)
+    with discordLock:
+        for url in discordhooks:
             req2 = requests.post(
                 url,
                 json=data)
-
-    cur.close()
-
+            while req2.status_code == 429:
+                time.sleep((req2.headers["Retry-After"] / 1000) + 1)
+                req2 = requests.post(
+                    url,
+                    json=data)
 
 def sendDrawAlert(channel, waifu, user, discord=True):
     logger.info("Alerting for waifu %s", str(waifu))
@@ -593,54 +595,24 @@ def sendDrawAlert(channel, waifu, user, discord=True):
                      "sound_href": alertSound, "duration": int(alertLength), "message": message}
         if alertColor == "rarity":
             alertbody["special_text_color"] = "rgb({r}, {g}, {b})".format(r=str(red), g=str(green), b=str(blue))
-
-        sendStreamlabsAlert(channel, alertbody)
-        if discord:
-            # check for first time drop
-            rarityName = str(config["rarity" + str(waifu["base_rarity"]) + "Name"])
-            discordbody = {"username": "Waifu TCG", "embeds": [
-                {
-                    "title": "A{n} {rarity} waifu has been dropped{first_time}!".format(
-                        rarity=rarityName,
-                        first_time=(" for the first time" if first_time else ""),
-                        n='n' if rarityName[0] in ('a', 'e', 'i', 'o', 'u') else '')
-                },
-                {
-                    "type": "rich",
-                    "title": "{user} dropped {name}!".format(user=str(user), name=str(waifu["name"])),
-                    "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
-                    "footer": {
-                        "text": "Waifu TCG by Marenthyu"
-                    },
-                    "image": {
-                        "url": str(waifu["image"])
-                    },
-                    "provider": {
-                        "name": "Marenthyu",
-                        "url": "https://marenthyu.de"
-                    }
-                }
-            ]}
-            if colorKey in config:
-                discordbody["embeds"][0]["color"] = int(config[colorKey])
-                discordbody["embeds"][1]["color"] = int(config[colorKey])
-            sendDiscordAlert(discordbody)
-
+            
         cur.close()
 
-
-def sendDisenchantAlert(channel, waifu, user):
-    with busyLock:
-        # no streamlabs alert for now
-        # todo maybe make a b&w copy of the waifu image
+    threading.Thread(target=sendStreamlabsAlert, args=(channel, alertbody)).start()
+    if discord:
+        # check for first time drop
+        rarityName = str(config["rarity" + str(waifu["base_rarity"]) + "Name"])
         discordbody = {"username": "Waifu TCG", "embeds": [
             {
-                "title": "A {rarity} waifu has been disenchanted!".format(
-                    rarity=str(config["rarity" + str(waifu["base_rarity"]) + "Name"]))
+                "title": "A{n} {rarity} waifu has been dropped{first_time}!".format(
+                    rarity=rarityName,
+                    first_time=(" for the first time" if first_time else ""),
+                    n='n' if rarityName[0] in ('a', 'e', 'i', 'o', 'u') else '')
             },
             {
                 "type": "rich",
-                "title": "{name} has been disenchanted! Press F to pay respects.".format(name=str(waifu["name"])),
+                "title": "{user} dropped {name}!".format(user=str(user), name=str(waifu["name"])),
+                "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
                 "footer": {
                     "text": "Waifu TCG by Marenthyu"
                 },
@@ -653,11 +625,40 @@ def sendDisenchantAlert(channel, waifu, user):
                 }
             }
         ]}
-        colorKey = "rarity" + str(waifu["base_rarity"]) + "EmbedColor"
         if colorKey in config:
             discordbody["embeds"][0]["color"] = int(config[colorKey])
             discordbody["embeds"][1]["color"] = int(config[colorKey])
-        sendDiscordAlert(discordbody)
+        threading.Thread(target=sendDiscordAlert, args=(discordbody,)).start()
+
+
+def sendDisenchantAlert(channel, waifu, user):
+    # no streamlabs alert for now
+    # todo maybe make a b&w copy of the waifu image
+    discordbody = {"username": "Waifu TCG", "embeds": [
+        {
+            "title": "A {rarity} waifu has been disenchanted!".format(
+                rarity=str(config["rarity" + str(waifu["base_rarity"]) + "Name"]))
+        },
+        {
+            "type": "rich",
+            "title": "{name} has been disenchanted! Press F to pay respects.".format(name=str(waifu["name"])),
+            "footer": {
+                "text": "Waifu TCG by Marenthyu"
+            },
+            "image": {
+                "url": str(waifu["image"])
+            },
+            "provider": {
+                "name": "Marenthyu",
+                "url": "https://marenthyu.de"
+            }
+        }
+    ]}
+    colorKey = "rarity" + str(waifu["base_rarity"]) + "EmbedColor"
+    if colorKey in config:
+        discordbody["embeds"][0]["color"] = int(config[colorKey])
+        discordbody["embeds"][1]["color"] = int(config[colorKey])
+    threading.Thread(target=sendDiscordAlert, args=(discordbody,)).start()
 
 
 def sendPromotionAlert(userid, waifuid, new_rarity):
@@ -682,31 +683,31 @@ def sendPromotionAlert(userid, waifuid, new_rarity):
             cur.execute("REPLACE INTO promotion_alerts_sent (userid, waifuid, rarity) VALUES(%s, %s, %s)",
                         [userid, waifuid, new_rarity])
 
-        # compile alert
-        discordbody = {"username": "Waifu TCG", "embeds": [
-            {
-                "title": "A waifu has been promoted!",
-                "color": int(config["rarity%dEmbedColor" % new_rarity])
+    # compile alert
+    discordbody = {"username": "Waifu TCG", "embeds": [
+        {
+            "title": "A waifu has been promoted!",
+            "color": int(config["rarity%dEmbedColor" % new_rarity])
+        },
+        {
+            "type": "rich",
+            "title": "{user} promoted {name} to {rarity} rarity!".format(user=username, name=waifu["name"],
+                                                                         rarity=config[
+                                                                             "rarity%dName" % new_rarity]),
+            "color": int(config["rarity%dEmbedColor" % new_rarity]),
+            "footer": {
+                "text": "Waifu TCG by Marenthyu"
             },
-            {
-                "type": "rich",
-                "title": "{user} promoted {name} to {rarity} rarity!".format(user=username, name=waifu["name"],
-                                                                             rarity=config[
-                                                                                 "rarity%dName" % new_rarity]),
-                "color": int(config["rarity%dEmbedColor" % new_rarity]),
-                "footer": {
-                    "text": "Waifu TCG by Marenthyu"
-                },
-                "image": {
-                    "url": waifu["image"]
-                },
-                "provider": {
-                    "name": "Marenthyu",
-                    "url": "https://marenthyu.de"
-                }
+            "image": {
+                "url": waifu["image"]
+            },
+            "provider": {
+                "name": "Marenthyu",
+                "url": "https://marenthyu.de"
             }
-        ]}
-        sendDiscordAlert(discordbody)
+        }
+    ]}
+    threading.Thread(target=sendDiscordAlert, args=(discordbody,)).start()
 
 
 def naturalJoinNames(names):
@@ -717,34 +718,33 @@ def naturalJoinNames(names):
 
 def sendSetAlert(channel, user, name, waifus):
     logger.info("Alerting for set claim %s", name)
-    with busyLock:
-        message = "{user} claimed the set {name}!".format(user=user, name=name)
-        alertbody = {"type": "donation", "sound_href": config["alertSound"], "duration": int(config["alertDuration"]),
-                     "message": message}
-        sendStreamlabsAlert(channel, alertbody)
+    message = "{user} claimed the set {name}!".format(user=user, name=name)
+    alertbody = {"type": "donation", "sound_href": config["alertSound"], "duration": int(config["alertDuration"]),
+                 "message": message}
+    threading.Thread(target=sendStreamlabsAlert, args=(channel, alertbody)).start()
 
-        discordbody = {"username": "Waifu TCG", "embeds": [
-            {
-                "title": "A set has been completed!",
-                "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"])
+    discordbody = {"username": "Waifu TCG", "embeds": [
+        {
+            "title": "A set has been completed!",
+            "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"])
+        },
+        {
+            "type": "rich",
+            "title": "{user} gathered {waifus} to complete the set {name}!".format(user=str(user),
+                                                                                   waifus=naturalJoinNames(waifus),
+                                                                                   name=name),
+            "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
+            "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"]),
+            "footer": {
+                "text": "Waifu TCG by Marenthyu"
             },
-            {
-                "type": "rich",
-                "title": "{user} gathered {waifus} to complete the set {name}!".format(user=str(user),
-                                                                                       waifus=naturalJoinNames(waifus),
-                                                                                       name=name),
-                "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
-                "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"]),
-                "footer": {
-                    "text": "Waifu TCG by Marenthyu"
-                },
-                "provider": {
-                    "name": "Marenthyu",
-                    "url": "https://marenthyu.de"
-                }
+            "provider": {
+                "name": "Marenthyu",
+                "url": "https://marenthyu.de"
             }
-        ]}
-        sendDiscordAlert(discordbody)
+        }
+    ]}
+    threading.Thread(target=sendDiscordAlert, args=(discordbody,)).start()
 
 
 def followsme(userid):
