@@ -495,23 +495,15 @@ function pullfeed(req, res, query) {
     "FROM drops JOIN waifus ON drops.waifuid = waifus.id JOIN users ON drops.userid = users.id WHERE drops.rarity >= 4 ORDER BY drops.id DESC LIMIT 100", function(err, result) {
         if(err) throw err;
         let wantJSON = false;
+        let jsonresp = [];
         if ("accept" in req.headers && req.headers["accept"] === "application/json") {
             wantJSON = true;
             res.writeHead(200, {'Content-Type': 'application/json; charset=utf-8'});
         } else {
             res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
-        }
-        if (wantJSON) {
-            res.write("[")
-        } else
             res.write(pfhead);
-        let first = true;
+        }
         for(let row of result) {
-            if (!first) {
-                res.write(", ");
-            } else {
-                first = false;
-            }
             let obj = {};
             if (wantJSON) {
                 obj["timestamp"] = row.timestamp;
@@ -524,7 +516,8 @@ function pullfeed(req, res, query) {
                     "rarity": row.rarity
                 };
                 obj["source"] = row.source;
-                res.write(JSON.stringify(obj));
+                obj["channel"] = row.channel;
+                jsonresp.push(obj);
             } else {
                 res.write("["+new Date(row.timestamp).toISOString()+"] ");
                 res.write(row.username+" pulled <code>["+row.waifuID+"]["+getRarityName(row.rarity)+"] "+row.waifuName+" from "+row.waifuSeries+"</code>");
@@ -552,9 +545,10 @@ function pullfeed(req, res, query) {
 
         }
         if (wantJSON) {
-            res.write("]")
-        } else
+            res.write(JSON.stringify(jsonresp));
+        } else {
             res.write(pffoot);
+        }
         res.end();
     });
     
