@@ -491,36 +491,70 @@ function bootstrapbooster(req, res, query) {
 
 function pullfeed(req, res, query) {
     
-    con.query("SELECT drops.rarity, drops.source, drops.channel, drops.timestamp, waifus.id AS waifuID, waifus.Name as waifuName, waifus.series AS waifuSeries, users.name AS username "+
+    con.query("SELECT drops.rarity, drops.source, drops.channel, drops.timestamp, waifus.id AS waifuID, waifus.Name as waifuName, waifus.series AS waifuSeries, waifus.image AS waifuImage, users.name AS username "+
     "FROM drops JOIN waifus ON drops.waifuid = waifus.id JOIN users ON drops.userid = users.id WHERE drops.rarity >= 4 ORDER BY drops.id DESC LIMIT 100", function(err, result) {
         if(err) throw err;
-        res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
-        res.write(pfhead);
-        for(let row of result) {
-            res.write("["+new Date(row.timestamp).toLocaleString("en-US")+"] ");
-            res.write(row.username+" pulled <code>["+row.waifuID+"]["+getRarityName(row.rarity)+"] "+row.waifuName+" from "+row.waifuSeries+"</code>");
-            if(row.source == 'freewaifu') {
-                res.write(" as a free waifu");
-            }
-            else if(row.source == 'buy') {
-                res.write(" using <code>!buy</code>");
-            }
-            else if(row.source.toString().startsWith("boosters.")) {
-                res.write(" from a "+row.source.substring(9)+" booster");
-            }
-            else {
-                res.write(" from a mysterious unknown source");
-            }
-            
-            if(row.channel == '$$whisper$$') {
-                res.write(" via whisper.");
-            }
-            else {
-                res.write(" in "+row.channel.substring(1)+"&#39;s channel.");
-            }
-            res.write("<br />");
+        let wantJSON = false;
+        if ("accept" in req.headers && req.headers["accept"] === "application/json") {
+            wantJSON = true;
+            res.writeHead(200, {'Content-Type': 'application/json; charset=utf-8'});
+        } else {
+            res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
         }
-        res.write(pffoot);
+        if (wantJSON) {
+            res.write("[")
+        } else
+            res.write(pfhead);
+        let first = true;
+        for(let row of result) {
+            if (!first) {
+                res.write(", ");
+            } else {
+                first = false;
+            }
+            let obj = {};
+            if (wantJSON) {
+                obj["timestamp"] = row.timestamp;
+                obj["user"] = row.username;
+                obj["waifu"] = {
+                    "name": row.waifuName,
+                    "id": row.waifuID,
+                    "series": row.waifuSeries,
+                    "image": row.waifuImage,
+                    "rarity": row.rarity
+                };
+                obj["source"] = row.source;
+                res.write(JSON.stringify(obj));
+            } else {
+                res.write("["+new Date(row.timestamp).toISOString()+"] ");
+                res.write(row.username+" pulled <code>["+row.waifuID+"]["+getRarityName(row.rarity)+"] "+row.waifuName+" from "+row.waifuSeries+"</code>");
+                if(row.source === 'freewaifu') {
+                    res.write(" as a free waifu");
+                }
+                else if(row.source === 'buy') {
+                    res.write(" using <code>!buy</code>");
+                }
+                else if(row.source.toString().startsWith("boosters.")) {
+                    res.write(" from a "+row.source.substring(9)+" booster");
+                }
+                else {
+                    res.write(" from a mysterious unknown source");
+                }
+
+                if(row.channel === '$$whisper$$') {
+                    res.write(" via whisper.");
+                }
+                else {
+                    res.write(" in "+row.channel.substring(1)+"&#39;s channel.");
+                }
+                res.write("<br />");
+            }
+
+        }
+        if (wantJSON) {
+            res.write("]")
+        } else
+            res.write(pffoot);
         res.end();
     });
     
