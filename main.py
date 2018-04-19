@@ -3529,16 +3529,6 @@ class NepBot(NepBotClass):
                                 cur.close()
                                 return
 
-                            # calculate prize multiplier based on run length
-                            # uses varying log depending on > or < 2h
-                            if resultData["result"] < 7200000:
-                                prizeMultiplier = 1 / (math.log(7200000.0 / resultData["result"], 4) + 1)
-                            else:
-                                prizeMultiplier = math.log(resultData["result"] / 7200000.0, 4) + 1
-
-                            if isMarathonChannel:
-                                prizeMultiplier *= 1.5
-
                             # calculate first run of prizes
                             prizes = defaultdict(list)
                             place = 0
@@ -3574,7 +3564,10 @@ class NepBot(NepBotClass):
                                 
                             # broadcaster prize
                             # run length in hours * 500, rounded to nearest 50
-                            bcPrize = max(int(round(resultData["result"] / 360000.0) * 50), 50)
+                            # scales up a bit as the hours go on
+                            runHours = resultData["result"] / 3600000.0
+                            bcPrize = min(runHours, 5) * 500 + min(max(runHours - 5, 0), 5) * 750 + max(runHours - 10, 0) * 1000
+                            bcPrize = max(int(round(bcPrize / 50.0) * 50), 50)
                             
                             cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
                             cur.execute("UPDATE bets SET status = 'paid', paidBroadcaster = %s, paidAt = %s WHERE id = %s", [bcPrize, current_milli_time(), betRow[0]])
