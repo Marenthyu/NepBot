@@ -4541,6 +4541,19 @@ class NepBot(NepBotClass):
             if command == "fixwaifu":
                 self.message(channel, "To submit changes/fixes for any waifu, please go to %s/fixes" % config["siteHost"], isWhisper)
                 return
+            if command == "packspending":
+                with db.cursor() as cur:
+                    cur.execute("SELECT boosters_opened.boostername, COUNT(*), SUM(IF(boosters_opened.paid > 0, boosters_opened.paid, boosters.cost)) FROM boosters_opened JOIN boosters ON boosters_opened.boostername = boosters.name JOIN users ON boosters_opened.userid=users.id WHERE users.id = %s AND boosters.cost > 0 GROUP BY boosters_opened.boostername ORDER BY COUNT(*) DESC", [tags['user-id']])
+                    packstats = cur.fetchall()
+                    
+                    if len(packstats) == 0:
+                        self.message(channel, "%s, you haven't bought any boosters yet! Buy your first with !booster buy." % tags['display-name'], isWhisper)
+                        return
+                        
+                    totalspending = sum([row[2] for row in packstats])
+                    packstr = ", ".join("%dx %s" % (row[1], row[0]) for row in packstats)
+                    self.message(channel, "%s, you have spent %d total points on the following packs: %s." % (tags['display-name'], totalspending, packstr), isWhisper)
+                    return
 
 
 
