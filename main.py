@@ -435,6 +435,11 @@ def getBadgeByID(id):
     cur.close()
     logger.debug("Fetched Badge from id: %s", ret)
     return ret
+    
+def addBadge(name, description, image):
+    with db.cursor() as cur:
+        cur.execute("INSERT INTO badges(name, description, image) VALUES(%s, %s, %s)", [name, description, image])
+        return cur.lastrowid
 
 def giveBadge(userid, badge):
     badgeObj = getBadgeByID(badge)
@@ -443,7 +448,7 @@ def giveBadge(userid, badge):
     else:
         try:
             with db.cursor() as cur:
-                cur.execute("INSERT INTO has_badges(userID, badgeID) VALUE (%s, %s)", [userid, badge])
+                cur.execute("INSERT INTO has_badges(userID, badgeID) VALUES(%s, %s)", [userid, badge])
         except:
             logger.debug("Had an error.")
             return False
@@ -3757,6 +3762,8 @@ class NepBot(NepBotClass):
                         cur.execute("UPDATE sets SET claimed_by = %s, claimed_at = %s WHERE sets.id = %s",
                                     [tags["user-id"], current_milli_time(), row[0]])
                         addPoints(tags["user-id"], int(row[2]))
+                        badgeid = addBadge(row[1], config["setBadgeDescription"], config["setBadgeDefaultImage"])
+                        giveBadge(tags['user-id'], badgeid)
                         self.message(channel,
                                      "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(
                                          set=row[1], user=tags["display-name"], reward=row[2]), isWhisper)
@@ -3796,6 +3803,8 @@ class NepBot(NepBotClass):
                                     addPoints(tags['user-id'], set[4])
                                     cur.executemany("INSERT INTO rarity_sets_cards (setID, cardID) VALUES(%s, %s)",
                                                     [(set[0], card) for card in usedCards])
+                                    badgeid = addBadge(set[1], config["setBadgeDescription"], config["setBadgeDefaultImage"])
+                                    giveBadge(tags['user-id'], badgeid)
                                     self.message(channel,
                                                  "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(
                                                      set=set[1], user=tags["display-name"], reward=set[4]), isWhisper)
