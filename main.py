@@ -1101,11 +1101,11 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
 
         if buying:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteedSCrarity, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
                 [packname])
         else:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteedSCrarity, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s",
                 [packname])
 
         packinfo = cur.fetchone()
@@ -1117,9 +1117,10 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         buyable = packinfo[1]
         cost = packinfo[2]
         numCards = packinfo[3]
-        minSCRarity = packinfo[4]
-        useEventWeightings = packinfo[5] != 0
-        normalChances = packinfo[6:]
+        pgRarity = packinfo[4]
+        pgCount = packinfo[5]
+        useEventWeightings = packinfo[6] != 0
+        normalChances = packinfo[7:]
 
         if buying:
             if not hasPoints(userid, cost):
@@ -1169,14 +1170,14 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
                             # make rarities above this one NOT more likely to drop
                             currentChances[rarity] /= currentChances[rarity - 1] / oldPromoChance
 
-            # account for min-singlecard-rarity in the pack
-            if i == 0 and minSCRarity > guaranteedRarity:
-                if minSCRarity == int(config["numNormalRarities"]) - 1:
+            # account for minrarity for some cards in the pack
+            if i < pgCount and pgRarity > guaranteedRarity:
+                if pgRarity == int(config["numNormalRarities"]) - 1:
                     currentChances = [1] * len(currentChances)
                 else:
-                    currentChances = ([1] * minSCRarity) + [
-                        functools.reduce((lambda x, y: x * y), currentChances[:minSCRarity + 1])] + list(
-                        currentChances[minSCRarity + 1:])
+                    currentChances = ([1] * pgRarity) + [
+                        functools.reduce((lambda x, y: x * y), currentChances[:pgRarity + 1])] + list(
+                        currentChances[pgRarity + 1:])
 
             logger.debug("using odds for card %d: %s", i, str(currentChances))
 
