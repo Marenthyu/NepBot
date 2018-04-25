@@ -440,20 +440,47 @@ function bootstraphand(req, res, query) {
     con.query("SELECT waifus.*, rarity, amount FROM waifus JOIN has_waifu ON waifus.id = has_waifu.waifuid JOIN users ON " +
         "has_waifu.userid = users.id WHERE users.name = ? ORDER BY (has_waifu.rarity < 8) DESC, waifus.id ASC, has_waifu.rarity ASC", query.user, function (err, result) {
         if (err) throw err;
+        let wantJSON = false;
+        if ("accept" in req.headers && req.headers["accept"] === "application/json") {
+            wantJSON = true;
+        }
         if (result.length === 0) {
-            res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
-            res.write("404 - User not found or Empty Hand.");
+            if (wantJSON) {
+                res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
+                res.write(JSON.stringify({"error":{"status":404, "explanation":"User not found"}}))
+            } else {
+                res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
+                res.write("404 - This user doesn't exist.");
+            }
             res.end();
             return;
         }
-        res.writeHead(200, {'Content-Type': 'text/html'});
-        let cards = '';
-        for (let row of result) {
-            let card = bootstraphandcard;
-            card = getCardHtml(card, row);
-            cards += card;
+        if (wantJSON) {
+            let sanitizedResult = [];
+            for (let row of result) {
+                let obj = {
+                    "id": row.id,
+                    "Name": row.Name,
+                    "series": row.series,
+                    "image": row.image,
+                    "base_rarity": row.base_rarity,
+                    "rarity": row.rarity,
+                    "amount": row.amount
+                };
+                sanitizedResult.push(obj);
+            }
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.write(JSON.stringify({'user':query.user, "cards":sanitizedResult}))
+        } else {
+            res.writeHead(200, {'Content-Type': 'text/html'});
+            let cards = '';
+            for (let row of result) {
+                let card = bootstraphandcard;
+                card = getCardHtml(card, row);
+                cards += card;
+            }
+            res.write(bootstraphandtpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user));
         }
-        res.write(bootstraphandtpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user));
         res.end();
     });
 }
@@ -467,24 +494,49 @@ function bootstrapbooster(req, res, query) {
 
     con.query("SELECT waifus.* FROM boosters_opened JOIN users ON boosters_opened.userid = users.id LEFT JOIN boosters_cards ON boosters_opened.id = boosters_cards.boosterid JOIN waifus ON boosters_cards.waifuid = waifus.id WHERE users.name = ? AND boosters_opened.status = 'open' ORDER BY waifus.id ASC", query.user, function (err, result) {
         if (err) throw err;
+        let wantJSON = false;
+        if ("accept" in req.headers && req.headers["accept"] === "application/json") {
+            wantJSON = true;
+        }
         if (result.length === 0) {
-            res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-            res.write("404 - This user doesn't exist or has no open booster.");
+            if (wantJSON) {
+                res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
+                res.write(JSON.stringify({"error":{"status":404, "explanation":"User not found or does not have an open booster."}}))
+            } else {
+                res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
+                res.write("404 - This user doesn't exist or has no open booster.");
+            }
             res.end();
             return;
         }
-        res.writeHead(200, {'Content-Type': 'text/html'});
-        let cards = '';
-        for (let row of result) {
-            let card = bootstrapboostercard;
-            card = card.replace(/{ID}/g, row.id.toString());
-            card = card.replace(/{IMAGE}/g, row.image.toString());
-            card = card.replace(/{NAME}/g, row.Name.toString());
-            card = card.replace(/{SERIES}/g, row.series.toString());
-            card = card.replace(/{RARITY}/g, getRarityName(row.base_rarity));
-            cards += card;
+        if (wantJSON) {
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            let sanitizedResult = [];
+            for (let row of result) {
+                let obj = {};
+                obj.id = row.id;
+                obj.Name = row.Name;
+                obj.image = row.image;
+                obj.rarity = row.base_rarity;
+                obj.series = row.series;
+                sanitizedResult.push(obj);
+            }
+            res.write(JSON.stringify({"user":query.user, "cards":sanitizedResult}));
+        } else {
+            res.writeHead(200, {'Content-Type': 'text/html'});
+            let cards = '';
+            for (let row of result) {
+                let card = bootstrapboostercard;
+                card = card.replace(/{ID}/g, row.id.toString());
+                card = card.replace(/{IMAGE}/g, row.image.toString());
+                card = card.replace(/{NAME}/g, row.Name.toString());
+                card = card.replace(/{SERIES}/g, row.series.toString());
+                card = card.replace(/{RARITY}/g, getRarityName(row.base_rarity));
+                cards += card;
+            }
+            res.write(bootstrapboostertpl.replace(/{CARDS}/g, cards));
         }
-        res.write(bootstrapboostertpl.replace(/{CARDS}/g, cards));
+
         res.end();
     });
 }
