@@ -4546,7 +4546,7 @@ class NepBot(NepBotClass):
                 return
             if command == "packspending":
                 with db.cursor() as cur:
-                    cur.execute("SELECT boosters_opened.boostername, COUNT(*), SUM(IF(boosters_opened.paid > 0, boosters_opened.paid, boosters.cost)) FROM boosters_opened JOIN boosters ON boosters_opened.boostername = boosters.name JOIN users ON boosters_opened.userid=users.id WHERE users.id = %s AND boosters.cost > 0 GROUP BY boosters_opened.boostername ORDER BY COUNT(*) DESC", [tags['user-id']])
+                    cur.execute("SELECT bo.boostername, COUNT(*), SUM(IF(bo.paid > 0, bo.paid, boosters.cost)) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON bo.boostername = boosters.name WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC", [tags['user-id']] * 2)
                     packstats = cur.fetchall()
                     
                     if len(packstats) == 0:
