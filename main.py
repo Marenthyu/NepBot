@@ -179,7 +179,7 @@ def loadConfig():
         curg.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
         packrows = curg.fetchall()
         visiblepacks = "/".join(row[0] for row in packrows)
-        
+
         # discord hooks
         with discordLock:
             curg.execute("SELECT url FROM discordHooks ORDER BY priority DESC")
@@ -197,7 +197,7 @@ def checkAndRenewAppAccessToken():
         # app access token has expired, get a new one
         logger.debug("Requesting new token")
         url = 'https://api.twitch.tv/kraken/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (
-        config["clientID"], twitchclientsecret)
+            config["clientID"], twitchclientsecret)
         r = requests.post(url)
         try:
             jsondata = r.json()
@@ -387,7 +387,7 @@ def attemptBountyFill(bot, waifuid):
             giveCard(order[1], waifuid, order[5])
             bot.message('#%s' % order[2],
                         "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (
-                        waifuid, order[4], order[3]), True)
+                            waifuid, order[4], order[3]), True)
             cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s",
                         [current_milli_time(), order[0]])
             # alert people with lower bounties but above the cap?
@@ -398,7 +398,7 @@ def attemptBountyFill(bot, waifuid):
             for userrow in cur.fetchall():
                 bot.message('#%s' % userrow[0],
                             "A higher bounty for [%d] %s than yours was filled, so you can now cancel yours and get full points back provided you don't change it." % (
-                            waifuid, order[4]), True)
+                                waifuid, order[4]), True)
             # give the disenchanter appropriate profit
             base_value = int(config["rarity" + str(order[5]) + "Value"])
             if order[3] > rarity_cap:
@@ -409,13 +409,16 @@ def attemptBountyFill(bot, waifuid):
             # no bounty
             return 0
 
+
 def setFavourite(userid, waifu):
     with db.cursor() as cur:
         cur.execute("UPDATE users SET favourite=%s WHERE id = %s", [waifu, userid])
 
+
 def setDescription(userid, newDesc):
     with db.cursor() as cur:
         cur.execute("UPDATE users SET profileDescription=%s WHERE id = %s", [newDesc, userid])
+
 
 def getBadgeByID(id):
     logger.debug("Getting badge for id %s", id)
@@ -431,15 +434,17 @@ def getBadgeByID(id):
     cur.execute("SELECT id, name, description, image FROM badges WHERE id=%s",
                 [id])
     row = cur.fetchone()
-    ret = {"id": row[0], "name": row[1], "image": row[3], "description":row[2]}
+    ret = {"id": row[0], "name": row[1], "image": row[3], "description": row[2]}
     cur.close()
     logger.debug("Fetched Badge from id: %s", ret)
     return ret
-    
+
+
 def addBadge(name, description, image):
     with db.cursor() as cur:
         cur.execute("INSERT INTO badges(name, description, image) VALUES(%s, %s, %s)", [name, description, image])
         return cur.lastrowid
+
 
 def giveBadge(userid, badge):
     badgeObj = getBadgeByID(badge)
@@ -453,6 +458,7 @@ def giveBadge(userid, badge):
             logger.debug("Had an error.")
             return False
         return True
+
 
 def getHoraro():
     "https://horaro.org/-/api/v1/schedules/3911mu51ljb1wf7a5e/ticker"
@@ -522,12 +528,12 @@ def updateGame(game):
 def sendStreamlabsAlert(channel, data):
     if '#' in channel:
         channel = channel[1:]
-    
+
     with busyLock:
         with db.cursor() as cur:
             cur.execute("SELECT alertkey FROM channels WHERE name = %s LIMIT 1", [channel])
             tokenRow = cur.fetchone()
-    
+
     if tokenRow is not None and tokenRow[0] is not None:
         data['access_token'] = tokenRow[0]
         with streamlabsLock:
@@ -551,6 +557,7 @@ def sendDiscordAlert(data):
                 req2 = requests.post(
                     url,
                     json=data)
+
 
 def sendDrawAlert(channel, waifu, user, discord=True):
     logger.info("Alerting for waifu %s", str(waifu))
@@ -586,7 +593,7 @@ def sendDrawAlert(channel, waifu, user, discord=True):
             str("rarity" + str(waifu["base_rarity"]) + "Sound")]
         defaultLength = config["alertDuration"] if "defaultLength" not in keys else alertconfig["defaultLength"]
         alertLength = defaultLength if str("rarity" + str(waifu["base_rarity"]) + "Length") not in keys else \
-        alertconfig[str("rarity" + str(waifu["base_rarity"]) + "Length")]
+            alertconfig[str("rarity" + str(waifu["base_rarity"]) + "Length")]
         alertColor = "default" if "color" not in keys else alertconfig["color"]
 
         if "id" in waifu:
@@ -600,7 +607,7 @@ def sendDrawAlert(channel, waifu, user, discord=True):
                      "sound_href": alertSound, "duration": int(alertLength), "message": message}
         if alertColor == "rarity":
             alertbody["special_text_color"] = "rgb({r}, {g}, {b})".format(r=str(red), g=str(green), b=str(blue))
-            
+
         cur.close()
 
     threading.Thread(target=sendStreamlabsAlert, args=(channel, alertbody)).start()
@@ -806,12 +813,14 @@ def maxWaifuID():
     cur.close()
     return ret
 
+
 def maxBadgeID():
     cur = db.cursor()
     cur.execute("SELECT MAX(id) FROM badges")
     ret = int(cur.fetchone()[0])
     cur.close()
     return ret
+
 
 def getUniqueCards(userid):
     with db.cursor() as cur:
@@ -977,7 +986,7 @@ def takeCard(userid, id, rarity, amount=1):
         else:
             raise ValueError(
                 "Couldn't remove %d of waifu %s at rarity %s from user %s as they don't own it/that many!" % (
-                amount, str(id), str(rarity), str(userid)))
+                    amount, str(id), str(rarity), str(userid)))
 
 
 def logDrop(userid, waifuid, rarity, source, channel, isWhisper):
@@ -1000,6 +1009,8 @@ def formatRank(rankNum):
 
 
 memes = ["🤔", "🏆", "✌", "🌲", "🍀", "🖐", "👌", "🤑", "🤣", "🎄"]
+
+
 def formatTimeDelta(ms):
     baseRepr = str(datetime.timedelta(milliseconds=ms, microseconds=0))
     output = baseRepr[:-3] if "." in baseRepr else baseRepr
@@ -1020,18 +1031,20 @@ def parseRarity(input):
     if rarity < 0 or rarity >= int(config["numNormalRarities"]) + int(config["numSpecialRarities"]):
         raise ValueError(input)
     return rarity
-    
+
+
 def parseBetTime(input):
     match = time_regex.fullmatch(input)
     if not match:
         return None
-        
+
     bet = match.groupdict()
     if bet["ms"] is None:
         bet["ms"] = "0"
     ms = int(bet["ms"] + ("0" * max(3 - len(bet["ms"]), 0)))
     total = int(bet["hours"]) * 3600000 + int(bet["minutes"]) * 60000 + int(bet["seconds"]) * 1000 + ms
-    return {"hours": total//3600000, "minutes": (total//60000) % 60, "seconds": (total//1000) % 60, "ms": total % 1000, "total": total}
+    return {"hours": total // 3600000, "minutes": (total // 60000) % 60, "seconds": (total // 1000) % 60,
+            "ms": total % 1000, "total": total}
 
 
 class CardNotInHandException(Exception):
@@ -1165,7 +1178,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
                         # make this rarity more likely to drop
                         oldPromoChance = currentChances[rarity - 1]
                         currentChances[rarity - 1] = min(currentChances[rarity - 1] * (
-                                    (scalingData[scaleIdx] / scalingThresholds[scaleIdx] - 1) * 2 + 1), 1)
+                                (scalingData[scaleIdx] / scalingThresholds[scaleIdx] - 1) * 2 + 1), 1)
                         if rarity != int(config["numNormalRarities"]) - 1:
                             # make rarities above this one NOT more likely to drop
                             currentChances[rarity] /= currentChances[rarity - 1] / oldPromoChance
@@ -1245,11 +1258,11 @@ def infoCommandAvailable(userid, username, bot, channel, isWhisper):
             if private:
                 bot.message(channel,
                             "%s, you have hit the rate limit for info commands. Please wait %s to use more." % (
-                            username, timeDiff), isWhisper)
+                                username, timeDiff), isWhisper)
             else:
                 bot.message(channel,
                             "%s, you have hit the rate limit for info commands in public chats. Please wait %s to use more or use them via whisper or in the bot's own chat." % (
-                            username, timeDiff), isWhisper)
+                                username, timeDiff), isWhisper)
             return False
 
 
@@ -1527,7 +1540,8 @@ class NepBot(NepBotClass):
                     currentSlice = doneusers[:100]
                     with busyLock:
                         cur = db.cursor()
-                        cur.execute("SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(["%s"] * len(currentSlice)), currentSlice)
+                        cur.execute("SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(
+                            ["%s"] * len(currentSlice)), currentSlice)
 
                         foundUsersData = cur.fetchall()
                         cur.close()
@@ -1547,7 +1561,6 @@ class NepBot(NepBotClass):
                                     pointGain = maxPointGain
                             if pointGain > 0:
                                 updateData.append((pointGain, viewerInfo[0]))
-                            
 
                         with busyLock:
                             cur = db.cursor()
@@ -1556,14 +1569,13 @@ class NepBot(NepBotClass):
 
                     doneusers = doneusers[100:]
 
-                    
                 if overflowPoints > 0:
                     logger.debug("Paying %d overflow points to the bot account" % overflowPoints)
                     with busyLock:
                         cur = db.cursor()
-                        cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [overflowPoints, config["username"]])
+                        cur.execute("UPDATE users SET points = points + %s WHERE name = %s",
+                                    [overflowPoints, config["username"]])
                         cur.close()
-                    
 
                 # now deal with user names that aren't already in the DB
                 if len(newUsers) > 10000:
@@ -1803,7 +1815,8 @@ class NepBot(NepBotClass):
                         self.message(channel, "User not found.")
                         return
                     userid = row[0]
-            self.do_command(args[1][1:].lower(), args[2:], args[0].lower(), channel, {'display-name': args[0], 'user-id': userid, 'badges': []}, isWhisper)
+            self.do_command(args[1][1:].lower(), args[2:], args[0].lower(), channel,
+                            {'display-name': args[0], 'user-id': userid, 'badges': []}, isWhisper)
 
             return
         with busyLock:
@@ -1944,7 +1957,7 @@ class NepBot(NepBotClass):
                             confirmRarityName = config["rarity%sName" % config["disenchantRequireConfirmationRarity"]]
                             self.message(channel,
                                          "%s, you are trying to disenchant one or more waifus of %s rarity or higher! If you are sure you want to do this, append \" yes\" to the end of your command." % (
-                                         tags['display-name'], confirmRarityName), isWhisper)
+                                             tags['display-name'], confirmRarityName), isWhisper)
                             return
                         if deTarget['rarity'] != deTarget['base_rarity'] and not hasConfirmed:
                             self.message(channel,
@@ -1957,7 +1970,7 @@ class NepBot(NepBotClass):
                     except AmbiguousRarityException:
                         self.message(channel,
                                      "You have more than one rarity of waifu %s in your hand. Please specify a rarity as well by appending a hyphen and then the rarity e.g. !disenchant %s-god" % (
-                                     arg, arg), isWhisper)
+                                         arg, arg), isWhisper)
                         return
                     except ValueError:
                         self.message(channel, "Could not decipher one or more of the waifu IDs you provided.",
@@ -2000,12 +2013,13 @@ class NepBot(NepBotClass):
                 if len(disenchants) == 1:
                     buytext = " (bounty filled)" if ordersFilled > 0 else ""
                     self.message(channel, "Successfully disenchanted waifu %d%s and added %d points to %s's account" % (
-                    disenchants[0]['id'], buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                        disenchants[0]['id'], buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
                 else:
                     buytext = " (%d bounties filled)" % ordersFilled if ordersFilled > 0 else ""
                     self.message(channel,
                                  "Successfully disenchanted %d waifus%s and added %d points to %s's account" % (
-                                 len(disenchants), buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                                     len(disenchants), buytext, pointsGain, str(tags['display-name'])),
+                                 isWhisper=isWhisper)
 
                 return
             if command == "giveme":
@@ -2158,7 +2172,7 @@ class NepBot(NepBotClass):
                                     "rarity%sName" % config["disenchantRequireConfirmationRarity"]]
                                 self.message(channel,
                                              "%s, you are trying to disenchant one or more waifus of %s rarity or higher! If you are sure you want to do this, append \" yes\" to the end of your command." % (
-                                             tags['display-name'], confirmRarityName), isWhisper)
+                                                 tags['display-name'], confirmRarityName), isWhisper)
                                 return
                             deCards.append(waifu)
 
@@ -2280,9 +2294,9 @@ class NepBot(NepBotClass):
                             wantdata = getWaifuById(want)
                             havedata = getWaifuById(have)
                             haveStr = "[%d][%s] %s" % (
-                            have, config["rarity" + str(have_rarity) + "Name"], havedata['name'])
+                                have, config["rarity" + str(have_rarity) + "Name"], havedata['name'])
                             wantStr = "[%d][%s] %s" % (
-                            want, config["rarity" + str(want_rarity) + "Name"], wantdata['name'])
+                                want, config["rarity" + str(want_rarity) + "Name"], wantdata['name'])
                             payer = "they will pay you" if otherid == payup else "you will pay them"
                             if tradepoints > 0:
                                 self.message(channel,
@@ -2311,13 +2325,13 @@ class NepBot(NepBotClass):
                             except CardRarityNotInHandException:
                                 self.message(channel,
                                              "%s, the rarity of waifu %d in your hand has changed! Trade cancelled." % (
-                                             tags['display-name'], want), isWhisper)
+                                                 tags['display-name'], want), isWhisper)
                                 cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s",
                                             [current_milli_time(), trade[0]])
                                 return
                             except CardNotInHandException:
                                 self.message(channel, "%s, you no longer own waifu %d! Trade cancelled." % (
-                                tags['display-name'], want), isWhisper)
+                                    tags['display-name'], want), isWhisper)
                                 cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s",
                                             [current_milli_time(), trade[0]])
                                 return
@@ -2327,13 +2341,13 @@ class NepBot(NepBotClass):
                             except CardRarityNotInHandException:
                                 self.message(channel,
                                              "%s, the rarity of %s's copy of waifu %d has changed! Trade cancelled." % (
-                                             tags['display-name'], otherparty, have), isWhisper)
+                                                 tags['display-name'], otherparty, have), isWhisper)
                                 cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s",
                                             [current_milli_time(), trade[0]])
                                 return
                             except CardNotInHandException:
                                 self.message(channel, "%s, %s no longer owns waifu %d! Trade cancelled." % (
-                                tags['display-name'], otherparty, have), isWhisper)
+                                    tags['display-name'], otherparty, have), isWhisper)
                                 cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s",
                                             [current_milli_time(), trade[0]])
                                 return
@@ -2344,7 +2358,7 @@ class NepBot(NepBotClass):
 
                             if not hasPoints(payup, cost + tradepoints):
                                 self.message(channel, "Sorry, but %s cannot cover the %s trading fee." % (
-                                "you" if payup == ourid else otherparty, "fair" if tradepoints > 0 else "base"),
+                                    "you" if payup == ourid else otherparty, "fair" if tradepoints > 0 else "base"),
                                              isWhisper=isWhisper)
                                 return
 
@@ -2404,7 +2418,7 @@ class NepBot(NepBotClass):
                     except AmbiguousRarityException:
                         self.message(channel,
                                      "%s, you own more than one rarity of waifu %s! Please specify a rarity as well by appending a hyphen and then the rarity, e.g. %s-god" % (
-                                     tags['display-name'], args[1], args[1]), isWhisper)
+                                         tags['display-name'], args[1], args[1]), isWhisper)
                         return
                     except ValueError:
                         self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
@@ -2424,7 +2438,7 @@ class NepBot(NepBotClass):
                     except AmbiguousRarityException:
                         self.message(channel,
                                      "%s, %s owns more than one rarity of waifu %s! Please specify a rarity as well by appending a hyphen and then the rarity, e.g. %s-god" % (
-                                     tags['display-name'], other, args[2], args[2]), isWhisper)
+                                         tags['display-name'], other, args[2], args[2]), isWhisper)
                         return
                     except ValueError:
                         self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
@@ -2437,13 +2451,11 @@ class NepBot(NepBotClass):
                         except ValueError:
                             self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
                             return
-                            
-                    
 
                     payup = ourid
                     firstSpecialRarity = int(config["numNormalRarities"])
                     canTradeDirectly = (want["rarity"] == have["rarity"]) or (
-                                want["rarity"] >= firstSpecialRarity and have["rarity"] >= firstSpecialRarity)
+                            want["rarity"] >= firstSpecialRarity and have["rarity"] >= firstSpecialRarity)
                     if not canTradeDirectly:
                         if have["rarity"] >= firstSpecialRarity or want["rarity"] >= firstSpecialRarity:
                             self.message(channel,
@@ -2474,7 +2486,6 @@ class NepBot(NepBotClass):
                     elif points > 0:
                         self.message(channel, "You cannot attach points on same-rarity trades.", isWhisper)
                         return
-                            
 
                     # cancel any old trades with this pairing
                     cur.execute(
@@ -2491,9 +2502,9 @@ class NepBot(NepBotClass):
                     havedata = getWaifuById(have['id'])
                     wantdata = getWaifuById(want['id'])
                     haveStr = "[%d][%s] %s" % (
-                    have['id'], config["rarity" + str(have['rarity']) + "Name"], havedata['name'])
+                        have['id'], config["rarity" + str(have['rarity']) + "Name"], havedata['name'])
                     wantStr = "[%d][%s] %s" % (
-                    want['id'], config["rarity" + str(want['rarity']) + "Name"], wantdata['name'])
+                        want['id'], config["rarity" + str(want['rarity']) + "Name"], wantdata['name'])
 
                     paying = ""
                     if points > 0:
@@ -2538,7 +2549,8 @@ class NepBot(NepBotClass):
 
                         ownerDescriptions = []
                         for owner in ownerData:
-                            if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner] or ownedByOwner[owner] > 1:
+                            if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner] or ownedByOwner[
+                                owner] > 1:
                                 # verbose
                                 if ownedByOwner[owner] > 1:
                                     ownerDescriptions.append(owner + " (" + ", ".join(
@@ -2775,7 +2787,9 @@ class NepBot(NepBotClass):
                 cur = db.cursor()
                 # Are they a DeepDigger?
 
-                cur.execute("SELECT id, points, waifuid, boostername, type, badgeID FROM tokens WHERE token=%s AND claimable=1 AND (only_redeemable_by IS NULL OR only_redeemable_by = %s) AND (not_redeemable_by IS NULL OR not_redeemable_by != %s) LIMIT 1", [args[0], tags['user-id'], tags['user-id']])
+                cur.execute(
+                    "SELECT id, points, waifuid, boostername, type, badgeID FROM tokens WHERE token=%s AND claimable=1 AND (only_redeemable_by IS NULL OR only_redeemable_by = %s) AND (not_redeemable_by IS NULL OR not_redeemable_by != %s) LIMIT 1",
+                    [args[0], tags['user-id'], tags['user-id']])
                 redeemablerows = cur.fetchall()
 
                 if len(redeemablerows) == 0:
@@ -2788,7 +2802,6 @@ class NepBot(NepBotClass):
                                  isWhisper)
                     cur.close()
                     return
-
 
                 redeemdata = redeemablerows[0]
 
@@ -2843,7 +2856,7 @@ class NepBot(NepBotClass):
                 if redeemdata[1] != 0:
                     addPoints(tags['user-id'], redeemdata[1])
                     received.append("%d points" % redeemdata[1])
-                
+
                 # badge?
                 if redeemdata[5] is not None:
                     badge = getBadgeByID(redeemdata[5])
@@ -2865,7 +2878,7 @@ class NepBot(NepBotClass):
                 # show results
                 self.message(channel,
                              "%s -> Successfully redeemed the token %s, added the following to your account -> %s" % (
-                             tags['display-name'], args[0], " and ".join(received[::-1])), isWhisper)
+                                 tags['display-name'], args[0], " and ".join(received[::-1])), isWhisper)
                 cur.close()
                 return
             if command == "wars":
@@ -2927,7 +2940,7 @@ class NepBot(NepBotClass):
                         if openEntry and status == 'open':
                             self.message(channel,
                                          "The %s bidwar has no choices defined yet! Add your own for %d or more points with !vote %s <choice> <points>" % (
-                                         title, openEntryMinimum, warid), isWhisper)
+                                             title, openEntryMinimum, warid), isWhisper)
                         else:
                             # this bidwar was never setup properly, ignore it exists
                             self.message(channel, "%s -> Invalid bidwar specified." % tags['display-name'], isWhisper)
@@ -2942,15 +2955,15 @@ class NepBot(NepBotClass):
                             runnersup = ", ".join("%s (%d points)" % (choice[0], choice[1]) for choice in choices[1:])
                             self.message(channel,
                                          "The %s bidwar is over! The winner was %s with %d points. Runners up: %s" % (
-                                         title, choices[0][0], choices[0][1], runnersup), isWhisper)
+                                             title, choices[0][0], choices[0][1], runnersup), isWhisper)
                     else:
                         # open war
                         choicesStr = ", ".join("%s (%d points)" % (choice[0], choice[1]) for choice in choices)
                         msg = "The %s bidwar is currently open! Current votes: %s. !vote %s <choice> <points> to have your say." % (
-                        title, choicesStr, warid)
+                            title, choicesStr, warid)
                         if openEntry:
                             msg += " You can add a new choice by contributing at least %d points (%d characters maximum)." % (
-                            openEntryMinimum, openEntryMaxLength)
+                                openEntryMinimum, openEntryMaxLength)
                         self.message(channel, msg, isWhisper)
 
                     return
@@ -3016,7 +3029,7 @@ class NepBot(NepBotClass):
                         # deal with custom choice entry
                         if not openEntry:
                             self.message(channel, "%s -> That isn't a valid choice for the %s bidwar." % (
-                            tags['display-name'], title), isWhisper)
+                                tags['display-name'], title), isWhisper)
                             return
 
                         for word in bannedWords:
@@ -3030,13 +3043,13 @@ class NepBot(NepBotClass):
                         if points < openEntryMinimum:
                             self.message(channel,
                                          "%s -> You must contribute at least %d points to add a new choice to this bidwar!" % (
-                                         tags['display-name'], openEntryMinimum), isWhisper)
+                                             tags['display-name'], openEntryMinimum), isWhisper)
                             return
 
                         if len(theirchoice) > openEntryMaxLength:
                             self.message(channel,
                                          "%s -> The maximum length of a choice in the %s bidwar is %d characters." % (
-                                         tags['display-name'], title, openEntryMaxLength), isWhisper)
+                                             tags['display-name'], title, openEntryMaxLength), isWhisper)
                             return
 
                         # all clear, add it
@@ -3055,7 +3068,7 @@ class NepBot(NepBotClass):
                             qargs)
 
                     self.message(channel, "%s -> Successfully added %d points to %s in the %s bidwar." % (
-                    tags['display-name'], points, theirchoice, title), isWhisper)
+                        tags['display-name'], points, theirchoice, title), isWhisper)
                     return
 
             if command == "incentives" and (isMarathonChannel or isWhisper):
@@ -3141,11 +3154,12 @@ class NepBot(NepBotClass):
 
                     if points + currAmount >= required:
                         self.message(channel, "%s -> You successfully donated %d points and met the %s incentive!" % (
-                        tags['display-name'], points, title), isWhisper)
+                            tags['display-name'], points, title), isWhisper)
                     else:
                         self.message(channel,
                                      "%s -> You successfully donated %d points towards the %s incentive. It needs %d more to be met." % (
-                                     tags['display-name'], points, title, required - currAmount - points), isWhisper)
+                                         tags['display-name'], points, title, required - currAmount - points),
+                                     isWhisper)
 
                     return
 
@@ -3248,8 +3262,8 @@ class NepBot(NepBotClass):
                                  isWhisper)
                     return
                 canAdminBets = sender in superadmins or (sender in admins and isMarathonChannel)
-                canManageBets = canAdminBets or str(tags["badges"]).find("broadcaster") > -1 
-                
+                canManageBets = canAdminBets or str(tags["badges"]).find("broadcaster") > -1
+
                 bet = parseBetTime(args[0])
                 if bet:
                     if sender == channel[1:]:
@@ -3270,8 +3284,9 @@ class NepBot(NepBotClass):
                     return
                 else:
                     subcmd = str(args[0]).lower()
-                    betPrizeNames = {config["betPrizeTier%dToken" % tier]:config["betPrizeTier%dName" % tier] for tier in range(1, 8)}
-                    
+                    betPrizeNames = {config["betPrizeTier%dToken" % tier]: config["betPrizeTier%dName" % tier] for tier
+                                     in range(1, 8)}
+
                     if canManageBets and subcmd == "open":
                         if openBet(channel):
                             self.message(channel, "Bets are now open! Use !bet HH:MM:SS(.ms) to submit your bet!")
@@ -3346,20 +3361,20 @@ class NepBot(NepBotClass):
                                 if canManageBets:
                                     self.message(channel,
                                                  "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results." % (
-                                                 formattedTime, numBets))
+                                                     formattedTime, numBets))
                                 else:
                                     self.message(channel, "Run in progress - elapsed time %s. %d bets were placed." % (
-                                    formattedTime, numBets))
+                                        formattedTime, numBets))
                             else:
                                 formattedTime = formatTimeDelta(betRow[3] - betRow[2])
                                 if canManageBets:
                                     self.message(channel,
                                                  "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed. Use !bet results to see full results or !bet open to open a new one." % (
-                                                 formattedTime, numBets))
+                                                     formattedTime, numBets))
                                 else:
                                     self.message(channel,
                                                  "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed." % (
-                                                 formattedTime, numBets))
+                                                     formattedTime, numBets))
                         cur.close()
                         return
                     elif canManageBets and subcmd == "results":
@@ -3414,65 +3429,70 @@ class NepBot(NepBotClass):
                             cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
                                         [channel])
                             betRow = cur.fetchone()
-                            
+
                             if betRow is None or betRow[1] != 'started':
                                 self.message(channel, "There is no bet in progress in this channel.", isWhisper)
                             else:
-                                cur.execute("UPDATE bets SET status = 'open', startTime = NULL WHERE id = %s", [betRow[0]])
-                                self.message(channel, "Reset the bet in progress in this channel to open status.", isWhisper)
+                                cur.execute("UPDATE bets SET status = 'open', startTime = NULL WHERE id = %s",
+                                            [betRow[0]])
+                                self.message(channel, "Reset the bet in progress in this channel to open status.",
+                                             isWhisper)
                         return
                     elif subcmd == "changetime" and canAdminBets:
                         # change the completion time of a completed bet
                         if len(args) < 2:
                             self.message(channel, "Usage: !bet changetime <time> (same format as !bet)", isWhisper)
                             return
-                            
+
                         ctdata = parseBetTime(args[1])
                         if not ctdata:
                             self.message(channel, "Usage: !bet changetime <time> (same format as !bet)", isWhisper)
                             return
-                        
+
                         with db.cursor() as cur:
                             cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
                                         [channel])
                             betRow = cur.fetchone()
-                            
+
                             if betRow is None or betRow[1] != 'completed':
                                 self.message(channel, "There is no just-completed bet in this channel.", isWhisper)
                             else:
-                                cur.execute("UPDATE bets SET endTime = startTime + %s WHERE id = %s", [ctdata["total"], betRow[0]])
+                                cur.execute("UPDATE bets SET endTime = startTime + %s WHERE id = %s",
+                                            [ctdata["total"], betRow[0]])
                                 self.message(channel,
-                                     "Successfully changed end time to: {h}h {min}min {s}s {ms}ms".format(
-                                         h=ctdata["hours"],
-                                         min=ctdata["minutes"],
-                                         s=ctdata["seconds"],
-                                         ms=ctdata["ms"]),
-                                     isWhisper)
+                                             "Successfully changed end time to: {h}h {min}min {s}s {ms}ms".format(
+                                                 h=ctdata["hours"],
+                                                 min=ctdata["minutes"],
+                                                 s=ctdata["seconds"],
+                                                 ms=ctdata["ms"]),
+                                             isWhisper)
                         return
                     elif subcmd == "forceenter" and canAdminBets:
                         # enter another user into a bet
                         if len(args) < 3:
                             self.message(channel, "Usage: !bet forceenter <username> <time>", isWhisper)
                             return
-                            
+
                         tdata = parseBetTime(args[2])
                         if not tdata:
                             self.message(channel, "Usage: !bet forceenter <username> <time>", isWhisper)
                             return
-                        
+
                         enteruser = args[1].strip().lower()
-                        
+
                         if enteruser == sender:
                             self.message(channel, "You can't force-enter your own time, pls.", isWhisper)
                             return
-                            
+
                         with db.cursor() as cur:
                             cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
                                         [channel])
                             betRow = cur.fetchone()
-                            
+
                             if betRow is None or betRow[1] not in ("open", "started"):
-                                self.message(channel, "There is not a bet in this channel that is eligible for force-entries.", isWhisper)
+                                self.message(channel,
+                                             "There is not a bet in this channel that is eligible for force-entries.",
+                                             isWhisper)
                             else:
                                 # check username
                                 cur.execute("SELECT id FROM users WHERE name = %s", [enteruser])
@@ -3481,15 +3501,17 @@ class NepBot(NepBotClass):
                                     self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
                                     return
                                 enterid = int(enteridrow[0])
-                                cur.execute("REPLACE INTO placed_bets (betid, userid, bet, updated) VALUE (%s, %s, %s, %s)", [betRow[0], enterid, tdata["total"], current_milli_time()])
+                                cur.execute(
+                                    "REPLACE INTO placed_bets (betid, userid, bet, updated) VALUE (%s, %s, %s, %s)",
+                                    [betRow[0], enterid, tdata["total"], current_milli_time()])
                                 self.message(channel,
-                                     "Successfully entered {user}'s bet: {h}h {min}min {s}s {ms}ms".format(
-                                         h=tdata["hours"],
-                                         min=tdata["minutes"],
-                                         s=tdata["seconds"],
-                                         ms=tdata["ms"],
-                                         user=enteruser),
-                                     isWhisper)
+                                             "Successfully entered {user}'s bet: {h}h {min}min {s}s {ms}ms".format(
+                                                 h=tdata["hours"],
+                                                 min=tdata["minutes"],
+                                                 s=tdata["seconds"],
+                                                 ms=tdata["ms"],
+                                                 user=enteruser),
+                                             isWhisper)
                         return
                     elif subcmd == "payout" and canAdminBets:
                         # pay out most recent bet in this channel
@@ -3536,42 +3558,47 @@ class NepBot(NepBotClass):
                             for winner in resultData["winners"]:
                                 place += 1
 
-                                
                                 if abs(winner["timedelta"]) < 10 and resultData["result"] >= 1800000:
                                     prizeTier = 7
                                 elif abs(winner["timedelta"]) < 1000 and resultData["result"] >= 1800000:
                                     prizeTier = 6
                                 else:
                                     prizeTier = 1
-                                    
+
                                     if place == 1:
                                         prizeTier += 1
                                     if place <= 3 and numEntries >= 10:
                                         prizeTier += 1
-                                    if place <= numEntries//2:
+                                    if place <= numEntries // 2:
                                         prizeTier += 1
                                     if abs(winner["timedelta"]) < 60000 and resultData["result"] >= 3600000:
                                         prizeTier += 1
                                     if isMarathonChannel and prizeTier < 5:
                                         prizeTier += 1
-                                
+
                                 prizeToken = config["betPrizeTier%dToken" % prizeTier]
                                 prizePack = config["betPrizeTier%dBooster" % prizeTier]
                                 prizeName = config["betPrizeTier%dName" % prizeTier]
-                                
+
                                 prizes[prizeToken].append(winner["name"])
-                                cur.execute("INSERT INTO tokens (token, boostername, claimable, bet_prize, type, only_redeemable_by) VALUES(%s, %s, 1, 1, 'single', %s)", [prizeToken, prizePack, winner["id"]])
-                                cur.execute("UPDATE placed_bets SET prizeToken = %s WHERE betid = %s AND userid = %s", [prizeToken, betRow[0], winner["id"]])
-                                
+                                cur.execute(
+                                    "INSERT INTO tokens (token, boostername, claimable, bet_prize, type, only_redeemable_by) VALUES(%s, %s, 1, 1, 'single', %s)",
+                                    [prizeToken, prizePack, winner["id"]])
+                                cur.execute("UPDATE placed_bets SET prizeToken = %s WHERE betid = %s AND userid = %s",
+                                            [prizeToken, betRow[0], winner["id"]])
+
                             # broadcaster prize
                             # run length in hours * 500, rounded to nearest 50
                             # scales up a bit as the hours go on
                             runHours = resultData["result"] / 3600000.0
-                            bcPrize = min(runHours, 5) * 500 + min(max(runHours - 5, 0), 5) * 750 + max(runHours - 10, 0) * 1000
+                            bcPrize = min(runHours, 5) * 500 + min(max(runHours - 5, 0), 5) * 750 + max(runHours - 10,
+                                                                                                        0) * 1000
                             bcPrize = max(int(round(bcPrize / 50.0) * 50), 50)
-                            
+
                             cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
-                            cur.execute("UPDATE bets SET status = 'paid', paidBroadcaster = %s, paidAt = %s WHERE id = %s", [bcPrize, current_milli_time(), betRow[0]])
+                            cur.execute(
+                                "UPDATE bets SET status = 'paid', paidBroadcaster = %s, paidAt = %s WHERE id = %s",
+                                [bcPrize, current_milli_time(), betRow[0]])
 
                             messages = ["Paid out the following prizes: "]
                             for prizeToken in prizes:
@@ -3589,28 +3616,36 @@ class NepBot(NepBotClass):
 
                             for message in messages:
                                 self.message(channel, message, isWhisper)
-                                
+
                             # alert each person individually as well
                             # sent after the messages to the channel itself deliberately
                             for prizeToken in prizes:
                                 for winnerName in prizes[prizeToken]:
                                     whisperArgs = (betPrizeNames[prizeToken], channel[1:], prizeToken)
-                                    self.message('#'+winnerName, "You won a %s from the bet in %s's channel. Redeem it in any chat with !redeem %s" % whisperArgs, True)
+                                    self.message('#' + winnerName,
+                                                 "You won a %s from the bet in %s's channel. Redeem it in any chat with !redeem %s" % whisperArgs,
+                                                 True)
 
                         cur.close()
                         return
                     elif subcmd == "packs":
                         # check any packs they might have left to claim
                         cur = db.cursor()
-                        cur.execute("SELECT token, COUNT(*) FROM tokens WHERE claimable = 1 AND bet_prize = 1 AND only_redeemable_by = %s GROUP BY token", [tags['user-id']])
+                        cur.execute(
+                            "SELECT token, COUNT(*) FROM tokens WHERE claimable = 1 AND bet_prize = 1 AND only_redeemable_by = %s GROUP BY token",
+                            [tags['user-id']])
                         prizes = cur.fetchall()
-                        
+
                         if len(prizes) > 0:
-                            prizeStr = ", ".join("%s%s (!redeem %s)" % (betPrizeNames[row[0]], " x%d" % row[1] if row[1] > 1 else "", row[0]) for row in prizes)
-                            self.message(channel, "%s, you have the following unclaimed bet prizes: %s" % (tags['display-name'], prizeStr), isWhisper)
+                            prizeStr = ", ".join("%s%s (!redeem %s)" % (
+                            betPrizeNames[row[0]], " x%d" % row[1] if row[1] > 1 else "", row[0]) for row in prizes)
+                            self.message(channel, "%s, you have the following unclaimed bet prizes: %s" % (
+                            tags['display-name'], prizeStr), isWhisper)
                         else:
-                            self.message(channel, "%s, you have no unclaimed bet prizes right now. Participate in more bets to earn free packs!" % tags['display-name'], isWhisper)
-                        
+                            self.message(channel,
+                                         "%s, you have no unclaimed bet prizes right now. Participate in more bets to earn free packs!" %
+                                         tags['display-name'], isWhisper)
+
                         cur.close()
                         return
                     else:
@@ -3665,7 +3700,7 @@ class NepBot(NepBotClass):
                 if len(args) == 0:
                     self.message(channel,
                                  "Available sets: %s/sets?user=%s !sets rarity to check your progress on rarity sets. !sets claim to claim all sets you are eligible for." % (
-                                 config["siteHost"], sender.lower()), isWhisper=isWhisper)
+                                     config["siteHost"], sender.lower()), isWhisper=isWhisper)
                     return
                 subcmd = args[0].lower()
                 if subcmd == "rarity":
@@ -3797,14 +3832,15 @@ class NepBot(NepBotClass):
                                     addPoints(tags['user-id'], set[4])
                                     cur.executemany("INSERT INTO rarity_sets_cards (setID, cardID) VALUES(%s, %s)",
                                                     [(set[0], card) for card in usedCards])
-                                    badgeid = addBadge(set[1], config["setBadgeDescription"], config["setBadgeDefaultImage"])
+                                    badgeid = addBadge(set[1], config["setBadgeDescription"],
+                                                       config["setBadgeDefaultImage"])
                                     giveBadge(tags['user-id'], badgeid)
                                     self.message(channel,
                                                  "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(
                                                      set=set[1], user=tags["display-name"], reward=set[4]), isWhisper)
                                     usedCardNames = [namesById[id] for id in usedCards]
                                     threading.Thread(target=sendSetAlert, args=(
-                                    channel, tags["display-name"], set[1], usedCardNames)).start()
+                                        channel, tags["display-name"], set[1], usedCardNames)).start()
                                     break
 
                     if claimed == 0:
@@ -3917,7 +3953,7 @@ class NepBot(NepBotClass):
                     if len(winners) != num_winners:
                         self.message(channel,
                                      "There aren't enough entrants left to pick %d more winners! Try %d or fewer." % (
-                                     num_winners, len(winners)), isWhisper)
+                                         num_winners, len(winners)), isWhisper)
                         cur.close()
                         return
 
@@ -3935,83 +3971,110 @@ class NepBot(NepBotClass):
                 with db.cursor() as cur:
                     cur.execute("SELECT id, status, ticket_price, max_tickets FROM raffles ORDER BY id DESC LIMIT 1")
                     raffle_info = cur.fetchone()
-                    
+
                     if len(args) == 0:
                         # check for info
                         if raffle_info is None or raffle_info[1] == 'done':
                             self.message(channel, "No raffle is open at this time.", isWhisper)
                             return
                         else:
-                            cur.execute("SELECT num_tickets, num_winners, won_grand FROM raffle_tickets WHERE raffleid = %s AND userid = %s", [raffle_info[0], tags['user-id']])
+                            cur.execute(
+                                "SELECT num_tickets, num_winners, won_grand FROM raffle_tickets WHERE raffleid = %s AND userid = %s",
+                                [raffle_info[0], tags['user-id']])
                             my_tickets = cur.fetchone()
-                            
+
                             if raffle_info[1] == 'open':
                                 if my_tickets is None:
-                                    self.message(channel, "There is a raffle currently open. You can buy up to %d tickets for %d points each using !raffle buy <amount>. You don't have any tickets right now." % (raffle_info[3], raffle_info[2]), isWhisper)
+                                    self.message(channel,
+                                                 "There is a raffle currently open. You can buy up to %d tickets for %d points each using !raffle buy <amount>. You don't have any tickets right now." % (
+                                                 raffle_info[3], raffle_info[2]), isWhisper)
                                 elif my_tickets[0] < raffle_info[3]:
-                                    self.message(channel, "There is a raffle currently open. You have bought %d tickets so far. You can buy up to %d more for %d points each using !raffle buy <amount>." % (my_tickets[0], raffle_info[3] - my_tickets[0], raffle_info[2]), isWhisper)
+                                    self.message(channel,
+                                                 "There is a raffle currently open. You have bought %d tickets so far. You can buy up to %d more for %d points each using !raffle buy <amount>." % (
+                                                 my_tickets[0], raffle_info[3] - my_tickets[0], raffle_info[2]),
+                                                 isWhisper)
                                 else:
-                                    self.message(channel, "There is a raffle currently open. You are already at the limit of %d tickets." % (raffle_info[3]), isWhisper)
+                                    self.message(channel,
+                                                 "There is a raffle currently open. You are already at the limit of %d tickets." % (
+                                                 raffle_info[3]), isWhisper)
                             else:
                                 # raffle in process of drawing
                                 if my_tickets is None:
-                                    self.message(channel, "The current raffle is in the process of being drawn. Unfortunately, you didn't buy any tickets! Try again next raffle.")
+                                    self.message(channel,
+                                                 "The current raffle is in the process of being drawn. Unfortunately, you didn't buy any tickets! Try again next raffle.")
                                 else:
                                     if my_tickets[2] != 0:
-                                        self.message(channel, "The current raffle is in the process of being drawn. So far you have won %d minor prizes and a grand prize from your %d tickets!" % (my_tickets[1] - 1, my_tickets[0]))
+                                        self.message(channel,
+                                                     "The current raffle is in the process of being drawn. So far you have won %d minor prizes and a grand prize from your %d tickets!" % (
+                                                     my_tickets[1] - 1, my_tickets[0]))
                                     else:
-                                        self.message(channel, "The current raffle is in the process of being drawn. So far, you have won %d minor prizes and no grand prize from your %d tickets." % (my_tickets[1], my_tickets[0]))
-                                        
+                                        self.message(channel,
+                                                     "The current raffle is in the process of being drawn. So far, you have won %d minor prizes and no grand prize from your %d tickets." % (
+                                                     my_tickets[1], my_tickets[0]))
+
                             return
-                        
+
                     subcmd = args[0].lower()
                     if subcmd == 'buy':
                         if raffle_info[1] != 'open':
-                            self.message(channel, "Raffle ticket purchases aren't open right now. Use !raffle to check the overall status.")
+                            self.message(channel,
+                                         "Raffle ticket purchases aren't open right now. Use !raffle to check the overall status.")
                             return
-                        
+
                         if len(args) < 2:
                             self.message(channel, "Usage: !raffle buy <amount>", isWhisper)
                             return
-                            
+
                         try:
                             tickets = int(args[1])
                             assert tickets >= 0
                         except Exception:
                             self.message(channel, "Invalid amount of tickets specified.", isWhisper)
                             return
-                            
-                        cur.execute("SELECT num_tickets, num_winners, won_grand FROM raffle_tickets WHERE raffleid = %s AND userid = %s", [raffle_info[0], tags['user-id']])
+
+                        cur.execute(
+                            "SELECT num_tickets, num_winners, won_grand FROM raffle_tickets WHERE raffleid = %s AND userid = %s",
+                            [raffle_info[0], tags['user-id']])
                         my_tickets = cur.fetchone()
-                        
+
                         can_buy = raffle_info[3] if my_tickets is None else raffle_info[3] - my_tickets[0]
                         cost = tickets * raffle_info[2]
-                        
+
                         if tickets > can_buy:
                             if can_buy == 0:
-                                self.message(channel, "%s, you're already at the maximum of %d tickets for this raffle. Please wait for the drawing." % (tags['display-name'], raffle_info[3]), isWhisper)
+                                self.message(channel,
+                                             "%s, you're already at the maximum of %d tickets for this raffle. Please wait for the drawing." % (
+                                             tags['display-name'], raffle_info[3]), isWhisper)
                             else:
-                                self.message(channel, "%s, you can only buy %d more tickets for this raffle. Please adjust your purchase." % (tags['display-name'], can_buy), isWhisper)
+                                self.message(channel,
+                                             "%s, you can only buy %d more tickets for this raffle. Please adjust your purchase." % (
+                                             tags['display-name'], can_buy), isWhisper)
                             return
-                            
+
                         if not hasPoints(tags['user-id'], cost):
-                            self.message(channel, "%s, you don't have the %d points required to buy %d tickets." % (tags['display-name'], cost, tickets), isWhisper)
+                            self.message(channel, "%s, you don't have the %d points required to buy %d tickets." % (
+                            tags['display-name'], cost, tickets), isWhisper)
                             return
-                            
+
                         # okay, buy the tickets
                         addPoints(tags['user-id'], -cost)
                         if my_tickets is None:
-                            cur.execute("INSERT INTO raffle_tickets (raffleid, userid, num_tickets, created) VALUES(%s, %s, %s, %s)", [raffle_info[0], tags['user-id'], tickets, current_milli_time()])
+                            cur.execute(
+                                "INSERT INTO raffle_tickets (raffleid, userid, num_tickets, created) VALUES(%s, %s, %s, %s)",
+                                [raffle_info[0], tags['user-id'], tickets, current_milli_time()])
                         else:
-                            cur.execute("UPDATE raffle_tickets SET num_tickets = num_tickets + %s, updated = %s WHERE raffleid = %s AND userid = %s", [tickets, current_milli_time(), raffle_info[0], tags['user-id']])
-                            
-                        self.message(channel, "%s, you successfully bought %d raffle tickets for %d points." % (tags['display-name'], tickets, cost), isWhisper)
+                            cur.execute(
+                                "UPDATE raffle_tickets SET num_tickets = num_tickets + %s, updated = %s WHERE raffleid = %s AND userid = %s",
+                                [tickets, current_milli_time(), raffle_info[0], tags['user-id']])
+
+                        self.message(channel, "%s, you successfully bought %d raffle tickets for %d points." % (
+                        tags['display-name'], tickets, cost), isWhisper)
                         return
-                    
+
                     if sender not in superadmins:
                         self.message(channel, "Usage: !raffle / !raffle buy <amount>", isWhisper)
                         return
-                    
+
                     if subcmd == 'open':
                         if raffle_info is not None and raffle_info[1] != 'done':
                             self.message(channel, "There is already an incomplete raffle right now.", isWhisper)
@@ -4025,90 +4088,114 @@ class NepBot(NepBotClass):
                             assert max_tickets > 0 and max_tickets < 100
                             assert points_per_ticket >= 100
                         except Exception:
-                            self.message(channel, "Invalid arguments. Usage: !raffle open <points per ticket> <max tickets>", isWhisper)
+                            self.message(channel,
+                                         "Invalid arguments. Usage: !raffle open <points per ticket> <max tickets>",
+                                         isWhisper)
                             return
-                        
+
                         # create a new raffle
-                        cur.execute("INSERT INTO raffles (opened, creator, status, ticket_price, max_tickets) VALUES(%s, %s, 'open', %s, %s)", [current_milli_time(), tags['user-id'], points_per_ticket, max_tickets])
+                        cur.execute(
+                            "INSERT INTO raffles (opened, creator, status, ticket_price, max_tickets) VALUES(%s, %s, 'open', %s, %s)",
+                            [current_milli_time(), tags['user-id'], points_per_ticket, max_tickets])
                         self.message(channel, "Started a new raffle!", isWhisper)
                         cur.close()
                         return
-                    
+
                     if subcmd == 'close':
                         if raffle_info is None or raffle_info[1] != 'open':
                             self.message(channel, "There is not an open raffle right now.", isWhisper)
                             return
-                        cur.execute("UPDATE raffles SET closed = %s, status = 'drawing' WHERE id = %s", [current_milli_time(), raffle_info[0]])
+                        cur.execute("UPDATE raffles SET closed = %s, status = 'drawing' WHERE id = %s",
+                                    [current_milli_time(), raffle_info[0]])
                         self.message(channel, "Closed ticket purchases for the current raffle!", isWhisper)
                         return
-                        
+
                     if subcmd == 'complete':
                         if raffle_info is None or raffle_info[1] != 'drawing':
-                            self.message(channel, "There is not a raffle in the process of drawing right now.", isWhisper)
+                            self.message(channel, "There is not a raffle in the process of drawing right now.",
+                                         isWhisper)
                             return
-                        cur.execute("UPDATE raffles SET status = 'done' WHERE id = %s", [current_milli_time(), raffle_info[0]])
+                        cur.execute("UPDATE raffles SET status = 'done' WHERE id = %s",
+                                    [current_milli_time(), raffle_info[0]])
                         self.message(channel, "Closed drawing for the current raffle!", isWhisper)
                         return
-                        
+
                     if subcmd == 'pick' or subcmd == 'draw':
                         if raffle_info is None or raffle_info[1] != 'drawing':
-                            self.message(channel, "There is not a raffle in the process of drawing right now.", isWhisper)
+                            self.message(channel, "There is not a raffle in the process of drawing right now.",
+                                         isWhisper)
                             return
-                            
+
                         if len(args) < 2:
                             self.message(channel, "Usage: !raffle pick <amount of winners>", isWhisper)
                             return
-                            
+
                         winners = []
-                        
+
                         try:
                             num_winners = int(args[1])
                             assert num_winners > 0
                         except Exception:
                             self.message(channel, "Usage: !raffle pick <amount of winners>", isWhisper)
                             return
-                            
+
                         for i in range(num_winners):
-                            cur.execute("SELECT raffle_tickets.userid, users.name FROM raffle_tickets INNER JOIN users ON raffle_tickets.userid = users.id WHERE raffle_tickets.raffleid = %s AND raffle_tickets.num_winners < raffle_tickets.num_tickets ORDER BY -LOG(1-RAND())/(num_tickets - num_winners) LIMIT 1", [raffle_info[0]])
+                            cur.execute(
+                                "SELECT raffle_tickets.userid, users.name FROM raffle_tickets INNER JOIN users ON raffle_tickets.userid = users.id WHERE raffle_tickets.raffleid = %s AND raffle_tickets.num_winners < raffle_tickets.num_tickets ORDER BY -LOG(1-RAND())/(num_tickets - num_winners) LIMIT 1",
+                                [raffle_info[0]])
                             winner = cur.fetchone()
                             if winner is None:
                                 # completely out of non-winning tickets
                                 break
-                            
+
                             # add their name to the winner list
                             winners.append(winner[1])
-                            
+
                             # update their ticket entry
-                            cur.execute("UPDATE raffle_tickets SET num_winners = num_winners + 1, updated = %s WHERE raffleid = %s AND userid = %s", [current_milli_time(), raffle_info[0], winner[0]])
-                            
+                            cur.execute(
+                                "UPDATE raffle_tickets SET num_winners = num_winners + 1, updated = %s WHERE raffleid = %s AND userid = %s",
+                                [current_milli_time(), raffle_info[0], winner[0]])
+
                         if len(winners) == 0:
-                            self.message(channel, "Drew no new minor prize winners - the system is out of non-winning tickets!", isWhisper)
+                            self.message(channel,
+                                         "Drew no new minor prize winners - the system is out of non-winning tickets!",
+                                         isWhisper)
                         elif len(winners) < num_winners:
-                            self.message(channel, "Drew %d minor prize winners (truncated) - %s !" % (len(winners), ", ".join(winners)), isWhisper)
+                            self.message(channel, "Drew %d minor prize winners (truncated) - %s !" % (
+                            len(winners), ", ".join(winners)), isWhisper)
                         else:
-                            self.message(channel, "Drew %d minor prize winners - %s !" % (len(winners), ", ".join(winners)), isWhisper)
-                        
+                            self.message(channel,
+                                         "Drew %d minor prize winners - %s !" % (len(winners), ", ".join(winners)),
+                                         isWhisper)
+
                         return
-                        
+
                     if subcmd == 'pickgrand' or subcmd == 'drawgrand':
                         if raffle_info is None or raffle_info[1] != 'drawing':
-                            self.message(channel, "There is not a raffle in the process of drawing right now.", isWhisper)
+                            self.message(channel, "There is not a raffle in the process of drawing right now.",
+                                         isWhisper)
                             return
-                            
+
                         if len(args) >= 2:
                             self.message(channel, "!raffle drawgrand only draws one winner at once.", isWhisper)
                             return
-                            
-                        cur.execute("SELECT raffle_tickets.userid, users.name FROM raffle_tickets INNER JOIN users ON raffle_tickets.userid = users.id WHERE raffle_tickets.raffleid = %s AND raffle_tickets.num_winners < raffle_tickets.num_tickets AND raffle_tickets.won_grand = 0 ORDER BY -LOG(1-RAND())/(num_tickets - num_winners) LIMIT 1", [raffle_info[0]])
+
+                        cur.execute(
+                            "SELECT raffle_tickets.userid, users.name FROM raffle_tickets INNER JOIN users ON raffle_tickets.userid = users.id WHERE raffle_tickets.raffleid = %s AND raffle_tickets.num_winners < raffle_tickets.num_tickets AND raffle_tickets.won_grand = 0 ORDER BY -LOG(1-RAND())/(num_tickets - num_winners) LIMIT 1",
+                            [raffle_info[0]])
                         winner = cur.fetchone()
                         if winner is None:
                             # completely out of non-winning tickets
-                            self.message(channel, "Could not draw a new grand prize winner as there are no applicable users left!", isWhisper)
+                            self.message(channel,
+                                         "Could not draw a new grand prize winner as there are no applicable users left!",
+                                         isWhisper)
                             return
-                        
+
                         # update their ticket entry
-                        cur.execute("UPDATE raffle_tickets SET num_winners = num_winners + 1, won_grand = 1, updated = %s WHERE raffleid = %s AND userid = %s", [current_milli_time(), raffle_info[0], winner[0]])
-                        
+                        cur.execute(
+                            "UPDATE raffle_tickets SET num_winners = num_winners + 1, won_grand = 1, updated = %s WHERE raffleid = %s AND userid = %s",
+                            [current_milli_time(), raffle_info[0], winner[0]])
+
                         self.message(channel, "Drew a new grand prize winner: %s!" % winner[1])
                         return
             if command == "bounty":
@@ -4279,7 +4366,7 @@ class NepBot(NepBotClass):
                         if amount < min_amount or amount > max_amount:
                             self.message(channel,
                                          "%s, your bounty for this waifu must fall between %d and %d points." % (
-                                         tags['display-name'], min_amount, max_amount), isWhisper)
+                                             tags['display-name'], min_amount, max_amount), isWhisper)
                             cur.close()
                             return
 
@@ -4290,14 +4377,15 @@ class NepBot(NepBotClass):
                             if amount < highest_other_bid + minimum_outbid:
                                 self.message(channel,
                                              "%s, you must place a bounty of at least %d points to outbid the current highest bid of %d points." % (
-                                             tags['display-name'], highest_other_bid + minimum_outbid,
-                                             highest_other_bid), isWhisper)
+                                                 tags['display-name'], highest_other_bid + minimum_outbid,
+                                                 highest_other_bid), isWhisper)
                                 cur.close()
                                 return
                         elif amount < old_bounty and highest_other_bid + minimum_outbid > amount and amount > highest_other_bid:
                             self.message(channel,
                                          "%s, the lowest you can reduce your bounty to is %d points due to the bid of %d points below it." % (
-                                         tags['display-name'], highest_other_bid + minimum_outbid, highest_other_bid))
+                                             tags['display-name'], highest_other_bid + minimum_outbid,
+                                             highest_other_bid))
                             cur.close()
                             return
 
@@ -4309,7 +4397,7 @@ class NepBot(NepBotClass):
                         if dupe_amt > 0:
                             self.message(channel,
                                          "%s, someone else has already placed a bounty on that waifu for %d points. Choose another amount." % (
-                                         tags['display-name'], amount), isWhisper)
+                                             tags['display-name'], amount), isWhisper)
                             cur.close()
                             return
 
@@ -4352,23 +4440,25 @@ class NepBot(NepBotClass):
                                 "INSERT INTO bounties (userid, waifuid, amount, status, created) VALUES(%s, %s, %s, 'open', %s)",
                                 [tags['user-id'], waifu['id'], amount, current_milli_time()])
                             self.message(channel, "%s, you placed a new bounty on [%d] %s for %d points." % (
-                            tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
+                                tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
                         else:
                             cur.execute("UPDATE bounties SET amount = %s, updated = %s WHERE id = %s",
                                         [amount, current_milli_time(), myorderinfo[0]])
                             self.message(channel, "%s, you updated your bounty on [%d] %s to %d points." % (
-                            tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
+                                tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
 
                         # outbid message?
                         if outbidding:
                             # attempt to whisper for outbid
-                            cur.execute("SELECT users.name FROM bounties JOIN users ON bounties.userid=users.id WHERE bounties.waifuid = %s AND bounties.amount = %s AND bounties.status = 'open' LIMIT 1", [waifu['id'], highest_other_bid])
+                            cur.execute(
+                                "SELECT users.name FROM bounties JOIN users ON bounties.userid=users.id WHERE bounties.waifuid = %s AND bounties.amount = %s AND bounties.status = 'open' LIMIT 1",
+                                [waifu['id'], highest_other_bid])
 
                             other_bidder = cur.fetchone()
                             if other_bidder is not None:
                                 self.message('#%s' % other_bidder[0],
                                              "Your bounty on [%d] %s has been outbid. The new highest bounty is %d points." % (
-                                             waifu['id'], waifu['name'], amount), True)
+                                                 waifu['id'], waifu['name'], amount), True)
                         cur.close()
                         return
 
@@ -4409,12 +4499,12 @@ class NepBot(NepBotClass):
                                 addPoints(tags['user-id'], refund)
                                 self.message(channel,
                                              "%s, you cancelled your bounty for [%d] %s and received only %d points back since it was above cap." % (
-                                             tags['display-name'], waifu['id'], waifu['name'], refund), isWhisper)
+                                                 tags['display-name'], waifu['id'], waifu['name'], refund), isWhisper)
                             else:
                                 addPoints(tags['user-id'], myorderinfo[1])
                                 self.message(channel,
                                              "%s, you cancelled your bounty for [%d] %s and received your %d points back." % (
-                                             tags['display-name'], waifu['id'], waifu['name'], myorderinfo[1]),
+                                                 tags['display-name'], waifu['id'], waifu['name'], myorderinfo[1]),
                                              isWhisper)
                         else:
                             self.message(channel,
@@ -4445,7 +4535,7 @@ class NepBot(NepBotClass):
 
                 if rarity == waifu['base_rarity']:
                     self.message(channel, "[%d] %s is already %s base rarity!" % (
-                    waifu['id'], waifu['name'], config['rarity%dName' % rarity]), isWhisper)
+                        waifu['id'], waifu['name'], config['rarity%dName' % rarity]), isWhisper)
                     return
 
                 # limit check
@@ -4460,7 +4550,7 @@ class NepBot(NepBotClass):
 
                     if currentOwned > newRarityLimit:
                         errorArgs = (
-                        waifu['id'], waifu['name'], config['rarity%dName' % rarity], currentOwned, newRarityLimit)
+                            waifu['id'], waifu['name'], config['rarity%dName' % rarity], currentOwned, newRarityLimit)
                         self.message(channel,
                                      "[%d] %s cannot be changed to %s base rarity. There are %d copies of her already owned while the limit at the new rarity would be %d." % errorArgs,
                                      isWhisper)
@@ -4481,14 +4571,14 @@ class NepBot(NepBotClass):
                         addPoints(bounty[0], bounty[2])
                         self.message('#%s' % bounty[1],
                                      "Your bounty for [%d] %s has been cancelled due to its rarity changing. Your %d points have been refunded." % (
-                                     waifu['id'], waifu['name'], bounty[2]), True)
+                                         waifu['id'], waifu['name'], bounty[2]), True)
                     cur.execute(
                         "UPDATE bounties SET status='cancelled', updated=%s WHERE waifuid = %s AND status='open'",
                         [current_milli_time(), waifu['id']])
 
                 # done
                 self.message(channel, "Successfully changed [%d] %s's base rarity to %s." % (
-                waifu['id'], waifu['name'], config['rarity%dName' % rarity]), isWhisper)
+                    waifu['id'], waifu['name'], config['rarity%dName' % rarity]), isWhisper)
                 return
             if command == "profile":
                 if len(args) == 0:
@@ -4525,7 +4615,8 @@ class NepBot(NepBotClass):
                                      isWhisper)
                         return
                     elif hasOrIsLowRarity:
-                        self.message(channel, "Updated your favourite Waifu to be " + newFavW["name"] + "! naroDesu", isWhisper)
+                        self.message(channel, "Updated your favourite Waifu to be " + newFavW["name"] + "! naroDesu",
+                                     isWhisper)
                         setFavourite(tags["user-id"], newFav)
                         return
                     else:
@@ -4537,27 +4628,35 @@ class NepBot(NepBotClass):
                     newDesc = " ".join(args[1:])
                     logger.debug("New description: " + newDesc)
                     if len(newDesc) > 1023:
-                        self.message(channel, "That description is too long. Please limit it to 1024 characters.", isWhisper)
+                        self.message(channel, "That description is too long. Please limit it to 1024 characters.",
+                                     isWhisper)
                         return
                     setDescription(tags["user-id"], newDesc)
-                    self.message(channel, tags["display-name"] + ", successfully updated your profile description!", isWhisper)
+                    self.message(channel, tags["display-name"] + ", successfully updated your profile description!",
+                                 isWhisper)
             if command == "fixwaifu":
-                self.message(channel, "To submit changes/fixes for any waifu, please go to %s/fixes" % config["siteHost"], isWhisper)
+                self.message(channel,
+                             "To submit changes/fixes for any waifu, please go to %s/fixes" % config["siteHost"],
+                             isWhisper)
                 return
             if command == "packspending":
                 with db.cursor() as cur:
-                    cur.execute("SELECT bo.boostername, COUNT(*), SUM(IF(bo.paid > 0, bo.paid, boosters.cost)) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON bo.boostername = boosters.name WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC", [tags['user-id']] * 2)
+                    cur.execute(
+                        "SELECT bo.boostername, COUNT(*), SUM(IF(bo.paid > 0, bo.paid, boosters.cost)) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON bo.boostername = boosters.name WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC",
+                        [tags['user-id']] * 2)
                     packstats = cur.fetchall()
-                    
+
                     if len(packstats) == 0:
-                        self.message(channel, "%s, you haven't bought any boosters yet! Buy your first with !booster buy." % tags['display-name'], isWhisper)
+                        self.message(channel,
+                                     "%s, you haven't bought any boosters yet! Buy your first with !booster buy." %
+                                     tags['display-name'], isWhisper)
                         return
-                        
+
                     totalspending = sum([row[2] for row in packstats])
                     packstr = ", ".join("%dx %s" % (row[1], row[0]) for row in packstats)
-                    self.message(channel, "%s, you have spent %d total points on the following packs: %s." % (tags['display-name'], totalspending, packstr), isWhisper)
+                    self.message(channel, "%s, you have spent %d total points on the following packs: %s." % (
+                    tags['display-name'], totalspending, packstr), isWhisper)
                     return
-
 
 
 curg = db.cursor()
