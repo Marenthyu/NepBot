@@ -739,7 +739,7 @@ function profile(req, res, query) {
         res.end();
         return;
     }
-    con.query("SELECT profileDescription, favourite FROM users WHERE users.name = ?", query.user, function(err, resultOuter) {
+    con.query("SELECT profileDescription, favourite, id FROM users WHERE users.name = ?", query.user, function(err, resultOuter) {
         if (err) throw err;
         if (resultOuter.length === 0) {
             res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
@@ -747,8 +747,9 @@ function profile(req, res, query) {
             res.end();
             return;
         }
+        let userID = resultOuter[0].id;
         con.query("SELECT badges.name, badges.description, badges.image FROM has_badges JOIN badges ON has_badges.badgeID =" +
-            " badges.id JOIN users ON has_badges.userID = users.id WHERE users.name = ?", query.user, function (err, result) {
+            " badges.id JOIN users ON has_badges.userID = users.id WHERE users.id = ?", userID, function (err, result) {
             if (err) throw err;
             res.writeHead(200, {'Content-Type': 'text/html'});
             let badges = '';
@@ -771,8 +772,19 @@ function profile(req, res, query) {
 
                 card = getCardHtml(card, row);
 
-                res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{USERNAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card));
-                res.end();
+                con.query("SELECT SUM(IF(bo.paid > 0, bo.paid, boosters.cost)) as paid FROM (SELECT * FROM boosters_opened WHERE userid = ? UNION SELECT * FROM archive_boosters_opened WHERE userid = ?) AS bo JOIN boosters ON bo.boostername = boosters.name WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC", [userID, userID], function (err, resultInnermost) {
+                    if (err) throw err;
+                    let spending = 0;
+                    for (let row of resultInnermost) {
+                        spending += row.paid;
+                    }
+                    let lastspendings = 4000;
+                    let nextspendings = 10000;
+                    let percentspendings = Math.max(((spending - lastspendings )/ ( nextspendings - lastspendings) )* 100, 0);
+                    res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{USERNAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
+                    res.end();
+                })
+
             });
 
         });

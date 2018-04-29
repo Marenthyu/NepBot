@@ -186,3 +186,8 @@ body {
 .col-favourite {
     min-width: 24%;
 }
+
+.progress {
+    margin: 0 auto;
+    width:  75%;
+}
