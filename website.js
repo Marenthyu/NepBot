@@ -778,11 +778,27 @@ function profile(req, res, query) {
                     for (let row of resultInnermost) {
                         spending += row.paid;
                     }
-                    let lastspendings = 4000;
-                    let nextspendings = 10000;
-                    let percentspendings = Math.max(((spending - lastspendings )/ ( nextspendings - lastspendings) )* 100, 0);
-                    res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{USERNAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
-                    res.end();
+                    con.query("SELECT slot, spendings, (SELECT paidHandUpgrades FROM users WHERE id = ?) as paidSlots FROM handupgrades", userID, function (err, huLUTresult) {
+                        if (err) throw err;
+
+                        let nextspendings = 0;
+                        let lastspendings = 0;
+
+                        let paidSlots = huLUTresult[0].paidSlots;
+
+                        while (paidSlots >= huLUTresult.length - 1) {
+                            paidSlots--;
+                            nextspendings += 1000000;
+                            lastspendings += 1000000;
+                        }
+                        lastspendings += huLUTresult[paidSlots].spendings;
+                        nextspendings += huLUTresult[paidSlots + 1].spendings;
+
+                        let percentspendings = Math.max(((spending - lastspendings )/ ( nextspendings - lastspendings) )* 100, 0);
+                        res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{USERNAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
+                        res.end();
+
+                    })
                 })
 
             });

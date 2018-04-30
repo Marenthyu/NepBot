@@ -3,27 +3,27 @@ html {
 }
 
 body {
-  padding-top: 10px;
-  padding-bottom: 30px;
+    padding-top: 10px;
+    padding-bottom: 30px;
 }
 
 .id-holder {
-	position: absolute;
-	bottom: 0;
-	left: 0;
-	padding: 2px 5px 2px 5px;
-	border-radius: 0 8px 0 0;
-	font-size: 120%;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    padding: 2px 5px 2px 5px;
+    border-radius: 0 8px 0 0;
+    font-size: 120%;
 }
 
 .rarity-holder {
-	position: absolute;
-	bottom: 0;
-	right: 0;
-	text-transform: uppercase;
-	padding: 2px 5px 2px 5px;
-	border-radius: 8px 0 0 0;
-	font-size: 120%;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    text-transform: uppercase;
+    padding: 2px 5px 2px 5px;
+    border-radius: 8px 0 0 0;
+    font-size: 120%;
 }
 
 .amount-holder {
@@ -32,7 +32,7 @@ body {
     left: 0;
     padding: 2px 5px 2px 5px;
     border-radius: 0 0 8px 0;
-	font-size: 150%;
+    font-size: 150%;
 }
 
 .promotion-holder {
@@ -41,7 +41,7 @@ body {
     right: 0;
     padding: 2px 5px 2px 5px;
     border-radius: 0 0 0 8px;
-	font-size: 120%;
+    font-size: 120%;
 }
 
 .invisible-space-holder {
@@ -52,43 +52,43 @@ body {
 }
 
 .rarity-common {
-	background-color: #BBBBBB;
-	color: black;
+    background-color: #BBBBBB;
+    color: black;
 }
 
 .rarity-uncommon {
-	background-color: #666666;
-	color: white;
+    background-color: #666666;
+    color: white;
 }
 
 .rarity-rare {
-	background-color: black;
-	color: white;
+    background-color: black;
+    color: white;
 }
 
 .rarity-super {
-	background-color: #E6E600;
-	color: black;
+    background-color: #E6E600;
+    color: black;
 }
 
 .rarity-ultra {
-	background-color: #820DFF;
-	color: white;
+    background-color: #820DFF;
+    color: white;
 }
 
 .rarity-legendary {
-	background-color: #FF831E;
-	color: black;
+    background-color: #FF831E;
+    color: black;
 }
 
 .rarity-mythical {
-	background-color: #0C96B4;
-	color: white;
+    background-color: #0C96B4;
+    color: white;
 }
 
 .rarity-god {
-	background-color: #ff69b4;
-	color: white;
+    background-color: #ff69b4;
+    color: white;
 }
 
 .card-god {
@@ -98,24 +98,24 @@ body {
 }
 
 .rarity-special {
-	background: linear-gradient(to right,rgba(255, 0, 0, 0.8),rgba(255, 165, 0, 0.8),rgba(0, 128, 0, 0.8),rgba(0, 0, 255, 0.8),rgba(75, 0, 162, 0.8),rgba(238, 162, 238, 0.8)), black;
-	color: white;
+    background: linear-gradient(to right,rgba(255, 0, 0, 0.8),rgba(255, 165, 0, 0.8),rgba(0, 128, 0, 0.8),rgba(0, 0, 255, 0.8),rgba(75, 0, 162, 0.8),rgba(238, 162, 238, 0.8)), black;
+    color: white;
 }
 
 .rarity-promo {
-	background: linear-gradient(to left,rgba(255, 0, 0, 0.8),rgba(255, 165, 0, 0.8),rgba(0, 128, 0, 0.8),rgba(0, 0, 255, 0.8),rgba(75, 0, 162, 0.8),rgba(238, 162, 238, 0.8)), black;
-	color: white;
+    background: linear-gradient(to left,rgba(255, 0, 0, 0.8),rgba(255, 165, 0, 0.8),rgba(0, 128, 0, 0.8),rgba(0, 0, 255, 0.8),rgba(75, 0, 162, 0.8),rgba(238, 162, 238, 0.8)), black;
+    color: white;
 }
 
 .card-body-tcg {
-	padding: 0;
+    padding: 0;
     position: relative;
     text-align: center;
 }
 
 .card-tcg {
-	margin: 0.5rem;
-	display: inline-block;
+    margin: 0.5rem;
+    display: inline-block;
     min-width: 170px;
 }
 
@@ -161,7 +161,7 @@ body {
 
 .badge-img {
     height: 50px;
-	width: 50px;
+    width: 50px;
 }
 
 .badge {
@@ -175,7 +175,7 @@ body {
 .badge-inf {
     margin-top: 3px;
     background:  rgb(237, 237, 237);
-	white-space: pre-wrap;
+    white-space: pre-wrap;
 }
 
 .row {
@@ -187,7 +187,11 @@ body {
     min-width: 24%;
 }
 
-.progress {
+.outerprogress {
     margin: 0 auto;
-    width:  75%;
+    width: 75%;
+}
+
+.progress {
+    width:  100%;
 }
