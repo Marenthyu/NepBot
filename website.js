@@ -784,18 +784,13 @@ function profile(req, res, query) {
 
                         let paidSlots = huLUTresult[0].paidSlots;
 
-                        while (paidSlots >= huLUTresult.length - 1) {
-                            paidSlots--;
-                            nextspendings += 1000000;
-                            if (paidSlots !== huLUTresult.length - 2)
-                                lastspendings += 1000000;
-                        }
-                        if (paidSlots === huLUTresult.length -2) {
-                            lastspendings += huLUTresult[paidSlots + 1].spendings;
+                        if (paidSlots + 1 < huLUTresult.length) {
+                            nextspendings = huLUTresult[paidSlots + 1].spendings;
+                            lastspendings = huLUTresult[paidSlots].spendings;
                         } else {
-                            lastspendings += huLUTresult[paidSlots].spendings;
+                            nextspendings = huLUTresult[huLUTresult.length-1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1) + 1));
+                            lastspendings = huLUTresult[huLUTresult.length-1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1)));
                         }
-                        nextspendings += huLUTresult[paidSlots + 1].spendings;
 
                         let percentspendings = Math.max(((spending - lastspendings )/ ( nextspendings - lastspendings) )* 100, 0);
                         res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{USERNAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
