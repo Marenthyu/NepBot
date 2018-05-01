@@ -195,3 +195,11 @@ body {
 .progress {
     width:  100%;
 }
+
+.progress-bar span {
+
+        position: absolute;
+        z-index: 2;
+        color: black;
+        margin: 0 auto;
+}
