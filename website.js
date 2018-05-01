@@ -772,12 +772,10 @@ function profile(req, res, query) {
 
                 card = getCardHtml(card, row);
 
-                con.query("SELECT SUM(IF(bo.paid > 0, bo.paid, boosters.cost)) as paid FROM (SELECT * FROM boosters_opened WHERE userid = ? UNION SELECT * FROM archive_boosters_opened WHERE userid = ?) AS bo JOIN boosters ON bo.boostername = boosters.name WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC", [userID, userID], function (err, resultInnermost) {
+                con.query("SELECT spending FROM users WHERE id = ?", userID, function (err, resultInnermost) {
                     if (err) throw err;
                     let spending = 0;
-                    for (let row of resultInnermost) {
-                        spending += row.paid;
-                    }
+                    spending = resultInnermost[0].spending;
                     con.query("SELECT slot, spendings, (SELECT paidHandUpgrades FROM users WHERE id = ?) as paidSlots FROM handupgrades", userID, function (err, huLUTresult) {
                         if (err) throw err;
 

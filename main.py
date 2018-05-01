@@ -337,11 +337,11 @@ def search(query, series=None):
 
 
 def handLimit(userid):
-    cur = db.cursor()
-    cur.execute("SELECT handLimit FROM users WHERE id = %s", [userid])
-    res = cur.fetchone()
-    limit = int(res[0])
-    cur.close()
+    with db.cursor() as cur:
+        cur.execute("SELECT 7 + GREATEST(paidHandUpgrades, oldPaidUpgrades) + freeUpgrades FROM users WHERE id = %s", [userid])
+        res = cur.fetchone()
+        limit = int(res[0])
+
     return limit
 
 
@@ -369,8 +369,8 @@ def currentCards(userid, verbose=False):
 
 def upgradeHand(userid, gifted=False):
     cur = db.cursor()
-    cur.execute("UPDATE users SET handLimit = handLimit + 1, paidHandUpgrades = paidHandUpgrades + %s WHERE id = %s",
-                [0 if gifted else 1, userid])
+    cur.execute("UPDATE users SET paidHandUpgrades = paidHandUpgrades + %s, freeUpgrades = freeUpgrades + %s WHERE id = %s",
+                [0 if gifted else 1, 1 if gifted else 0, userid])
     cur.close()
 
 
@@ -441,12 +441,14 @@ def getBadgeByID(id):
 
 
 def addBadge(name, description, image):
+    """Adds a new Badge to the database"""
     with db.cursor() as cur:
         cur.execute("INSERT INTO badges(name, description, image) VALUES(%s, %s, %s)", [name, description, image])
         return cur.lastrowid
 
 
 def giveBadge(userid, badge):
+    """Gives a user a badge"""
     badgeObj = getBadgeByID(badge)
     if badgeObj is None:
         return False
@@ -1107,6 +1109,62 @@ class CantAffordBoosterException(Exception):
         self.cost = cost
 
 
+def getPackStats(userid):
+    with db.cursor() as cur:
+        cur.execute(
+            "SELECT bo.boostername, COUNT(*), SUM(IF(bo.paid > 0, bo.paid, boosters.cost)) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON bo.boostername = boosters.name WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC",
+            [userid] * 2)
+        packstats = cur.fetchall()
+        return packstats
+
+def getSpendings(userid):
+    with db.cursor() as cur:
+        cur.execute("SELECT spending FROM users WHERE id = %s", [userid])
+        result = cur.fetchall()
+        return int(result[0][0])
+
+def getHandUpgradeLUT():
+    with db.cursor() as cur:
+        cur.execute("SELECT slot, spendings FROM handupgrades")
+        lut = cur.fetchall()
+        return lut
+
+def getNextUpgradeSpendings(userid):
+
+    lut = getHandUpgradeLUT()
+    currSlots = paidHandUpgrades(userid)
+    paidSlots = currSlots
+
+    nextSpendings = 0
+
+    while currSlots >= len(lut):
+        currSlots -= 1
+        nextSpendings += 1000000
+
+    nextSpendings += lut[currSlots+1][1]
+    return nextSpendings
+
+def checkHandUpgrade(userid):
+    userid = int(userid)
+    nextSpendings = getNextUpgradeSpendings(userid)
+    spendings = getSpendings(userid)
+
+    logger.debug("next spendings: %d", nextSpendings)
+    logger.debug("current spendings: %d", spendings)
+
+
+    if spendings >= nextSpendings:
+        upgradeHand(userid)
+        logger.debug("Upgraded Hand for %d", userid)
+        return True
+    return False
+
+
+def addSpending(userid, amount):
+    with db.cursor() as cur:
+        cur.execute("UPDATE users SET spending=spending + %s WHERE id = %s", [amount, userid])
+
+
 def openBooster(userid, username, channel, isWhisper, packname, buying=True):
     with db.cursor() as cur:
         rarityColumns = ", ".join(
@@ -1216,6 +1274,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
 
         cards.sort()
         recordPullMetrics(*cards)
+        addSpending(userid, cost)
 
         # pity pull data update
         cur.execute("UPDATE users SET pullScalingData = %s WHERE id = %s",
@@ -1892,10 +1951,10 @@ class NepBot(NepBotClass):
             if command == "freewaifu":
                 # print("Checking free waifu egliability for " + str(sender))
                 cur = db.cursor()
-                cur.execute("SELECT lastFree, handLimit FROM users WHERE id = %s", [tags['user-id']])
+                cur.execute("SELECT lastFree FROM users WHERE id = %s", [tags['user-id']])
                 res = cur.fetchone()
                 nextFree = 79200000 + int(res[0])
-                limit = int(res[1])
+                limit = handLimit(tags['user-id'])
                 freeAvailable = nextFree < current_milli_time()
                 if freeAvailable and currentCards(tags['user-id']) < limit:
                     row = getWaifuById(dropCard(bannedCards=getUniqueCards(tags['user-id'])))
@@ -2233,6 +2292,11 @@ class NepBot(NepBotClass):
                     packname = args[1].lower()
                     try:
                         openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, True)
+                        if checkHandUpgrade(tags['user-id']):
+                            self.message(channel, str(
+                                tags['display-name']) + ", Your new booster unlocked a new Hand Slot! Congratulations! naroYay",
+                                         isWhisper)
+
                         droplink = config["siteHost"] + "/booster?user=" + sender
                         self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(
                             user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
@@ -2835,6 +2899,10 @@ class NepBot(NepBotClass):
                     try:
                         packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3],
                                              False)
+                        if checkHandUpgrade(tags['user-id']):
+                            self.message(channel, str(
+                                tags['display-name']) + ", Your new booster unlocked a new Hand Slot! Congratulations! naroYay",
+                                         isWhisper)
                         received.append("a free booster: %s/booster?user=%s" % (config["siteHost"], sender))
                     except InvalidBoosterException:
                         self.message(channel,
@@ -3165,34 +3233,30 @@ class NepBot(NepBotClass):
 
             if command == "upgrade":
                 user = tags['user-id']
-                limit = handLimit(user)
-                purchased = paidHandUpgrades(user)
-                linearStart = int(config["linearUpgradesStart"])
-                if purchased >= linearStart:
-                    price = int(
-                        int(config["firstUpgradeCost"]) * math.pow(2, linearStart) * (purchased - linearStart + 1))
-                else:
-                    price = int(int(config["firstUpgradeCost"]) * math.pow(2, purchased))
-                if len(args) != 1:
-                    self.message(channel,
-                                 "{user}, your current hand limit is {limit}. To add a slot for {price} points, use !upgrade buy".format(
-                                     user=tags['display-name'], limit=str(limit), price=str(price)),
-                                 isWhisper=isWhisper)
+
+                if checkHandUpgrade(user):
+                    self.message(channel, "We apparently missed one hand upgrade for you, " + tags['display-name'] + "! You now have one more slot!", isWhisper)
                     return
-                if args[0] == "buy":
+
+                multiplier = 0.5# TODO: Make multiplier configurable
+                price = int((getNextUpgradeSpendings(user) - getSpendings(user)) * multiplier)
+
+                if len(args) > 0 and args[0] == "buy":
                     if hasPoints(user, price):
                         addPoints(user, price * -1)
+                        addSpending(user, getNextUpgradeSpendings(user) - getSpendings(user))
                         upgradeHand(user, gifted=False)
                         self.message(channel, "Successfully upgraded {user}'s hand for {price} points!".format(
                             user=tags['display-name'], price=str(price)), isWhisper=isWhisper)
                         return
                     else:
                         self.message(channel,
-                                     "{user}, you do not have enough points to upgrade your hand - it costs {price}".format(
+                                     "{user}, you do not have enough points to force a hand upgrade now. It currently would cost you {price} points.".format(
                                          user=tags['display-name'], price=str(price)), isWhisper=isWhisper)
                         return
+
                 self.message(channel,
-                             "Usage: !upgrade - checks your limit and the price for an upgrade; !upgrade buy - buys an additional slot for your hand",
+                             tags['display-name'] + ", you can currently buy a hand upgrade for " + str(price) + " points. Use !upgrade buy to do so.",
                              isWhisper=isWhisper)
                 return
             if command == "announce":
@@ -4640,11 +4704,7 @@ class NepBot(NepBotClass):
                              isWhisper)
                 return
             if command == "packspending":
-                with db.cursor() as cur:
-                    cur.execute(
-                        "SELECT bo.boostername, COUNT(*), SUM(IF(bo.paid > 0, bo.paid, boosters.cost)) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON bo.boostername = boosters.name WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC",
-                        [tags['user-id']] * 2)
-                    packstats = cur.fetchall()
+                    packstats = getPackStats(tags["user-id"])
 
                     if len(packstats) == 0:
                         self.message(channel,
@@ -4656,6 +4716,8 @@ class NepBot(NepBotClass):
                     packstr = ", ".join("%dx %s" % (row[1], row[0]) for row in packstats)
                     self.message(channel, "%s, you have spent %d total points on the following packs: %s." % (
                     tags['display-name'], totalspending, packstr), isWhisper)
+                    if checkHandUpgrade(tags["user-id"]):
+                        self.message(channel, "... and this was enough to upgrade your hand to a new slot! naroYay", isWhisper)
                     return
 
 
