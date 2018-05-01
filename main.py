@@ -3411,24 +3411,51 @@ class NepBot(NepBotClass):
                                              "No time prediction contest in progress. The most recent contest was cancelled.")
                         else:
                             cur.execute("SELECT COUNT(*) FROM placed_bets WHERE betid = %s", [betRow[0]])
-                            numBets = cur.fetchone()[0] or 0
+                            numBets = cur.fetchone()[0]
+                            cur.execute("SELECT bet FROM placed_bets WHERE userid = %s AND betid = %s", [tags["user-id"], betRow[0]])
+                            placedBets = cur.fetchall()
+                            placedBet = None if len(placedBets) == 0 else placedBets[0][0]
+                            hasBet = placedBet is not None
                             if betRow[1] == 'open':
                                 if canManageBets:
-                                    self.message(channel,
-                                                 "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer." % numBets)
+                                    if hasBet:
+                                        self.message(channel,
+                                                     "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer. Your bet currently is %s" % (numBets, formatTimeDelta(placedBet)))
+
+                                    else:
+                                        self.message(channel,
+                                                     "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer. You have not bet yet." % numBets)
+
+
                                 else:
-                                    self.message(channel,
+                                    if hasBet:
+                                        self.message(channel,
                                                  "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
+                                    else:
+                                        self.message(channel,
+                                                 "Bets are currently open for a new contest. %d bets have been placed so far. You have not yet bet. Your bet currently is %s" % (numBets, formatTimeDelta(placedBet)))
+
+
                             elif betRow[1] == 'started':
                                 elapsed = current_milli_time() - betRow[2]
                                 formattedTime = formatTimeDelta(elapsed)
                                 if canManageBets:
-                                    self.message(channel,
-                                                 "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results." % (
-                                                     formattedTime, numBets))
+                                    if hasBet:
+                                        self.message(channel,
+                                                 "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results. Your bet is %s" % (
+                                                     formattedTime, numBets, formatTimeDelta(placedBet)))
+                                    else:
+                                        self.message(channel,
+                                                     "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results. You did not bet." % (
+                                                         formattedTime, numBets))
                                 else:
-                                    self.message(channel, "Run in progress - elapsed time %s. %d bets were placed." % (
-                                        formattedTime, numBets))
+                                    if hasBet:
+                                        self.message(channel, "Run in progress - elapsed time %s. %d bets were placed. Your bet is %s" % (
+                                        formattedTime, numBets, formatTimeDelta(placedBet)))
+                                    else:
+                                        self.message(channel,
+                                                     "Run in progress - elapsed time %s. %d bets were placed. You did not bet." % (
+                                                         formattedTime, numBets))
                             else:
                                 formattedTime = formatTimeDelta(betRow[3] - betRow[2])
                                 if canManageBets:
