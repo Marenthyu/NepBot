@@ -1137,7 +1137,7 @@ def getNextUpgradeSpendings(userid):
 
     nextSpendings = 0
 
-    while currSlots >= len(lut):
+    while currSlots >= len(lut) - 1:
         currSlots -= 1
         nextSpendings += 1000000
 

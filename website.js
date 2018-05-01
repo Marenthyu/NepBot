@@ -787,9 +787,14 @@ function profile(req, res, query) {
                         while (paidSlots >= huLUTresult.length - 1) {
                             paidSlots--;
                             nextspendings += 1000000;
-                            lastspendings += 1000000;
+                            if (paidSlots !== huLUTresult.length - 2)
+                                lastspendings += 1000000;
                         }
-                        lastspendings += huLUTresult[paidSlots].spendings;
+                        if (paidSlots === huLUTresult.length -2) {
+                            lastspendings += huLUTresult[paidSlots + 1].spendings;
+                        } else {
+                            lastspendings += huLUTresult[paidSlots].spendings;
+                        }
                         nextspendings += huLUTresult[paidSlots + 1].spendings;
 
                         let percentspendings = Math.max(((spending - lastspendings )/ ( nextspendings - lastspendings) )* 100, 0);
