@@ -555,7 +555,7 @@ def sendDiscordAlert(data):
                 url,
                 json=data)
             while req2.status_code == 429:
-                time.sleep((req2.headers["Retry-After"] / 1000) + 1)
+                time.sleep((int(req2.headers["Retry-After"]) / 1000) + 1)
                 req2 = requests.post(
                     url,
                     json=data)
@@ -3322,6 +3322,29 @@ class NepBot(NepBotClass):
                     attemptPromotions(*ids)
                     self.message(channel, "Rechecked promotions for %d waifus" % len(ids))
                 return
+            if command == "changepromos" and sender in superadmins:
+                # assumes that the new promotion thresholds have already been inserted
+                if "promoschanged" in config:
+                    self.message(channel, "Already done.")
+                    return
+                with db.cursor() as cur:
+                    cur.execute("SELECT has_waifu.userid, has_waifu.waifuid, has_waifu.rarity, has_waifu.amount, waifus.base_rarity FROM has_waifu JOIN waifus ON has_waifu.waifuid=waifus.id WHERE rarity < 7")
+                    oldhands = cur.fetchall()
+                    cur.execute("DELETE FROM has_waifu WHERE rarity < 7")
+                    # recalculate qty
+                    for oldrow in oldhands:
+                        qty = oldrow[3] * (3 ** (oldrow[2] - oldrow[4]))
+                        giveCard(oldrow[0], oldrow[1], oldrow[4], qty)
+                    # recheck promos
+                    cur.execute("SELECT DISTINCT waifuid FROM has_waifu WHERE amount >= 2")
+                    rows = cur.fetchall()
+                    ids = [row[0] for row in rows]
+                    attemptPromotions(*ids)
+                    # .done
+                    config["promoschanged"] = "yes"
+                    cur.execute("REPLACE INTO config(name, value) VALUES('promoschanged', 'yes')")
+                return
+                            
             if command == "bet":
                 if len(args) < 1:
                     self.message(channel,
