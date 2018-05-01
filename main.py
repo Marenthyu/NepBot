@@ -2665,6 +2665,9 @@ class NepBot(NepBotClass):
                     cur = db.cursor()
                     cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
                     row = cur.fetchone();
+                    if row is None:
+                        self.message(channel, "The Bot is not in your channel, so alerts can not be set up for you. Ask an admin to let it join!", iswhisper=isWhisper)
+                        return
                     if row[0] is None:
                         self.message("#jtv",
                                      "/w {user} Please go to the following link and allow access: {link}{user}".format(
