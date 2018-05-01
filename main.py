@@ -2666,7 +2666,7 @@ class NepBot(NepBotClass):
                     cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
                     row = cur.fetchone();
                     if row is None:
-                        self.message(channel, "The Bot is not in your channel, so alerts can not be set up for you. Ask an admin to let it join!", iswhisper=isWhisper)
+                        self.message(channel, "The bot is not in your channel, so alerts can't be set up for you. Ask an admin to let it join!", iswhisper=isWhisper)
                         return
                     if row[0] is None:
                         self.message("#jtv",
@@ -2712,7 +2712,7 @@ class NepBot(NepBotClass):
                         cur = db.cursor()
                         cur.execute("DELETE FROM alertConfig WHERE channelName = %s", [sender])
                         cur.close()
-                        self.message(channel, "Removed all custom alert config for your channel. #NoireScremRules",
+                        self.message(channel, "Removed all custom alert config for your channel. #NoireScreamRules",
                                      isWhisper=isWhisper)
                         return
                     if configName not in validalertconfigvalues:
