@@ -343,6 +343,14 @@ def handLimit(userid):
         limit = int(res[0])
 
     return limit
+    
+def realHandLimit(userid):
+    with db.cursor() as cur:
+        cur.execute("SELECT 7 + paidHandUpgrades + freeUpgrades FROM users WHERE id = %s", [userid])
+        res = cur.fetchone()
+        limit = int(res[0])
+
+    return limit
 
 
 def paidHandUpgrades(userid):
@@ -1158,6 +1166,16 @@ def checkHandUpgrade(userid):
         logger.debug("Upgraded Hand for %d", userid)
         return True
     return False
+    
+def messageForHandUpgrade(userid, username, bot, channel, isWhisper):
+    with db.cursor() as cur:
+        cur.execute("SELECT paidHandUpgrades, oldPaidUpgrades, freeUpgrades FROM users WHERE id = %s", [userid])
+        data = cur.fetchone()
+        
+        if data[0] <= data[1]:
+            bot.message(channel, "%s, your hand space entitlement from booster spending just increased to %d! naroYay" % (username, 7 + data[0] + data[2]), isWhisper)
+        else:
+            bot.message(channel, "%s, you just got a new hand space from booster spending! naroYay" % username, isWhisper)
 
 
 def addSpending(userid, amount):
@@ -1898,9 +1916,10 @@ class NepBot(NepBotClass):
 
                 currentData = currentCards(tags['user-id'], True)
                 limit = handLimit(tags['user-id'])
+                reallimit = realHandLimit(tags['user-id'])
                 dropLink = "%s/hand?user=%s" % (config["siteHost"], sender)
                 msgArgs = {"user": tags['display-name'], "limit": limit, "curr": currentData['hand'],
-                           "bounties": currentData['bounties'], "link": dropLink}
+                           "bounties": currentData['bounties'], "link": dropLink, "graceAlert": "*" if reallimit < limit else ""}
 
                 # verbose mode if it's a whisper or they request it
                 if len(args) > 0 and args[0].lower() == "verbose":
@@ -1908,11 +1927,11 @@ class NepBot(NepBotClass):
                         whisperChannel = "#%s" % sender
                         if currentData['bounties'] > 0:
                             self.message(whisperChannel,
-                                         "{user}, you can have {limit} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
+                                         "{user}, you can have {limit}{graceAlert} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
                                              **msgArgs), True)
                         else:
                             self.message(whisperChannel,
-                                         "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(
+                                         "{user}, you can have {limit}{graceAlert} waifus (currently held: {curr}) and your current hand is: {link}".format(
                                              **msgArgs), True)
                         messages = ["Your current hand is: "]
                         for row in cards:
@@ -1933,11 +1952,11 @@ class NepBot(NepBotClass):
                 else:
                     if currentData['bounties'] > 0:
                         self.message(channel,
-                                     "{user}, you can have {limit} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
+                                     "{user}, you can have {limit}{graceAlert} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
                                          **msgArgs), isWhisper)
                     else:
                         self.message(channel,
-                                     "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(
+                                     "{user}, you can have {limit}{graceAlert} waifus (currently held: {curr}) and your current hand is: {link}".format(
                                          **msgArgs), isWhisper)
                 return
             if command == "points":
@@ -2293,9 +2312,7 @@ class NepBot(NepBotClass):
                     try:
                         openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, True)
                         if checkHandUpgrade(tags['user-id']):
-                            self.message(channel, str(
-                                tags['display-name']) + ", Your new booster unlocked a new Hand Slot! Congratulations! naroYay",
-                                         isWhisper)
+                            messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
 
                         droplink = config["siteHost"] + "/booster?user=" + sender
                         self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(
@@ -2903,9 +2920,7 @@ class NepBot(NepBotClass):
                         packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3],
                                              False)
                         if checkHandUpgrade(tags['user-id']):
-                            self.message(channel, str(
-                                tags['display-name']) + ", Your new booster unlocked a new Hand Slot! Congratulations! naroYay",
-                                         isWhisper)
+                            messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
                         received.append("a free booster: %s/booster?user=%s" % (config["siteHost"], sender))
                     except InvalidBoosterException:
                         self.message(channel,
@@ -3238,29 +3253,40 @@ class NepBot(NepBotClass):
                 user = tags['user-id']
 
                 if checkHandUpgrade(user):
-                    self.message(channel, "We apparently missed one hand upgrade for you, " + tags['display-name'] + "! You now have one more slot!", isWhisper)
+                    messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
                     return
-
-                multiplier = 0.5# TODO: Make multiplier configurable
-                price = int((getNextUpgradeSpendings(user) - getSpendings(user)) * multiplier)
+                    
+                spendingsToNext = getNextUpgradeSpendings(user) - getSpendings(user)
+                multiplier = 0.5 # TODO: Make multiplier configurable
+                directPrice = max(int(spendingsToNext * multiplier), 1)
 
                 if len(args) > 0 and args[0] == "buy":
-                    if hasPoints(user, price):
-                        addPoints(user, price * -1)
-                        addSpending(user, getNextUpgradeSpendings(user) - getSpendings(user))
+                    if hasPoints(user, directPrice):
+                        addPoints(user, directPrice * -1)
+                        addSpending(user, spendingsToNext)
                         upgradeHand(user, gifted=False)
                         self.message(channel, "Successfully upgraded {user}'s hand for {price} points!".format(
-                            user=tags['display-name'], price=str(price)), isWhisper=isWhisper)
+                            user=tags['display-name'], price=str(directPrice)), isWhisper=isWhisper)
                         return
                     else:
                         self.message(channel,
                                      "{user}, you do not have enough points to force a hand upgrade now. It currently would cost you {price} points.".format(
-                                         user=tags['display-name'], price=str(price)), isWhisper=isWhisper)
+                                         user=tags['display-name'], price=str(directPrice)), isWhisper=isWhisper)
                         return
-
-                self.message(channel,
-                             tags['display-name'] + ", you can currently buy a hand upgrade for " + str(price) + " points. Use !upgrade buy to do so.",
-                             isWhisper=isWhisper)
+                        
+                realLimit = realHandLimit(tags['user-id'])
+                currLimit = handLimit(tags['user-id'])
+                
+                if realLimit < currLimit:
+                    msgArgs = (tags['display-name'], realLimit, spendingsToNext, realLimit + 1, directPrice, currLimit)
+                    self.message(channel, ("%s, you have currently earnt a hand size of %d from pack spending. "+
+                    "Spend another %d points on boosters to earn space #%d, or use !upgrade buy to jump there directly for %d points. "+
+                    "(Note: on June 4 your hand size will be adjusted to match your spending, until then you will have a minimum of %d spaces)") % msgArgs, isWhisper)
+                else:
+                    msgArgs = (tags['display-name'], realLimit, spendingsToNext, realLimit + 1, directPrice)
+                    self.message(channel, ("%s, you have currently earnt a hand size of %d from pack spending. "+
+                    "Spend another %d points on boosters to earn space #%d, or use !upgrade buy to jump there directly for %d points.") % msgArgs, isWhisper)
+                
                 return
             if command == "announce":
                 if not (sender in superadmins):
