@@ -3482,10 +3482,11 @@ class NepBot(NepBotClass):
                                 else:
                                     if hasBet:
                                         self.message(channel,
-                                                 "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
+                                                 "Bets are currently open for a new contest. %d bets have been placed so far. You have not yet bet. Your bet currently is %s" % (numBets, formatTimeDelta(placedBet)))
                                     else:
                                         self.message(channel,
-                                                 "Bets are currently open for a new contest. %d bets have been placed so far. You have not yet bet. Your bet currently is %s" % (numBets, formatTimeDelta(placedBet)))
+                                                 "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
+                                        
 
 
                             elif betRow[1] == 'started':
