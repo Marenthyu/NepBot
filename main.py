@@ -3842,83 +3842,12 @@ class NepBot(NepBotClass):
             if command == "sets" or command == "set":
                 if len(args) == 0:
                     self.message(channel,
-                                 "Available sets: %s/sets?user=%s !sets rarity to check your progress on rarity sets. !sets claim to claim all sets you are eligible for." % (
+                                 "Available sets: %s/sets?user=%s . !sets claim to claim all sets you are eligible for." % (
                                      config["siteHost"], sender.lower()), isWhisper=isWhisper)
                     return
                 subcmd = args[0].lower()
                 if subcmd == "rarity":
-                    cur = db.cursor()
-                    cur.execute(
-                        "SELECT id, name, rarity, amount, reward, grouping FROM rarity_sets WHERE claimed_by IS NULL AND claimable = 1")
-                    sets = cur.fetchall()
-
-                    if len(sets) == 0:
-                        cur.close()
-                        self.message(channel,
-                                     "There are no rarity sets available to claim right now. New ones are added each month.",
-                                     isWhisper=isWhisper)
-                        return
-
-                    # get eligibility info
-                    currentGrouping = sets[0][5]
-                    cur.execute(
-                        "SELECT rarity, grouping FROM rarity_sets WHERE claimed_by = %s AND grouping IN(%s, %s)",
-                        [tags['user-id'], currentGrouping, currentGrouping - 1])
-                    ineligibleData = cur.fetchall()
-                    ineligibleRarities = []
-
-                    for row in ineligibleData:
-                        if row[1] == currentGrouping:
-                            cur.close()
-                            self.message(channel,
-                                         "You have already claimed a rarity set this month. You'll be eligible again next month.",
-                                         isWhisper=isWhisper)
-                            return
-                        else:
-                            ineligibleRarities.append(row[0])
-
-                    # get cards they could use to claim
-                    hand = getHand(tags['user-id'])
-                    if len(hand) == 0:
-                        cur.close()
-                        self.message(channel, "You have no cards in your hand!", isWhisper=isWhisper)
-                        return
-
-                    handIDs = [row["id"] for row in hand]
-                    inTemplate = ",".join(["%s"] * len(handIDs))
-                    cur.execute("SELECT cardID FROM rarity_sets_cards WHERE cardID IN(%s)" % inTemplate, handIDs)
-                    cardIneligibleData = cur.fetchall()
-                    ineligibleCards = [row[0] for row in cardIneligibleData]
-
-                    # put together info
-                    messages = ["Your current progress towards rarity sets: "]
-                    for set in sets:
-                        message = set[1] + " - "
-                        if set[2] in ineligibleRarities:
-                            message += "Ineligible (claimed last month)"
-                        else:
-                            count = sum(
-                                1 for card in hand if (card["id"] not in ineligibleCards and card["rarity"] == set[2]))
-                            ineligible = sum(
-                                1 for card in hand if (card["id"] in ineligibleCards and card["rarity"] == set[2]))
-                            if count >= set[3]:
-                                message += "CLAIMABLE NOW! (!sets claim)"
-                            else:
-                                message += "%d/%d" % (count, set[3])
-                                if ineligible > 0:
-                                    message += " (%d cards in hand already used)" % ineligible
-
-                        message += "; "
-
-                        if len(message) + len(messages[-1]) > 400:
-                            messages.append(message)
-                        else:
-                            messages[-1] += message
-
-                    for message in messages:
-                        self.message(channel, message, isWhisper)
-
-                    cur.close()
+                    self.message(channel, "Rarity sets have been suspended for the time being. They may return in some form at some point.", isWhisper)
                     return
                 elif subcmd == "claim":
                     cur = db.cursor()
@@ -3946,56 +3875,16 @@ class NepBot(NepBotClass):
                         threading.Thread(target=sendSetAlert,
                                          args=(channel, tags["display-name"], row[1], cards)).start()
 
-                    # rarity sets
-                    cur.execute(
-                        "SELECT id, name, rarity, amount, reward FROM rarity_sets rs WHERE claimable = 1 AND claimed_by IS NULL AND (SELECT COUNT(*) FROM rarity_sets rs2 WHERE rs2.claimed_by = %s AND rs2.grouping = rs.grouping) = 0 AND (SELECT COUNT(*) FROM rarity_sets rs3 WHERE rs3.grouping = rs.grouping - 1 AND rs3.claimed_by = %s AND rs3.rarity = rs.rarity) = 0 ORDER BY rs.reward DESC",
-                        [tags['user-id']] * 2)
-                    sets = cur.fetchall()
-                    if len(sets) != 0:
-                        # get cards
-                        hand = getHand(tags['user-id'])
-                        if len(hand) != 0:
-                            handIDs = [row["id"] for row in hand]
-                            namesById = {row["id"]: row["name"] for row in hand}
-                            inTemplate = ",".join(["%s"] * len(handIDs))
-                            cur.execute("SELECT cardID FROM rarity_sets_cards WHERE cardID IN(%s)" % inTemplate,
-                                        handIDs)
-                            cardIneligibleData = cur.fetchall()
-                            ineligibleCards = [row[0] for row in cardIneligibleData]
-
-                            for set in sets:
-                                eligibleCards = [card["id"] for card in hand if
-                                                 (card["id"] not in ineligibleCards and card["rarity"] == set[2])]
-                                if len(eligibleCards) >= set[3]:
-                                    # can claim
-                                    usedCards = eligibleCards[:set[3]]
-                                    claimed += 1
-                                    cur.execute("UPDATE rarity_sets SET claimed_by = %s, claimed_at = %s WHERE id = %s",
-                                                [tags["user-id"], current_milli_time(), set[0]])
-                                    addPoints(tags['user-id'], set[4])
-                                    cur.executemany("INSERT INTO rarity_sets_cards (setID, cardID) VALUES(%s, %s)",
-                                                    [(set[0], card) for card in usedCards])
-                                    badgeid = addBadge(set[1], config["setBadgeDescription"],
-                                                       config["setBadgeDefaultImage"])
-                                    giveBadge(tags['user-id'], badgeid)
-                                    self.message(channel,
-                                                 "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(
-                                                     set=set[1], user=tags["display-name"], reward=set[4]), isWhisper)
-                                    usedCardNames = [namesById[id] for id in usedCards]
-                                    threading.Thread(target=sendSetAlert, args=(
-                                        channel, tags["display-name"], set[1], usedCardNames)).start()
-                                    break
-
                     if claimed == 0:
                         self.message(channel,
-                                     "You do not have any completed sets that are available to be claimed. !sets and/or !sets rarity to check progress.",
+                                     "You do not have any completed sets that are available to be claimed. !sets to check progress.",
                                      isWhisper=isWhisper)
                         return
 
                     cur.close()
                     return
                 else:
-                    self.message(channel, "Usage: !sets OR !sets rarity OR !sets claim", isWhisper=isWhisper)
+                    self.message(channel, "Usage: !sets OR !sets claim", isWhisper=isWhisper)
                     return
             if command == "debug" and sender in superadmins:
                 if debugMode:
