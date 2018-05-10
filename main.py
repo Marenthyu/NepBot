@@ -2644,10 +2644,20 @@ class NepBot(NepBotClass):
                                 ownerDescriptions.append(owner)
 
                         waifu["rarity"] = baseRarityName
+                        
+                        # check for packs
+                        with db.cursor() as cur:
+                            cur.execute("SELECT users.name FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid = boosters_opened.id JOIN users ON boosters_opened.userid = users.id WHERE boosters_cards.waifuid = %s AND boosters_opened.status = 'open'", [waifu['id']])
+                            packholders = [row[0] for row in cur.fetchall()]
+                        
                         if len(ownerDescriptions) > 0:
                             waifu["owned"] = " - owned by " + ", ".join(ownerDescriptions)
+                            if len(packholders) > 0:
+                                waifu["owned"] += "; currently in a pack for: " + ", ".join(packholders)
+                        elif len(packholders) > 0:
+                            waifu["owned"] = " - currently in a pack for: " + ", ".join(packholders)
                         elif waifu["pulls"] > 0:
-                            waifu["owned"] = " (not currently owned)"
+                            waifu["owned"] = " (not currently owned or in a pack)"
                         else:
                             waifu["owned"] = " (not dropped yet)"
 
