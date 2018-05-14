@@ -1313,9 +1313,9 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         return boosterid
 
 
-def infoCommandAvailable(userid, username, bot, channel, isWhisper):
+def infoCommandAvailable(userid, username, displayName, bot, channel, isWhisper):
     with db.cursor() as cur:
-        private = isWhisper or channel == '#' + config['username']
+        private = isWhisper or channel == '#' + config['username'] or channel == '#' + username
         columnName = "Private" if private else "Public"
         cur.execute("SELECT infoUsed{0}, infoLastReset{0} FROM users WHERE id = %s".format(columnName), [userid])
         limitData = list(cur.fetchone())
@@ -1335,17 +1335,17 @@ def infoCommandAvailable(userid, username, bot, channel, isWhisper):
             if private:
                 bot.message(channel,
                             "%s, you have hit the rate limit for info commands. Please wait %s to use more." % (
-                                username, timeDiff), isWhisper)
+                                displayName, timeDiff), isWhisper)
             else:
                 bot.message(channel,
                             "%s, you have hit the rate limit for info commands in public chats. Please wait %s to use more or use them via whisper or in the bot's own chat." % (
-                                username, timeDiff), isWhisper)
+                                displayName, timeDiff), isWhisper)
             return False
 
 
-def useInfoCommand(userid, channel, isWhisper):
+def useInfoCommand(userid, username, channel, isWhisper):
     with db.cursor() as cur:
-        private = isWhisper or channel == '#' + config['username']
+        private = isWhisper or channel == '#' + config['username'] or channel == '#' + username
         columnName = "Private" if private else "Public"
         cur.execute("UPDATE users SET infoUsed{0} = infoUsed{0} + 1 WHERE id = %s".format(columnName), [userid])
 
@@ -2605,7 +2605,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "Usage: !lookup <id>", isWhisper=isWhisper)
                     return
 
-                if infoCommandAvailable(tags['user-id'], tags['display-name'], self, channel, isWhisper):
+                if infoCommandAvailable(tags['user-id'], sender, tags['display-name'], self, channel, isWhisper):
                     try:
                         waifu = getWaifuById(args[0])
                         assert waifu is not None
@@ -2660,12 +2660,32 @@ class NepBot(NepBotClass):
                             waifu["owned"] = " (not currently owned or in a pack)"
                         else:
                             waifu["owned"] = " (not dropped yet)"
+                            
+                        # bounty info
+                        with db.cursor() as cur:
+                            cur.execute("SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM bounties WHERE waifuid = %s AND status='open'", [waifu['id']])
+                            allordersinfo = cur.fetchone()
+                            
+                            if allordersinfo[0] > 0:
+                                cur.execute("SELECT amount FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'", [tags['user-id'], waifu['id']])
+                                myorderinfo = cur.fetchone()
+                                minfo = {"count": allordersinfo[0], "highest": allordersinfo[1]}
+                                if myorderinfo is not None:
+                                    minfo["mine"] = myorderinfo[0]
+                                    if myorderinfo[0] == allordersinfo[1]:
+                                        waifu["bountyinfo"] = "This waifu currently has {count} bounties, you are the highest bidder at {highest} points.".format(**minfo)
+                                    else:
+                                        waifu["bountyinfo"] = "This waifu currently has {count} bounties, your bid of {mine} points is lower than the highest bid of {highest} points.".format(**minfo)
+                                else:
+                                    waifu["bountyinfo"] = "This waifu currently has {count} bounties, out of which the highest bid is {highest} points. You don't have a bounty on this waifu right now.".format(**minfo)
+                            else:
+                                waifu["bountyinfo"] = "There are no current bounties on this waifu."
 
-                        self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}'.format(**waifu),
+                        self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}. {bountyinfo}'.format(**waifu),
                                      isWhisper=isWhisper)
 
                         if sender not in superadmins:
-                            useInfoCommand(tags['user-id'], channel, isWhisper)
+                            useInfoCommand(tags['user-id'], sender, channel, isWhisper)
                     except Exception:
                         self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
 
@@ -3314,7 +3334,7 @@ class NepBot(NepBotClass):
                 if len(args) < 1:
                     self.message(channel, "Usage: !search <name>[ from <series>]", isWhisper=isWhisper)
                     return
-                if infoCommandAvailable(tags['user-id'], tags['display-name'], self, channel, isWhisper):
+                if infoCommandAvailable(tags['user-id'], sender, tags['display-name'], self, channel, isWhisper):
                     try:
                         from_index = [arg.lower() for arg in args].index("from")
                         q = " ".join(args[:from_index])
@@ -3342,7 +3362,7 @@ class NepBot(NepBotClass):
                             map(lambda waifu: str(waifu['id']), result)), isWhisper=isWhisper)
 
                     if sender not in superadmins:
-                        useInfoCommand(tags['user-id'], channel, isWhisper)
+                        useInfoCommand(tags['user-id'], sender, channel, isWhisper)
 
                 return
             if command == "promote":
@@ -4259,7 +4279,7 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !bounty check <ID>", isWhisper=isWhisper)
                         return
 
-                    if infoCommandAvailable(tags['user-id'], tags['display-name'], self, channel, isWhisper):
+                    if infoCommandAvailable(tags['user-id'], sender, tags['display-name'], self, channel, isWhisper):
                         try:
                             waifu = getWaifuById(args[1])
                             assert waifu is not None
@@ -4270,7 +4290,7 @@ class NepBot(NepBotClass):
                                 return
 
                             if sender not in superadmins:
-                                useInfoCommand(tags['user-id'], channel, isWhisper)
+                                useInfoCommand(tags['user-id'], sender, channel, isWhisper)
 
                             with db.cursor() as cur:
                                 cur.execute(
