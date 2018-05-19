@@ -3711,7 +3711,7 @@ class NepBot(NepBotClass):
                             cur.close()
                             return
 
-                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                        cur.execute("SELECT id, status, endTime FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
                                     [channel])
                         betRow = cur.fetchone()
                         if betRow is None or (betRow[1] != 'paid' and betRow[1] != 'completed'):
@@ -3780,9 +3780,11 @@ class NepBot(NepBotClass):
                             bcPrize = max(int(round(bcPrize / 50.0) * 50), 50)
 
                             cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
+                            # start cooldown for next bet payout at max(endTime, lastPayout + 22h)
+                            payoutTime = max(betRow[2], lastPayout + 79200000)
                             cur.execute(
                                 "UPDATE bets SET status = 'paid', paidBroadcaster = %s, paidAt = %s WHERE id = %s",
-                                [bcPrize, current_milli_time(), betRow[0]])
+                                [bcPrize, payoutTime, betRow[0]])
 
                             messages = ["Paid out the following prizes: "]
                             for prizeToken in prizes:
