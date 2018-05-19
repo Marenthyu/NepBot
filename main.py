@@ -149,10 +149,9 @@ def loadConfig():
         else:
             emotewaremotes = []
         alertRarityRange = range(int(config["drawAlertMinimumRarity"]), int(config["numNormalRarities"]))
-        validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound"] + ["rarity%dLength" % rarity
-                                                                                               for rarity in
-                                                                                               alertRarityRange] + [
-                                     "rarity%dSound" % rarity for rarity in alertRarityRange]
+        validalertconfigvalues = ["color", "alertChannel", "defaultLength", "defaultSound", "setClaimSound", "setClaimLength"] \
+            + ["rarity%dLength" % rarity for rarity in alertRarityRange] \
+            + ["rarity%dSound" % rarity for rarity in alertRarityRange]
         waifu_regex = re.compile('(\[(?P<id>[0-9]+?)])?(?P<name>.+?) *- *(?P<series>.+) *- *(?P<rarity>[0-' + str(
             int(config["numNormalRarities"]) - 1) + ']) *- *(?P<link>.+?)$')
         logger.debug("Alert config values: %s", str(validalertconfigvalues))
@@ -740,9 +739,20 @@ def naturalJoinNames(names):
 
 def sendSetAlert(channel, user, name, waifus):
     logger.info("Alerting for set claim %s", name)
+    with busyLock:
+        with db.cursor() as cur:
+            chanOwner = str(channel).replace("#", "")
+            cur.execute("SELECT config, val FROM alertConfig WHERE channelName = %s", [chanOwner])
+            rows = cur.fetchall()
+            
+    alertconfig = {row[0]:row[1] for row in rows}
+    alertChannel = "donation" if "alertChannel" not in alertconfig else alertconfig["alertChannel"]
+    defaultSound = config["alertSound"] if "defaultSound" not in alertconfig else alertconfig["defaultSound"]
+    alertSound = defaultSound if "setClaimSound" not in alertconfig else alertconfig["setClaimSound"]
+    defaultLength = config["alertDuration"] if "defaultLength" not in alertconfig else alertconfig["defaultLength"]
+    alertLength = defaultLength if "setClaimLength" not in alertconfig else alertconfig["setClaimLength"]
     message = "{user} claimed the set {name}!".format(user=user, name=name)
-    alertbody = {"type": "donation", "sound_href": config["alertSound"], "duration": int(config["alertDuration"]),
-                 "message": message}
+    alertbody = {"type": alertChannel, "sound_href": alertSound, "duration": int(alertLength), "message": message}
     threading.Thread(target=sendStreamlabsAlert, args=(channel, alertbody)).start()
 
     discordbody = {"username": "Waifu TCG", "embeds": [
