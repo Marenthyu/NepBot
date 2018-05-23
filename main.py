@@ -3711,7 +3711,7 @@ class NepBot(NepBotClass):
                             cur.close()
                             return
 
-                        cur.execute("SELECT id, status, endTime FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                        cur.execute("SELECT id, status, endTime FROM bets WHERE channel = %s AND status IN('completed', 'paid', 'cancelled') ORDER BY id DESC LIMIT 1",
                                     [channel])
                         betRow = cur.fetchone()
                         if betRow is None or (betRow[1] != 'paid' and betRow[1] != 'completed'):
