@@ -2690,8 +2690,20 @@ class NepBot(NepBotClass):
                                     waifu["bountyinfo"] = "This waifu currently has {count} bounties, out of which the highest bid is {highest} points. You don't have a bounty on this waifu right now.".format(**minfo)
                             else:
                                 waifu["bountyinfo"] = "There are no current bounties on this waifu."
+                                
+                        # last pull
+                        if waifu["pulls"] == 0:
+                            waifu["lp"] = ""
+                        else:
+                            lpdiff = (current_milli_time() - waifu["last_pull"]) // 86400000
+                            if lpdiff == 0:
+                                waifu["lp"] = " This waifu was last pulled less than a day ago."
+                            elif lpdiff == 1:
+                                waifu["lp"] = " This waifu was last pulled 1 day ago."
+                            else:
+                                waifu["lp"] = " This waifu was last pulled %d days ago." % lpdiff
 
-                        self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}. {bountyinfo}'.format(**waifu),
+                        self.message(channel, '[{id}][{rarity}] {name} from {series} - {image}{owned}. {bountyinfo}{lp}'.format(**waifu),
                                      isWhisper=isWhisper)
 
                         if sender not in superadmins:
@@ -3522,7 +3534,7 @@ class NepBot(NepBotClass):
                                 else:
                                     if hasBet:
                                         self.message(channel,
-                                                 "Bets are currently open for a new contest. %d bets have been placed so far. You have not yet bet. Your bet currently is %s" % (numBets, formatTimeDelta(placedBet)))
+                                                 "Bets are currently open for a new contest. %d bets have been placed so far. Your bet currently is %s" % (numBets, formatTimeDelta(placedBet)))
                                     else:
                                         self.message(channel,
                                                  "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
