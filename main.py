@@ -2692,7 +2692,7 @@ class NepBot(NepBotClass):
                                 waifu["bountyinfo"] = "There are no current bounties on this waifu."
                                 
                         # last pull
-                        if waifu["pulls"] == 0:
+                        if waifu["pulls"] == 0 or waifu["last_pull"] is None or waifu["base_rarity"] >= int(config["numNormalRarities"]):
                             waifu["lp"] = ""
                         else:
                             lpdiff = (current_milli_time() - waifu["last_pull"]) // 86400000
