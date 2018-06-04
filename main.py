@@ -1946,11 +1946,11 @@ class NepBot(NepBotClass):
                 else:
                     if currentData['bounties'] > 0:
                         self.message(channel,
-                                     "{user}, you can have {limit}{graceAlert} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
+                                     "{user}, you can have {limit} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
                                          **msgArgs), isWhisper)
                     else:
                         self.message(channel,
-                                     "{user}, you can have {limit}{graceAlert} waifus (currently held: {curr}) and your current hand is: {link}".format(
+                                     "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(
                                          **msgArgs), isWhisper)
                 return
             if command == "points":
@@ -3325,7 +3325,7 @@ class NepBot(NepBotClass):
                         return
                         
                 currLimit = handLimit(tags['user-id'])
-                msgArgs = (tags['display-name'], realLimit, spendingsToNext, realLimit + 1, directPrice)
+                msgArgs = (tags['display-name'], currLimit, spendingsToNext, currLimit + 1, directPrice)
                 self.message(channel, ("%s, you have currently earnt a hand size of %d from pack spending. "+
                 "Spend another %d points on boosters to earn space #%d, or use !upgrade buy to jump there directly for %d points.") % msgArgs, isWhisper)
                 
