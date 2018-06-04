@@ -337,14 +337,6 @@ def search(query, series=None):
 
 def handLimit(userid):
     with db.cursor() as cur:
-        cur.execute("SELECT 7 + GREATEST(paidHandUpgrades, oldPaidUpgrades) + freeUpgrades FROM users WHERE id = %s", [userid])
-        res = cur.fetchone()
-        limit = int(res[0])
-
-    return limit
-    
-def realHandLimit(userid):
-    with db.cursor() as cur:
         cur.execute("SELECT 7 + paidHandUpgrades + freeUpgrades FROM users WHERE id = %s", [userid])
         res = cur.fetchone()
         limit = int(res[0])
@@ -1178,14 +1170,7 @@ def checkHandUpgrade(userid):
     return False
     
 def messageForHandUpgrade(userid, username, bot, channel, isWhisper):
-    with db.cursor() as cur:
-        cur.execute("SELECT paidHandUpgrades, oldPaidUpgrades, freeUpgrades FROM users WHERE id = %s", [userid])
-        data = cur.fetchone()
-        
-        if data[0] <= data[1]:
-            bot.message(channel, "%s, your hand space entitlement from booster spending just increased to %d! naroYay" % (username, 7 + data[0] + data[2]), isWhisper)
-        else:
-            bot.message(channel, "%s, you just got a new hand space from booster spending! naroYay" % username, isWhisper)
+    bot.message(channel, "%s, you just got a new hand space from booster spending! naroYay" % username, isWhisper)
 
 
 def addSpending(userid, amount):
@@ -1926,10 +1911,9 @@ class NepBot(NepBotClass):
 
                 currentData = currentCards(tags['user-id'], True)
                 limit = handLimit(tags['user-id'])
-                reallimit = realHandLimit(tags['user-id'])
                 dropLink = "%s/hand?user=%s" % (config["siteHost"], sender)
                 msgArgs = {"user": tags['display-name'], "limit": limit, "curr": currentData['hand'],
-                           "bounties": currentData['bounties'], "link": dropLink, "graceAlert": "*" if reallimit < limit else ""}
+                           "bounties": currentData['bounties'], "link": dropLink}
 
                 # verbose mode if it's a whisper or they request it
                 if len(args) > 0 and args[0].lower() == "verbose":
@@ -1937,11 +1921,11 @@ class NepBot(NepBotClass):
                         whisperChannel = "#%s" % sender
                         if currentData['bounties'] > 0:
                             self.message(whisperChannel,
-                                         "{user}, you can have {limit}{graceAlert} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
+                                         "{user}, you can have {limit} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
                                              **msgArgs), True)
                         else:
                             self.message(whisperChannel,
-                                         "{user}, you can have {limit}{graceAlert} waifus (currently held: {curr}) and your current hand is: {link}".format(
+                                         "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(
                                              **msgArgs), True)
                         messages = ["Your current hand is: "]
                         for row in cards:
@@ -1979,40 +1963,54 @@ class NepBot(NepBotClass):
                 return
             if command == "freewaifu":
                 # print("Checking free waifu egliability for " + str(sender))
-                cur = db.cursor()
-                cur.execute("SELECT lastFree FROM users WHERE id = %s", [tags['user-id']])
-                res = cur.fetchone()
-                nextFree = 79200000 + int(res[0])
-                limit = handLimit(tags['user-id'])
-                freeAvailable = nextFree < current_milli_time()
-                if freeAvailable and currentCards(tags['user-id']) < limit:
+                with db.cursor() as cur:
+                    cur.execute("SELECT lastFree FROM users WHERE id = %s", [tags['user-id']])
+                    res = cur.fetchone()
+                    nextFree = 79200000 + int(res[0])
+                    if nextFree > current_milli_time():
+                        a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
+                        datestring = "{0}".format(a).split(".")[0]
+                        self.message(channel,
+                                     str(tags['display-name']) + ", you need to wait {0} for your next free drop!".format(
+                                         datestring), isWhisper=isWhisper)
+                        return
+                        
+                    storeInPack = False
+                    
+                    if len(args) > 0 and args[0].lower() == "pack":
+                        cur.execute("SELECT COUNT(*) FROM boosters_opened WHERE userid = %s AND status = 'open'", [tags['user-id']])
+                        bct = cur.fetchone()[0]
+                        if bct > 0:
+                            self.message(channel, "%s, you can't use !freewaifu pack while you have an open booster! You might be able to use !freewaifu instead." % tags['display-name'], isWhisper)
+                            return
+                        storeInPack = True
+                    elif currentCards(tags['user-id']) >= handLimit(tags['user-id']):
+                        self.message(channel, "%s, your hand is full! Disenchant something or use !freewaifu pack instead." % tags['display-name'], isWhisper)
+                        return
+                    
+                    # good to get freewaifu
                     row = getWaifuById(dropCard(bannedCards=getUniqueCards(tags['user-id'])))
                     recordPullMetrics(row['id'])
                     logDrop(str(tags['user-id']), row['id'], row['base_rarity'], "freewaifu", channel, isWhisper)
                     if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                         threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
-                    self.message(channel, tags[
-                        'display-name'] + ', you dropped a new Waifu: [{id}][{rarity}] {name} from {series} - {link}'.format(
-                        id=str(row['id']), rarity=config["rarity" + str(row['base_rarity']) + "Name"], name=row['name'],
-                        series=row['series'],
-                        link=row['image']), isWhisper=isWhisper)
-                    giveCard(tags['user-id'], row['id'], row['base_rarity'])
-                    attemptPromotions(row['id'])
-
+                    
+                    droplink = config["siteHost"] + "/booster?user=" + sender
+                    msgArgs = {"username": tags['display-name'], "id": row['id'], "rarity": config["rarity%dName" % row['base_rarity']],
+                        "name": row['name'], "series": row['series'], "link": row['image'], "pack": " ( %s )" % droplink if storeInPack else ""}
+                    
+                    if storeInPack:
+                        cur.execute("INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, 'freewaifu', 0, %s, 'open')",
+                        [tags['user-id'], current_milli_time()])
+                        boosterid = cur.lastrowid
+                        cur.execute("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)", [boosterid, row['id']])
+                    else:
+                        giveCard(tags['user-id'], row['id'], row['base_rarity'])
+                        attemptPromotions(row['id'])
+                    
                     cur.execute("UPDATE users SET lastFree = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
-                elif freeAvailable:
-                    # print("too many cards")
-                    self.message(channel, str(
-                        tags['display-name']) + ", your hand is full! !disenchant something or upgrade your hand!",
-                                 isWhisper=isWhisper)
-                else:
-                    a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
-                    datestring = "{0}".format(a).split(".")[0]
-                    self.message(channel,
-                                 str(tags['display-name']) + ", you need to wait {0} for your next free drop!".format(
-                                     datestring), isWhisper=isWhisper)
-                cur.close()
-                return
+                    self.message(channel, "{username}, you dropped a new waifu: [{id}][{rarity}] {name} from {series} - {link}{pack}".format(**msgArgs), isWhisper)
+                    return
             if command == "disenchant" or command == "de":
                 if len(args) == 0 or (len(args) == 1 and len(args[0]) == 0):
                     self.message(channel, "Usage: !disenchant <list of IDs>", isWhisper=isWhisper)
@@ -3326,18 +3324,10 @@ class NepBot(NepBotClass):
                                          user=tags['display-name'], price=str(directPrice)), isWhisper=isWhisper)
                         return
                         
-                realLimit = realHandLimit(tags['user-id'])
                 currLimit = handLimit(tags['user-id'])
-                
-                if realLimit < currLimit:
-                    msgArgs = (tags['display-name'], realLimit, spendingsToNext, realLimit + 1, directPrice, currLimit)
-                    self.message(channel, ("%s, you have currently earnt a hand size of %d from pack spending. "+
-                    "Spend another %d points on boosters to earn space #%d, or use !upgrade buy to jump there directly for %d points. "+
-                    "(Note: on June 4 your hand size will be adjusted to match your spending, until then you will have a minimum of %d spaces)") % msgArgs, isWhisper)
-                else:
-                    msgArgs = (tags['display-name'], realLimit, spendingsToNext, realLimit + 1, directPrice)
-                    self.message(channel, ("%s, you have currently earnt a hand size of %d from pack spending. "+
-                    "Spend another %d points on boosters to earn space #%d, or use !upgrade buy to jump there directly for %d points.") % msgArgs, isWhisper)
+                msgArgs = (tags['display-name'], realLimit, spendingsToNext, realLimit + 1, directPrice)
+                self.message(channel, ("%s, you have currently earnt a hand size of %d from pack spending. "+
+                "Spend another %d points on boosters to earn space #%d, or use !upgrade buy to jump there directly for %d points.") % msgArgs, isWhisper)
                 
                 return
             if command == "announce":
