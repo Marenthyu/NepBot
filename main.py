@@ -730,6 +730,14 @@ def naturalJoinNames(names):
         return names[0]
     return ", ".join(names[:-1]) + " and " + names[-1]
 
+def getTradeString(waifuid, waifuname, cardrarity, baserarity):
+    promoteDiff = cardrarity - baserarity
+    promoteStars = (" (" + ("★" * (promoteDiff)) + ")") if promoteDiff > 0 else ""
+
+    retStr = "[%d][%s%s] %s" % (
+        waifuid, config["rarity" + str(cardrarity) + "Name"], promoteStars, waifuname)
+
+    return retStr
 
 def sendSetAlert(channel, user, name, waifus, discord=True):
     logger.info("Alerting for set claim %s", name)
@@ -2401,10 +2409,10 @@ class NepBot(NepBotClass):
                         if subarg == "check":
                             wantdata = getWaifuById(want)
                             havedata = getWaifuById(have)
-                            haveStr = "[%d][%s] %s" % (
-                                have, config["rarity" + str(have_rarity) + "Name"], havedata['name'])
-                            wantStr = "[%d][%s] %s" % (
-                                want, config["rarity" + str(want_rarity) + "Name"], wantdata['name'])
+
+                            haveStr = getTradeString(have, havedata['name'], have_rarity, havedata['base_rarity'])
+                            wantStr = getTradeString(want, wantdata['name'], want_rarity, wantdata['base_rarity'])
+
                             payer = "they will pay you" if otherid == payup else "you will pay them"
                             if tradepoints > 0:
                                 self.message(channel,
@@ -2609,10 +2617,9 @@ class NepBot(NepBotClass):
 
                     havedata = getWaifuById(have['id'])
                     wantdata = getWaifuById(want['id'])
-                    haveStr = "[%d][%s] %s" % (
-                        have['id'], config["rarity" + str(have['rarity']) + "Name"], havedata['name'])
-                    wantStr = "[%d][%s] %s" % (
-                        want['id'], config["rarity" + str(want['rarity']) + "Name"], wantdata['name'])
+
+                    haveStr = getTradeString(have['id'], havedata['name'], have['rarity'], havedata['base_rarity'])
+                    wantStr = getTradeString(want['id'], wantdata['name'], want['rarity'], wantdata['base_rarity'])
 
                     paying = ""
                     if points > 0:
@@ -2805,7 +2812,8 @@ class NepBot(NepBotClass):
                     else:
                         if isSet:
                             threading.Thread(target=sendSetAlert, args=(
-                            sender, sender, "Test Set", ["Neptune", "Nepgear", "Some other test waifu"], False)).start()
+                                sender, sender, "Test Set", ["Neptune", "Nepgear", "Some other test waifu"],
+                                False)).start()
                         else:
                             threading.Thread(target=sendDrawAlert, args=(
                                 sender, {"name": "Test Alert, please ignore", "base_rarity": rarity,
@@ -3563,7 +3571,7 @@ class NepBot(NepBotClass):
                                     if hasBet:
                                         self.message(channel,
                                                      "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer. Your bet currently is %s" % (
-                                                     numBets, formatTimeDelta(placedBet)))
+                                                         numBets, formatTimeDelta(placedBet)))
 
                                     else:
                                         self.message(channel,
@@ -3574,7 +3582,7 @@ class NepBot(NepBotClass):
                                     if hasBet:
                                         self.message(channel,
                                                      "Bets are currently open for a new contest. %d bets have been placed so far. Your bet currently is %s" % (
-                                                     numBets, formatTimeDelta(placedBet)))
+                                                         numBets, formatTimeDelta(placedBet)))
                                     else:
                                         self.message(channel,
                                                      "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
