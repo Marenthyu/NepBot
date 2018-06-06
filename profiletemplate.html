@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>{USERNAME}'s profile - Waifu TCG</title>
+    <title>{NAME}'s profile - Waifu TCG</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css"
           integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
     <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
@@ -17,11 +17,34 @@
     <link rel="stylesheet" href="/waifus-bootstrap.css">
 </head>
 <body>
+<nav class="navbar navbar-expand sticky-top navbar-dark bg-dark">
+    <a class="navbar-brand" href="/help">Waifu TCG &ndash; <b>{NAME}</b></a>
+
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+        <ul class="navbar-nav mr-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="/hand?user={NAME}">Hand</a>
+          </li>
+          <li class="nav-item active">
+            <a class="nav-link" href="/profile?user={NAME}">Profile</a>
+          </li>
+            <li class="nav-item">
+            <a class="nav-link" href="/booster?user={NAME}">Booster</a>
+          </li>
+            <li class="nav-item">
+            <a class="nav-link" href="/sets?user={NAME}">Sets</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link disabled">Super Secret Admin-Panel</a>
+          </li>
+        </ul>
+        <form method="GET" class="form-inline">
+          <input value="{NAME}" class="form-control" type="search" name="user" placeholder="Search for User" aria-label="Search">
+          <button class="btn btn-outline-light mx-2" type="submit">Check User</button>
+        </form>
+    </div>
+</nav>
 <div class='container-fluid'>
-    <h2>{USERNAME}
-        <small><a class="btn btn-primary" href="/hand?user={USERNAME}">Show Hand</a><br/></small>
-    </h2>
-    <hr>
     <div class="row">
         <div class="col">
             <h3>Badges</h3>
