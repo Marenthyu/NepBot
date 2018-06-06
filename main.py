@@ -729,7 +729,7 @@ def naturalJoinNames(names):
     return ", ".join(names[:-1]) + " and " + names[-1]
 
 
-def sendSetAlert(channel, user, name, waifus):
+def sendSetAlert(channel, user, name, waifus, discord=True):
     logger.info("Alerting for set claim %s", name)
     with busyLock:
         with db.cursor() as cur:
@@ -768,7 +768,8 @@ def sendSetAlert(channel, user, name, waifus):
             }
         }
     ]}
-    threading.Thread(target=sendDiscordAlert, args=(discordbody,)).start()
+    if discord:
+        threading.Thread(target=sendDiscordAlert, args=(discordbody,)).start()
 
 
 def followsme(userid):
@@ -2723,7 +2724,7 @@ class NepBot(NepBotClass):
             if command == "alerts" or command == "alert":
                 if len(args) < 1:
                     self.message(channel,
-                                 "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
+                                 "Usage: !alerts setup OR !alerts test <rarity/set> OR !alerts config <config Name> <config Value>",
                                  isWhisper=isWhisper)
                     return
                 sender = sender.lower()
@@ -2749,10 +2750,15 @@ class NepBot(NepBotClass):
                     cur.close()
                     return
                 if subcmd == "test":
-                    try:
-                        rarity = parseRarity(args[1])
-                    except Exception:
+                    isSet = False
+                    if args[1] == "set":
                         rarity = int(config["numNormalRarities"]) - 1
+                        isSet = True
+                    else:
+                        try:
+                            rarity = parseRarity(args[1])
+                        except Exception:
+                            rarity = int(config["numNormalRarities"]) - 1
                     cur = db.cursor()
                     cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
                     row = cur.fetchone();
@@ -2762,9 +2768,12 @@ class NepBot(NepBotClass):
                                      "Alerts do not seem to be set up for your channel, please set them up using !alerts setup",
                                      isWhisper=isWhisper)
                     else:
-                        threading.Thread(target=sendDrawAlert, args=(
-                            sender, {"name": "Test Alert, please ignore", "base_rarity": rarity,
-                                     "image": "http://t.fuelr.at/k6g"},
+                        if isSet:
+                            threading.Thread(target=sendSetAlert, args=(sender, sender, "Test Set", ["Neptune", "Nepgear", "Some other test waifu"], False)).start()
+                        else:
+                            threading.Thread(target=sendDrawAlert, args=(
+                                sender, {"name": "Test Alert, please ignore", "base_rarity": rarity,
+                                         "image": "http://t.fuelr.at/k6g"},
                             str(tags["display-name"]), False)).start()
                         self.message(channel, "Test Alert sent.", isWhisper=isWhisper)
                     return
