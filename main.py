@@ -730,7 +730,16 @@ def naturalJoinNames(names):
         return names[0]
     return ", ".join(names[:-1]) + " and " + names[-1]
 
-def getTradeString(waifuid, waifuname, cardrarity, baserarity):
+def getWaifuRepresentationString(waifuid, baserarity=None, cardrarity=None, waifuname=None):
+    if baserarity == None or cardrarity == None or waifuname == None:
+        waifuData = getWaifuById(waifuid)
+        if baserarity == None:
+            baserarity = waifuData['base_rarity']
+        if cardrarity == None:
+            cardrarity = baserarity
+        if waifuname == None:
+            waifuname = waifuData['name']
+
     promoteDiff = cardrarity - baserarity
     promoteStars = (" (" + ("★" * (promoteDiff)) + ")") if promoteDiff > 0 else ""
 
@@ -1944,8 +1953,8 @@ class NepBot(NepBotClass):
                         messages = ["Your current hand is: "]
                         for row in cards:
                             row['amount'] = "(x%d)" % row['amount'] if row['amount'] > 1 else ""
-                            row['rarity'] = config["rarity%sName" % row['rarity']]
-                            waifumsg = '[{id}][{rarity}] {name} from {series} - {image}{amount}; '.format(**row)
+                            waifumsg = getWaifuRepresentationString(row['id'], cardrarity=row[
+                                'rarity']) + ' from {series} - {image}{amount}; '.format(**row)
                             if len(messages[-1]) + len(waifumsg) > 400:
                                 messages.append(waifumsg)
                             else:
@@ -2410,8 +2419,10 @@ class NepBot(NepBotClass):
                             wantdata = getWaifuById(want)
                             havedata = getWaifuById(have)
 
-                            haveStr = getTradeString(have, havedata['name'], have_rarity, havedata['base_rarity'])
-                            wantStr = getTradeString(want, wantdata['name'], want_rarity, wantdata['base_rarity'])
+                            haveStr = getWaifuRepresentationString(have, havedata['base_rarity'], have_rarity,
+                                                                   havedata['name'])
+                            wantStr = getWaifuRepresentationString(want, wantdata['base_rarity'], want_rarity,
+                                                                   wantdata['name'])
 
                             payer = "they will pay you" if otherid == payup else "you will pay them"
                             if tradepoints > 0:
@@ -2618,8 +2629,10 @@ class NepBot(NepBotClass):
                     havedata = getWaifuById(have['id'])
                     wantdata = getWaifuById(want['id'])
 
-                    haveStr = getTradeString(have['id'], havedata['name'], have['rarity'], havedata['base_rarity'])
-                    wantStr = getTradeString(want['id'], wantdata['name'], want['rarity'], wantdata['base_rarity'])
+                    haveStr = getWaifuRepresentationString(have['id'], havedata['base_rarity'], have['rarity'],
+                                                           havedata['name'])
+                    wantStr = getWaifuRepresentationString(want['id'], wantdata['base_rarity'], want['rarity'],
+                                                           wantdata['name'])
 
                     paying = ""
                     if points > 0:
