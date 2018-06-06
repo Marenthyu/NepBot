@@ -1985,7 +1985,7 @@ class NepBot(NepBotClass):
                             return
                         storeInPack = True
                     elif currentCards(tags['user-id']) >= handLimit(tags['user-id']):
-                        self.message(channel, "%s, your hand is full! Disenchant something or use !freewaifu pack instead." % tags['display-name'], isWhisper)
+                        self.message(channel, "%s, your hand is full! Disenchant something, !upgrade your hand or use !freewaifu pack instead." % tags['display-name'], isWhisper)
                         return
                     
                     # good to get freewaifu
@@ -1997,7 +1997,7 @@ class NepBot(NepBotClass):
                     
                     droplink = config["siteHost"] + "/booster?user=" + sender
                     msgArgs = {"username": tags['display-name'], "id": row['id'], "rarity": config["rarity%dName" % row['base_rarity']],
-                        "name": row['name'], "series": row['series'], "link": row['image'], "pack": " ( %s )" % droplink if storeInPack else ""}
+                        "name": row['name'], "series": row['series'], "link": row['image'] if not storeInPack else "", "pack": " ( %s )" % droplink if storeInPack else ""}
                     
                     if storeInPack:
                         cur.execute("INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, 'freewaifu', 0, %s, 'open')",
