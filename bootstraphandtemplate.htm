@@ -1,47 +1,102 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>{NAME}'s hand - Waifu TCG</title>
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css" integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
-<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js" integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="/waifus-bootstrap.css">
-    </head>
+    <meta charset="UTF-8">
+    <title>{NAME}'s hand - Waifu TCG</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css"
+          integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+            integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+            crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+            integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+            crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js"
+            integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4"
+            crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/waifus-bootstrap.css">
+</head>
 <body>
 <nav class="navbar navbar-expand sticky-top navbar-dark bg-dark">
     <a class="navbar-brand" href="/help">Waifu TCG &ndash; <b>{NAME}</b></a>
 
     <div class="collapse navbar-collapse" id="navbarSupportedContent">
         <ul class="navbar-nav mr-auto">
-          <li class="nav-item active">
-            <a class="nav-link" href="/hand?user={NAME}">Hand</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/profile?user={NAME}">Profile</a>
-          </li>
+            <li class="nav-item active">
+                <a class="nav-link" href="/hand?user={NAME}">Hand</a>
+            </li>
             <li class="nav-item">
-            <a class="nav-link" href="/booster?user={NAME}">Booster</a>
-          </li>
+                <a class="nav-link" href="/profile?user={NAME}">Profile</a>
+            </li>
             <li class="nav-item">
-            <a class="nav-link" href="/sets?user={NAME}">Sets</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link disabled">Super Secret Admin-Panel</a>
-          </li>
+                <a class="nav-link" href="/booster?user={NAME}">Booster</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/sets?user={NAME}">Sets</a>
+            </li>
+            <li class="nav-item">
+                <a id="controlpanel" class="nav-link disabled">Super Secret Admin-Panel</a>
+            </li>
         </ul>
         <form method="GET" class="form-inline">
-          <input value="{NAME}" class="form-control" type="search" name="user" placeholder="Search for User" aria-label="Search">
-          <button class="btn btn-outline-light mx-2" type="submit">Check User</button>
+            <input value="{NAME}" class="form-control" type="search" name="user" placeholder="Search for User"
+                   aria-label="Search">
+            <button class="btn btn-outline-light mx-2" type="submit">Check User</button>
         </form>
     </div>
 </nav>
 <div class='container-fluid'>
-<div id='cards-grid'>
-{CARDS}
-</div>
-<i>All images (c) to their original Artists. No Copyright claimed from the owner of this Website.</i>
+    <div id='cards-grid'>
+        {CARDS}
+    </div>
+    <i>All images (c) to their original Artists. No Copyright claimed from the owner of this Website.</i>
 </div>
 </body>
+<script>
+    // from stackoverflow https://stackoverflow.com/questions/31626852/how-to-add-konami-code-in-a-website-based-on-html
+    // memes.
+    // a key map of allowed keys
+    let allowedKeys = {
+        37: 'left',
+        38: 'up',
+        39: 'right',
+        40: 'down',
+        65: 'a',
+        66: 'b'
+    };
+
+    // the 'official' Konami Code sequence
+    let konamiCode = ['up', 'up', 'down', 'down', 'left', 'right', 'left', 'right', 'b', 'a'];
+
+    // a variable to remember the 'position' the user has reached so far.
+    let konamiCodePosition = 0;
+
+    // add keydown event listener
+    document.addEventListener('keydown', function (e) {
+        // get the value of the key code from the key map
+        let key = allowedKeys[e.keyCode];
+        // get the value of the required key from the konami code
+        let requiredKey = konamiCode[konamiCodePosition];
+
+        // compare the key with the required key
+        if (key === requiredKey) {
+
+            // move to the next key in the konami code sequence
+            konamiCodePosition++;
+
+            // if the last key is reached, activate cheats
+            if (konamiCodePosition === konamiCode.length) {
+                activateCheats();
+                konamiCodePosition = 0;
+            }
+        } else {
+            konamiCodePosition = 0;
+        }
+    });
+
+    function activateCheats() {
+        alert("memes");
+        $("#controlpanel").removeClass("disabled").attr("href", "/teasing");
+    }
+</script>
 </html>
