@@ -113,7 +113,7 @@ let white = "#FFFFFF";
 let bootstraphandtpl = fs.readFileSync('bootstraphandtemplate.htm', 'utf8');
 let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-body card-body-tcg">' +
-    '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />' +
+    '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
     '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
     '<div class="invisible-space-holder">&nbsp;</div>' +
     '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>' +
@@ -121,7 +121,7 @@ let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '{PROMOTEDHOLDER}' +
     '</div>' +
     '<div class="card-footer text-center">' +
-    '{NAME}<br />' +
+    '{CARDNAME}<br />' +
     '{SERIES}' +
     '</div>' +
     '</div>';
@@ -130,7 +130,7 @@ let bootstraphandpromoholder = '<div class="promotion-holder rarity-{RARITY}">{S
 let bootstrapboostertpl = fs.readFileSync('bootstrapboostertemplate.htm', 'utf8');
 let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-body card-body-tcg">' +
-    '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />' +
+    '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
     '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
     '<div class="invisible-space-holder">&nbsp;</div>' +
     '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>' +
@@ -140,16 +140,16 @@ let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '<input type="checkbox" onchange="update()" /><br />Keep?' +
     '</div>' +
     '<div class="card-info">' +
-    '{NAME}<br />' +
+    '{CARDNAME}<br />' +
     '{SERIES}' +
     '</div>' +
     '</div>' +
     '</div>';
 let badgetemplate = '' +
     '<div class="badge">' +
-    '<img class="badge-img rounded-circle" src="{IMAGE}" title="{NAME}"/><br/>' +
+    '<img class="badge-img rounded-circle" src="{IMAGE}" title="{CARDNAME}"/><br/>' +
     '<div class="badge-inf">' +
-    '{NAME}<br/>' +
+    '{CARDNAME}<br/>' +
     '{DESCRIPTION}' +
     '</div>' +
     '</div>';
@@ -420,7 +420,7 @@ function getCardHtml(template, row) {
     }
     template = template.replace(/{ID}/g, row.id.toString());
     template = template.replace(/{IMAGE}/g, row.image.toString());
-    template = template.replace(/{NAME}/g, row.Name.toString());
+    template = template.replace(/{CARDNAME}/g, row.Name.toString());
     template = template.replace(/{SERIES}/g, row.series.toString());
     template = template.replace(/{RARITY}/g, getRarityName(row.rarity));
     template = template.replace(/{AMOUNT}/g, row.amount.toString());
@@ -533,7 +533,7 @@ function bootstrapbooster(req, res, query) {
                 let card = bootstrapboostercard;
                 card = card.replace(/{ID}/g, row.id.toString());
                 card = card.replace(/{IMAGE}/g, row.image.toString());
-                card = card.replace(/{NAME}/g, row.Name.toString());
+                card = card.replace(/{CARDNAME}/g, row.Name.toString());
                 card = card.replace(/{SERIES}/g, row.series.toString());
                 card = card.replace(/{RARITY}/g, getRarityName(row.base_rarity));
                 cards += card;
@@ -764,7 +764,7 @@ function profile(req, res, query) {
                 let badge = badgetemplate;
                 badge = badge.replace(/{DESCRIPTION}/g, row.description);
                 badge = badge.replace(/{IMAGE}/g, row.image);
-                badge = badge.replace(/{NAME}/g, row.name);
+                badge = badge.replace(/{CARDNAME}/g, row.name);
                 badges += badge;
             }
             con.query("SELECT waifus.id, waifus.Name, waifus.image, waifus.base_rarity, waifus.series FROM waifus WHERE id = ?", resultOuter[0].favourite, function (err, resultInner) {
