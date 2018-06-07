@@ -2825,7 +2825,7 @@ class NepBot(NepBotClass):
                         if isSet:
                             threading.Thread(target=sendSetAlert, args=(
                                 sender, sender, "Test Set", ["Neptune", "Nepgear", "Some other test waifu"], 0,
-                                True)).start()
+                                False)).start()
                         else:
                             threading.Thread(target=sendDrawAlert, args=(
                                 sender, {"name": "Test Alert, please ignore", "base_rarity": rarity,
