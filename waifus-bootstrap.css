@@ -3,8 +3,12 @@ html {
 }
 
 body {
-    padding-top: 10px;
+    /* padding-top: 10px; */
     padding-bottom: 30px;
+}
+
+nav {
+    margin-bottom: 0.5rem;
 }
 
 .id-holder {

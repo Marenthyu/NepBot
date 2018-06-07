@@ -109,14 +109,11 @@ let setimagefoot = "</div>" +
 let setsetfoot = "    </div>\n" +
     "</div>";
 let white = "#FFFFFF";
-let red = "#ffabb2";
-let green = "#96ff95";
-let downloading = 0;
 
 let bootstraphandtpl = fs.readFileSync('bootstraphandtemplate.htm', 'utf8');
 let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-body card-body-tcg">' +
-    '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />' +
+    '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
     '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
     '<div class="invisible-space-holder">&nbsp;</div>' +
     '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>' +
@@ -124,7 +121,7 @@ let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '{PROMOTEDHOLDER}' +
     '</div>' +
     '<div class="card-footer text-center">' +
-    '{NAME}<br />' +
+    '{CARDNAME}<br />' +
     '{SERIES}' +
     '</div>' +
     '</div>';
@@ -133,7 +130,7 @@ let bootstraphandpromoholder = '<div class="promotion-holder rarity-{RARITY}">{S
 let bootstrapboostertpl = fs.readFileSync('bootstrapboostertemplate.htm', 'utf8');
 let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-body card-body-tcg">' +
-    '<img src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image" />' +
+    '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
     '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
     '<div class="invisible-space-holder">&nbsp;</div>' +
     '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>' +
@@ -143,16 +140,16 @@ let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '<input type="checkbox" onchange="update()" /><br />Keep?' +
     '</div>' +
     '<div class="card-info">' +
-    '{NAME}<br />' +
+    '{CARDNAME}<br />' +
     '{SERIES}' +
     '</div>' +
     '</div>' +
     '</div>';
 let badgetemplate = '' +
     '<div class="badge">' +
-    '<img class="badge-img rounded-circle" src="{IMAGE}" title="{NAME}"/><br/>' +
+    '<img class="badge-img rounded-circle" src="{IMAGE}" title="{CARDNAME}"/><br/>' +
     '<div class="badge-inf">' +
-    '{NAME}<br/>' +
+    '{CARDNAME}<br/>' +
     '{DESCRIPTION}' +
     '</div>' +
     '</div>';
@@ -190,7 +187,7 @@ function smartsets(req, res, query) {
     if ('user' in query) {
         user = query.user;
     }
-    let response = smartsetstpl.replace(/{HTMLSTRINGUSER}/g, escapeHtml(user));
+    let response = smartsetstpl.replace(/{NAME}/g, escapeHtml(user));
     res.writeHead(200, {'Content-Type': 'text/html'});
     res.write(response);
     res.end();
@@ -423,7 +420,7 @@ function getCardHtml(template, row) {
     }
     template = template.replace(/{ID}/g, row.id.toString());
     template = template.replace(/{IMAGE}/g, row.image.toString());
-    template = template.replace(/{NAME}/g, row.Name.toString());
+    template = template.replace(/{CARDNAME}/g, row.Name.toString());
     template = template.replace(/{SERIES}/g, row.series.toString());
     template = template.replace(/{RARITY}/g, getRarityName(row.rarity));
     template = template.replace(/{AMOUNT}/g, row.amount.toString());
@@ -447,10 +444,11 @@ function bootstraphand(req, res, query) {
         if (result.length === 0) {
             if (wantJSON) {
                 res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
-                res.write(JSON.stringify({"error":{"status":404, "explanation":"User not found"}}))
+                res.write(JSON.stringify({"error": {"status": 404, "explanation": "User not found"}}))
             } else {
                 res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                res.write("404 - This user doesn't exist.");
+                res.write(bootstraphandtpl.replace(/{CARDS}/g, "404 - This user doesn't exist.").replace(/{NAME}/g, escapeHtml(query.user)));
+
             }
             res.end();
             return;
@@ -470,7 +468,7 @@ function bootstraphand(req, res, query) {
                 sanitizedResult.push(obj);
             }
             res.writeHead(200, {'Content-Type': 'application/json'});
-            res.write(JSON.stringify({'user':query.user, "cards":sanitizedResult}))
+            res.write(JSON.stringify({'user': query.user, "cards": sanitizedResult}))
         } else {
             res.writeHead(200, {'Content-Type': 'text/html'});
             let cards = '';
@@ -501,10 +499,16 @@ function bootstrapbooster(req, res, query) {
         if (result.length === 0) {
             if (wantJSON) {
                 res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
-                res.write(JSON.stringify({"error":{"status":404, "explanation":"User not found or does not have an open booster."}}))
+                res.write(JSON.stringify({
+                    "error": {
+                        "status": 404,
+                        "explanation": "User not found or does not have an open booster."
+                    }
+                }))
             } else {
                 res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                res.write("404 - This user doesn't exist or has no open booster.");
+                res.write(bootstrapboostertpl.replace(/{CARDS}/g, "404 - This user doesn't exist or has no open booster.").replace(/{NAME}/g, escapeHtml(query.user)));
+
             }
             res.end();
             return;
@@ -521,7 +525,7 @@ function bootstrapbooster(req, res, query) {
                 obj.series = row.series;
                 sanitizedResult.push(obj);
             }
-            res.write(JSON.stringify({"user":query.user, "cards":sanitizedResult}));
+            res.write(JSON.stringify({"user": query.user, "cards": sanitizedResult}));
         } else {
             res.writeHead(200, {'Content-Type': 'text/html'});
             let cards = '';
@@ -529,12 +533,14 @@ function bootstrapbooster(req, res, query) {
                 let card = bootstrapboostercard;
                 card = card.replace(/{ID}/g, row.id.toString());
                 card = card.replace(/{IMAGE}/g, row.image.toString());
-                card = card.replace(/{NAME}/g, row.Name.toString());
+                card = card.replace(/{CARDNAME}/g, row.Name.toString());
                 card = card.replace(/{SERIES}/g, row.series.toString());
                 card = card.replace(/{RARITY}/g, getRarityName(row.base_rarity));
                 cards += card;
             }
-            res.write(bootstrapboostertpl.replace(/{CARDS}/g, cards));
+            let responsestr = bootstrapboostertpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, escapeHtml(query.user));
+            res.write(responsestr);
+
         }
 
         res.end();
@@ -542,10 +548,10 @@ function bootstrapbooster(req, res, query) {
 }
 
 function pullfeed(req, res, query) {
-    
-    con.query("SELECT drops.rarity, drops.source, drops.channel, drops.timestamp, waifus.id AS waifuID, waifus.Name as waifuName, waifus.series AS waifuSeries, waifus.image AS waifuImage, users.name AS username "+
-    "FROM drops JOIN waifus ON drops.waifuid = waifus.id JOIN users ON drops.userid = users.id WHERE drops.rarity >= 4 ORDER BY drops.id DESC LIMIT 100", function(err, result) {
-        if(err) throw err;
+
+    con.query("SELECT drops.rarity, drops.source, drops.channel, drops.timestamp, waifus.id AS waifuID, waifus.Name as waifuName, waifus.series AS waifuSeries, waifus.image AS waifuImage, users.name AS username " +
+        "FROM drops JOIN waifus ON drops.waifuid = waifus.id JOIN users ON drops.userid = users.id WHERE drops.rarity >= 4 ORDER BY drops.id DESC LIMIT 100", function (err, result) {
+        if (err) throw err;
         let wantJSON = false;
         let jsonresp = [];
         if ("accept" in req.headers && req.headers["accept"] === "application/json") {
@@ -555,7 +561,7 @@ function pullfeed(req, res, query) {
             res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
             res.write(pfhead);
         }
-        for(let row of result) {
+        for (let row of result) {
             let obj = {};
             if (wantJSON) {
                 obj["timestamp"] = row.timestamp;
@@ -571,26 +577,26 @@ function pullfeed(req, res, query) {
                 obj["channel"] = row.channel;
                 jsonresp.push(obj);
             } else {
-                res.write("["+new Date(row.timestamp).toISOString()+"] ");
-                res.write(row.username+" pulled <code>["+row.waifuID+"]["+getRarityName(row.rarity)+"] "+row.waifuName+" from "+row.waifuSeries+"</code>");
-                if(row.source === 'freewaifu') {
+                res.write("[" + new Date(row.timestamp).toISOString() + "] ");
+                res.write(row.username + " pulled <code>[" + row.waifuID + "][" + getRarityName(row.rarity) + "] " + row.waifuName + " from " + row.waifuSeries + "</code>");
+                if (row.source === 'freewaifu') {
                     res.write(" as a free waifu");
                 }
-                else if(row.source === 'buy') {
+                else if (row.source === 'buy') {
                     res.write(" using <code>!buy</code>");
                 }
-                else if(row.source.toString().startsWith("boosters.")) {
-                    res.write(" from a "+row.source.substring(9)+" booster");
+                else if (row.source.toString().startsWith("boosters.")) {
+                    res.write(" from a " + row.source.substring(9) + " booster");
                 }
                 else {
                     res.write(" from a mysterious unknown source");
                 }
 
-                if(row.channel === '$$whisper$$') {
+                if (row.channel === '$$whisper$$') {
                     res.write(" via whisper.");
                 }
                 else {
-                    res.write(" in "+row.channel.substring(1)+"&#39;s channel.");
+                    res.write(" in " + row.channel.substring(1) + "&#39;s channel.");
                 }
                 res.write("<br />");
             }
@@ -603,7 +609,7 @@ function pullfeed(req, res, query) {
         }
         res.end();
     });
-    
+
 }
 
 function teaser(req, res, query) {
@@ -739,11 +745,12 @@ function profile(req, res, query) {
         res.end();
         return;
     }
-    con.query("SELECT profileDescription, favourite, id FROM users WHERE users.name = ?", query.user, function(err, resultOuter) {
+    con.query("SELECT profileDescription, favourite, id FROM users WHERE users.name = ?", query.user, function (err, resultOuter) {
         if (err) throw err;
         if (resultOuter.length === 0) {
             res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
-            res.write("404 - User not found.");
+            res.write(profiletpl.replace(/{NAME}/g, escapeHtml(query.user)).replace(/{BADGES}/g, "404 - User not found.").replace(/{DESCRIPTION}/g, "404 - User not found.").replace(/{FAVOURITE}/g, "404 - User not found.").replace(/{CURRENTSPENDINGS}/g, "0").replace(/{NEXTSPENDINGS}/g, "0"));
+
             res.end();
             return;
         }
@@ -757,10 +764,10 @@ function profile(req, res, query) {
                 let badge = badgetemplate;
                 badge = badge.replace(/{DESCRIPTION}/g, row.description);
                 badge = badge.replace(/{IMAGE}/g, row.image);
-                badge = badge.replace(/{NAME}/g, row.name);
+                badge = badge.replace(/{CARDNAME}/g, row.name);
                 badges += badge;
             }
-            con.query("SELECT waifus.id, waifus.Name, waifus.image, waifus.base_rarity, waifus.series FROM waifus WHERE id = ?", resultOuter[0].favourite, function(err, resultInner) {
+            con.query("SELECT waifus.id, waifus.Name, waifus.image, waifus.base_rarity, waifus.series FROM waifus WHERE id = ?", resultOuter[0].favourite, function (err, resultInner) {
                 if (err) throw err;
 
                 let row = resultInner[0];
@@ -788,12 +795,12 @@ function profile(req, res, query) {
                             nextspendings = huLUTresult[paidSlots + 1].spendings;
                             lastspendings = huLUTresult[paidSlots].spendings;
                         } else {
-                            nextspendings = huLUTresult[huLUTresult.length-1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1) + 1));
-                            lastspendings = huLUTresult[huLUTresult.length-1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1)));
+                            nextspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1) + 1));
+                            lastspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1)));
                         }
 
-                        let percentspendings = Math.max(((spending - lastspendings )/ ( nextspendings - lastspendings) )* 100, 0);
-                        res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{USERNAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
+                        let percentspendings = Math.max(((spending - lastspendings) / (nextspendings - lastspendings)) * 100, 0);
+                        res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{NAME}/g, escapeHtml(query.user)).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
                         res.end();
 
                     })
