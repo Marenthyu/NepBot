@@ -748,7 +748,7 @@ def getWaifuRepresentationString(waifuid, baserarity=None, cardrarity=None, waif
 
     return retStr
 
-def sendSetAlert(channel, user, name, waifus, discord=True):
+def sendSetAlert(channel, user, name, waifus, points, discord=True):
     logger.info("Alerting for set claim %s", name)
     with busyLock:
         with db.cursor() as cur:
@@ -773,9 +773,8 @@ def sendSetAlert(channel, user, name, waifus, discord=True):
         },
         {
             "type": "rich",
-            "title": "{user} gathered {waifus} to complete the set {name}!".format(user=str(user),
-                                                                                   waifus=naturalJoinNames(waifus),
-                                                                                   name=name),
+            "title": "{user} completed the set {name}!".format(user=str(user), name=name),
+            "description": "They gathered {waifus} and received {points} points as their reward.".format(waifus=naturalJoinNames(waifus), points=str(points)),
             "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
             "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"]),
             "footer": {
@@ -2806,7 +2805,7 @@ class NepBot(NepBotClass):
                     return
                 if subcmd == "test":
                     isSet = False
-                    if args[1] == "set":
+                    if len(args) > 1 and args[1].lower() == "set":
                         rarity = int(config["numNormalRarities"]) - 1
                         isSet = True
                     else:
@@ -2818,14 +2817,14 @@ class NepBot(NepBotClass):
                     cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
                     row = cur.fetchone();
                     cur.close()
-                    if row[0] is None:
+                    if row is None or row[0] is None:
                         self.message(channel,
                                      "Alerts do not seem to be set up for your channel, please set them up using !alerts setup",
                                      isWhisper=isWhisper)
                     else:
                         if isSet:
                             threading.Thread(target=sendSetAlert, args=(
-                                sender, sender, "Test Set", ["Neptune", "Nepgear", "Some other test waifu"],
+                                sender, sender, "Test Set", ["Neptune", "Nepgear", "Some other test waifu"], 0,
                                 False)).start()
                         else:
                             threading.Thread(target=sendDrawAlert, args=(
@@ -3993,7 +3992,7 @@ class NepBot(NepBotClass):
                             [row[0]])
                         cards = [sc[0] for sc in cur.fetchall()]
                         threading.Thread(target=sendSetAlert,
-                                         args=(channel, tags["display-name"], row[1], cards)).start()
+                                         args=(channel, tags["display-name"], row[1], cards, row[2])).start()
 
                     if claimed == 0:
                         self.message(channel,
