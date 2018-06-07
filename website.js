@@ -447,7 +447,7 @@ function bootstraphand(req, res, query) {
                 res.write(JSON.stringify({"error":{"status":404, "explanation":"User not found"}}))
             } else {
                 res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                res.write(bootstraphandtpl.replace(/{CARDS}/g, "404 - This user doesn't exist.").replace(/{NAME}/g, query.user));
+                res.write(bootstraphandtpl.replace(/{CARDS}/g, "404 - This user doesn't exist.").replace(/{NAME}/g, escapeHtml(query.user)));
 
             }
             res.end();
@@ -502,7 +502,7 @@ function bootstrapbooster(req, res, query) {
                 res.write(JSON.stringify({"error":{"status":404, "explanation":"User not found or does not have an open booster."}}))
             } else {
                 res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                res.write(bootstrapboostertpl.replace(/{CARDS}/g, "404 - This user doesn't exist or has no open booster.").replace(/{NAME}/g, query.user));
+                res.write(bootstrapboostertpl.replace(/{CARDS}/g, "404 - This user doesn't exist or has no open booster.").replace(/{NAME}/g, escapeHtml(query.user)));
 
             }
             res.end();
@@ -533,7 +533,7 @@ function bootstrapbooster(req, res, query) {
                 card = card.replace(/{RARITY}/g, getRarityName(row.base_rarity));
                 cards += card;
             }
-            let responsestr = bootstrapboostertpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user);
+            let responsestr = bootstrapboostertpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, escapeHtml(query.user));
             res.write(responsestr);
 
         }
@@ -744,7 +744,7 @@ function profile(req, res, query) {
         if (err) throw err;
         if (resultOuter.length === 0) {
             res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
-            res.write(profiletpl.replace(/{NAME}/g, query.user).replace(/{BADGES}/g, "404 - User not found.").replace(/{DESCRIPTION}/g, "404 - User not found.").replace(/{FAVOURITE}/g, "404 - User not found.").replace(/{CURRENTSPENDINGS}/g, "0").replace(/{NEXTSPENDINGS}/g, "0"));
+            res.write(profiletpl.replace(/{NAME}/g, escapeHtml(query.user)).replace(/{BADGES}/g, "404 - User not found.").replace(/{DESCRIPTION}/g, "404 - User not found.").replace(/{FAVOURITE}/g, "404 - User not found.").replace(/{CURRENTSPENDINGS}/g, "0").replace(/{NEXTSPENDINGS}/g, "0"));
 
             res.end();
             return;
@@ -795,7 +795,7 @@ function profile(req, res, query) {
                         }
 
                         let percentspendings = Math.max(((spending - lastspendings )/ ( nextspendings - lastspendings) )* 100, 0);
-                        res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{NAME}/g, query.user).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
+                        res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{NAME}/g, escapeHtml(query.user)).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
                         res.end();
 
                     })
