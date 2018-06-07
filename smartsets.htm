@@ -82,7 +82,7 @@
     let uniqid = 0;
     let cardtemplate = '<div class="card card-tcg">' +
         '<div class="card-body card-body-tcg">' +
-        '<img data-src="{IMAGE}" alt="{NAME}" title="{NAME}" class="card-image lazyload" />' +
+        '<img data-src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image lazyload" />' +
         '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
         '<div class="invisible-space-holder">&nbsp;</div>' +
         '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>' +
@@ -90,7 +90,7 @@
         '<div class="card-footer text-center{OWNEDCLASS}">' +
         '{OWNEDDATA}' +
         '<div class="card-info">' +
-        '{NAME}<br />' +
+        '{CARDNAME}<br />' +
         '{SERIES}' +
         '</div>' +
         '</div>' +
@@ -117,7 +117,7 @@
                 let card = cardtemplate;
                 card = card.replace(/{ID}/g, row.id.toString());
                 card = card.replace(/{IMAGE}/g, row.image);
-                card = card.replace(/{NAME}/g, row.name);
+                card = card.replace(/{CARDNAME}/g, row.name);
                 card = card.replace(/{SERIES}/g, row.series);
                 card = card.replace(/{RARITY}/g, row.rarity);
                 if (user !== "null") {
