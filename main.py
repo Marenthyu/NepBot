@@ -838,7 +838,7 @@ def getWaifuOwners(id, rarity):
             ownerData[row[0]] = []
             ownedByOwner[row[0]] = 0
         rarityName = config["rarity%dName" % row[1]]
-        ownerData[row[0]].append(rarityName if row[2] == 1 else "%d %s" % (rarityName, row[2]))
+        ownerData[row[0]].append(rarityName if row[2] == 1 else "%d %s" % (row[2], rarityName))
         ownedByOwner[row[0]] += row[2]
 
     ownerDescriptions = []
