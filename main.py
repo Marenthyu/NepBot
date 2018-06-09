@@ -835,22 +835,17 @@ def getWaifuOwners(id, rarity):
     ownedByOwner = {}
     for row in allOwners:
         if row[0] not in ownerData:
-            ownerData[row[0]] = OrderedDict()
+            ownerData[row[0]] = []
             ownedByOwner[row[0]] = 0
-        ownerData[row[0]][config["rarity%dName" % row[1]]] = row[2]
+        rarityName = config["rarity%dName" % row[1]]
+        ownerData[row[0]].append(rarityName if row[2] == 1 else "%d %s" % (rarityName, row[2]))
         ownedByOwner[row[0]] += row[2]
 
     ownerDescriptions = []
     for owner in ownerData:
         if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner] or ownedByOwner[owner] > 1:
             # verbose
-            if ownedByOwner[owner] > 1:
-                ownerDescriptions.append(owner + " (" + ", ".join(
-                    "%d %s" % (ownerData[owner][rarity], rarity) for rarity in
-                    ownerData[owner]) + ")")
-            else:
-                ownerDescriptions.append(
-                    owner + " (" + "".join(rarity for rarity in ownerData[owner]) + ")")
+            ownerDescriptions.append(owner + " (" + ", ".join(ownerData[owner]) + ")")
         else:
             ownerDescriptions.append(owner)
             
