@@ -14,7 +14,7 @@ import threading
 import math
 import functools
 from string import ascii_letters
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 import sys
 import re
@@ -821,6 +821,40 @@ def getWaifuById(id):
     cur.close()
     # print("Fetched Waifu from id: " + str(ret))
     return ret
+    
+def getWaifuOwners(id, rarity):
+    with db.cursor() as cur:
+        baseRarityName = config["rarity%dName" % rarity]
+        cur.execute(
+            "SELECT users.name, has_waifu.rarity, has_waifu.amount FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE has_waifu.waifuid = %s ORDER BY has_waifu.rarity DESC, has_waifu.amount DESC, users.name ASC",
+            [id])
+        allOwners = cur.fetchall()
+
+    # compile per-owner data
+    ownerData = OrderedDict()
+    ownedByOwner = {}
+    for row in allOwners:
+        if row[0] not in ownerData:
+            ownerData[row[0]] = OrderedDict()
+            ownedByOwner[row[0]] = 0
+        ownerData[row[0]][config["rarity%dName" % row[1]]] = row[2]
+        ownedByOwner[row[0]] += row[2]
+
+    ownerDescriptions = []
+    for owner in ownerData:
+        if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner] or ownedByOwner[owner] > 1:
+            # verbose
+            if ownedByOwner[owner] > 1:
+                ownerDescriptions.append(owner + " (" + ", ".join(
+                    "%d %s" % (ownerData[owner][rarity], rarity) for rarity in
+                    ownerData[owner]) + ")")
+            else:
+                ownerDescriptions.append(
+                    owner + " (" + "".join(rarity for rarity in ownerData[owner]) + ")")
+        else:
+            ownerDescriptions.append(owner)
+            
+    return ownerDescriptions
 
 
 def hasPoints(userid, amount):
@@ -1845,7 +1879,7 @@ class NepBot(NepBotClass):
 
         activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup",
                           "alerts", "redeem", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway",
-                          "bounty", "emotewar", "wars", "war", "vote", "profile"]
+                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners"]
 
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
@@ -2657,39 +2691,10 @@ class NepBot(NepBotClass):
                         assert waifu is not None
                         assert waifu['can_lookup'] == 1
 
-                        with db.cursor() as cur:
-                            baseRarityName = config["rarity%dName" % waifu["base_rarity"]]
-                            cur.execute(
-                                "SELECT users.name, has_waifu.rarity, has_waifu.amount FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE has_waifu.waifuid = %s",
-                                [waifu['id']])
-                            allOwners = cur.fetchall()
-
-                        # compile per-owner data
-                        ownerData = {}
-                        ownedByOwner = {}
-                        for row in allOwners:
-                            if row[0] not in ownerData:
-                                ownerData[row[0]] = {}
-                                ownedByOwner[row[0]] = 0
-                            ownerData[row[0]][config["rarity%dName" % row[1]]] = row[2]
-                            ownedByOwner[row[0]] += row[2]
-
-                        ownerDescriptions = []
-                        for owner in ownerData:
-                            if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner] or ownedByOwner[
-                                owner] > 1:
-                                # verbose
-                                if ownedByOwner[owner] > 1:
-                                    ownerDescriptions.append(owner + " (" + ", ".join(
-                                        "%d %s" % (ownerData[owner][rarity], rarity) for rarity in
-                                        ownerData[owner]) + ")")
-                                else:
-                                    ownerDescriptions.append(
-                                        owner + " (" + "".join(rarity for rarity in ownerData[owner]) + ")")
-                            else:
-                                ownerDescriptions.append(owner)
-
-                        waifu["rarity"] = baseRarityName
+                        ownerDescriptions = getWaifuOwners(waifu['id'], waifu['base_rarity'])
+                        if len(ownerDescriptions) > 3:
+                            ownerDescriptions = ownerDescriptions[0:2] + ["%d others" % (len(ownerDescriptions) - 2)]
+                        waifu["rarity"] = config["rarity%dName" % waifu["base_rarity"]]
 
                         # check for packs
                         with db.cursor() as cur:
@@ -2701,9 +2706,9 @@ class NepBot(NepBotClass):
                         if len(ownerDescriptions) > 0:
                             waifu["owned"] = " - owned by " + ", ".join(ownerDescriptions)
                             if len(packholders) > 0:
-                                waifu["owned"] += "; currently in a pack for: " + ", ".join(packholders)
+                                waifu["owned"] += "; in a pack for: " + ", ".join(packholders)
                         elif len(packholders) > 0:
-                            waifu["owned"] = " - currently in a pack for: " + ", ".join(packholders)
+                            waifu["owned"] = " - in a pack for: " + ", ".join(packholders)
                         elif waifu["pulls"] > 0:
                             waifu["owned"] = " (not currently owned or in a pack)"
                         else:
@@ -2726,18 +2731,18 @@ class NepBot(NepBotClass):
                                     minfo["mine"] = myorderinfo[0]
                                     if myorderinfo[0] == allordersinfo[1]:
                                         waifu[
-                                            "bountyinfo"] = "This waifu currently has {count} bounties, you are the highest bidder at {highest} points.".format(
+                                            "bountyinfo"] = " {count} current bounties, your bid is highest at {highest} points.".format(
                                             **minfo)
                                     else:
                                         waifu[
-                                            "bountyinfo"] = "This waifu currently has {count} bounties, your bid of {mine} points is lower than the highest bid of {highest} points.".format(
+                                            "bountyinfo"] = "{count} current bounties, your bid of {mine} points is lower than the highest at {highest} points.".format(
                                             **minfo)
                                 else:
                                     waifu[
-                                        "bountyinfo"] = "This waifu currently has {count} bounties, out of which the highest bid is {highest} points. You don't have a bounty on this waifu right now.".format(
+                                        "bountyinfo"] = "{count} current bounties, the highest bid is {highest} points.".format(
                                         **minfo)
                             else:
-                                waifu["bountyinfo"] = "There are no current bounties on this waifu."
+                                waifu["bountyinfo"] = "No current bounties on this waifu."
 
                         # last pull
                         if waifu["pulls"] == 0 or waifu["last_pull"] is None or waifu["base_rarity"] >= int(
@@ -2746,14 +2751,57 @@ class NepBot(NepBotClass):
                         else:
                             lpdiff = (current_milli_time() - waifu["last_pull"]) // 86400000
                             if lpdiff == 0:
-                                waifu["lp"] = " This waifu was last pulled less than a day ago."
+                                waifu["lp"] = " Last pulled less than a day ago."
                             elif lpdiff == 1:
-                                waifu["lp"] = " This waifu was last pulled 1 day ago."
+                                waifu["lp"] = " Last pulled 1 day ago."
                             else:
-                                waifu["lp"] = " This waifu was last pulled %d days ago." % lpdiff
+                                waifu["lp"] = " Last pulled %d days ago." % lpdiff
 
                         self.message(channel,
                                      '[{id}][{rarity}] {name} from {series} - {image}{owned}. {bountyinfo}{lp}'.format(
+                                         **waifu),
+                                     isWhisper=isWhisper)
+
+                        if sender not in superadmins:
+                            useInfoCommand(tags['user-id'], sender, channel, isWhisper)
+                    except Exception as exc:
+                        self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
+
+                return
+            if command == "owners":
+                if len(args) != 1:
+                    self.message(channel, "Usage: !owners <id>", isWhisper=isWhisper)
+                    return
+
+                if infoCommandAvailable(tags['user-id'], sender, tags['display-name'], self, channel, isWhisper):
+                    try:
+                        waifu = getWaifuById(args[0])
+                        assert waifu is not None
+                        assert waifu['can_lookup'] == 1
+
+                        ownerDescriptions = getWaifuOwners(waifu['id'], waifu['base_rarity'])
+                        waifu["rarity"] = config["rarity%dName" % waifu["base_rarity"]]
+
+                        # check for packs
+                        with db.cursor() as cur:
+                            cur.execute(
+                                "SELECT users.name FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid = boosters_opened.id JOIN users ON boosters_opened.userid = users.id WHERE boosters_cards.waifuid = %s AND boosters_opened.status = 'open'",
+                                [waifu['id']])
+                            packholders = [row[0] for row in cur.fetchall()]
+
+                        if len(ownerDescriptions) > 0:
+                            waifu["owned"] = " is owned by " + ", ".join(ownerDescriptions)
+                            if len(packholders) > 0:
+                                waifu["owned"] += "; in a pack for: " + ", ".join(packholders)
+                        elif len(packholders) > 0:
+                            waifu["owned"] = " is in a pack for: " + ", ".join(packholders)
+                        elif waifu["pulls"] > 0:
+                            waifu["owned"] = " is not currently owned or in a pack"
+                        else:
+                            waifu["owned"] = " has not dropped yet"
+
+                        self.message(channel,
+                                     '[{id}][{rarity}] {name} from {series}{owned}.'.format(
                                          **waifu),
                                      isWhisper=isWhisper)
 
