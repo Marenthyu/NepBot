@@ -15,6 +15,7 @@ import math
 import functools
 from string import ascii_letters
 from collections import defaultdict, OrderedDict
+from random import Random
 
 import sys
 import re
@@ -1394,6 +1395,42 @@ def useInfoCommand(userid, username, channel, isWhisper):
         private = isWhisper or channel == '#' + config['username'] or channel == '#' + username
         columnName = "Private" if private else "Public"
         cur.execute("UPDATE users SET infoUsed{0} = infoUsed{0} + 1 WHERE id = %s".format(columnName), [userid])
+        
+def generateRewardsSeed(cycleLength, numGoodRewards):
+    # generate a reasonable rewards seed
+    # "reasonable" is defined as the gap between successive good rewards
+    # being between (CL/NumGood)/2 and (CL/NumGood)*2 every time
+    # where gap is 1, not 0, for two consecutive good rewards
+    # uses 0 to (numGoodRewards-1) to represent the good rewards
+    # and other numbers to represent the bad
+    hasSeed = False
+    while not hasSeed:
+        seed = random.randrange(0, 0x10000000000000000)
+        if numGoodRewards == 0 or cycleLength == numGoodRewards:
+            return seed
+        generator = Random(seed)
+        order = [x for x in range(cycleLength)]
+        generator.shuffle(order)
+        hasSeed = True
+        lastPos = -1
+        for i in range(int(numGoodRewards)):
+            pos = lastPos + 1
+            while order[pos] >= numGoodRewards:
+                pos += 1
+            if pos - lastPos <= (cycleLength/numGoodRewards)/2 or pos - lastPos >= (cycleLength/numGoodRewards)*2:
+                hasSeed = False
+                break
+            lastPos = pos
+        if cycleLength - lastPos >= (cycleLength/numGoodRewards)*2:
+            hasSeed = False
+    return seed
+    
+# returns (cycle length, number of good rewards) for use elsewhere
+def getRewardsMetadata():
+    with db.cursor() as cur:
+        cur.execute("SELECT COUNT(*), SUM(IF(is_good != 0, 1, 0)) FROM free_rewards")
+        return cur.fetchone()
+        
 
 
 # From https://github.com/Shizmob/pydle/issues/35
@@ -2012,10 +2049,10 @@ class NepBot(NepBotClass):
                              isWhisper=isWhisper)
                 cur.close()
                 return
-            if command == "freewaifu":
+            if command == "freewaifu" or command == "freebie":
                 # print("Checking free waifu egliability for " + str(sender))
                 with db.cursor() as cur:
-                    cur.execute("SELECT lastFree FROM users WHERE id = %s", [tags['user-id']])
+                    cur.execute("SELECT lastFree, rewardSeqSeed, rewardSeqIndex FROM users WHERE id = %s", [tags['user-id']])
                     res = cur.fetchone()
                     nextFree = 79200000 + int(res[0])
                     if nextFree > current_milli_time():
@@ -2026,54 +2063,110 @@ class NepBot(NepBotClass):
                                              'display-name']) + ", you need to wait {0} for your next free drop!".format(
                                          datestring), isWhisper=isWhisper)
                         return
-
-                    storeInPack = False
-
-                    if len(args) > 0 and args[0].lower() == "pack":
-                        cur.execute("SELECT COUNT(*) FROM boosters_opened WHERE userid = %s AND status = 'open'",
-                                    [tags['user-id']])
-                        bct = cur.fetchone()[0]
-                        if bct > 0:
-                            self.message(channel,
-                                         "%s, you can't use !freewaifu pack while you have an open booster! You might be able to use !freewaifu instead." %
-                                         tags['display-name'], isWhisper)
-                            return
-                        storeInPack = True
-                    elif currentCards(tags['user-id']) >= handLimit(tags['user-id']):
-                        self.message(channel,
-                                     "%s, your hand is full! Disenchant something, !upgrade your hand or use !freewaifu pack instead." %
-                                     tags['display-name'], isWhisper)
-                        return
-
-                    # good to get freewaifu
-                    row = getWaifuById(dropCard(bannedCards=getUniqueCards(tags['user-id'])))
-                    recordPullMetrics(row['id'])
-                    logDrop(str(tags['user-id']), row['id'], row['base_rarity'], "freewaifu", channel, isWhisper)
-                    if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
-                        threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
-
-                    droplink = config["siteHost"] + "/booster?user=" + sender
-                    msgArgs = {"username": tags['display-name'], "id": row['id'],
-                               "rarity": config["rarity%dName" % row['base_rarity']],
-                               "name": row['name'], "series": row['series'],
-                               "link": row['image'] if not storeInPack else "",
-                               "pack": " ( %s )" % droplink if storeInPack else ""}
-
-                    if storeInPack:
-                        cur.execute(
-                            "INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, 'freewaifu', 0, %s, 'open')",
-                            [tags['user-id'], current_milli_time()])
-                        boosterid = cur.lastrowid
-                        cur.execute("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)",
-                                    [boosterid, row['id']])
+                        
+                    cur.execute("SELECT COUNT(*) FROM boosters_opened WHERE userid = %s AND status = 'open'", [tags['user-id']])
+                    hasPack = cur.fetchone()[0] > 0
+                    storeInPack = len(args) > 0 and args[0].lower() == "pack"
+                    
+                    freeData = getRewardsMetadata()
+                    
+                    seed = res[1]
+                    index = res[2]
+                    
+                    if seed is None or index >= freeData[0]:
+                        seed = generateRewardsSeed(*freeData)
+                        index = 0
+                        
+                    # retrieve their reward for this time
+                    generator = Random(seed)
+                    seq = [x for x in range(freeData[0])]
+                    generator.shuffle(seq)
+                    rewardNum = seq[index]
+                    
+                    if rewardNum >= freeData[1]:
+                        # not good reward
+                        lookup = [0, rewardNum - freeData[1]]
                     else:
-                        giveCard(tags['user-id'], row['id'], row['base_rarity'])
-                        attemptPromotions(row['id'])
+                        # good
+                        lookup = [1, rewardNum]
+                        
+                    cur.execute("SELECT points, waifuid, waifu_rarity, boostername FROM free_rewards WHERE `is_good` = %s AND `index` = %s", lookup)
+                    rewardInfo = cur.fetchone()
+                    
+                    if rewardInfo is None:
+                        self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
+                        return
+                        
+                    # only one of the latter three rewards is allowed to be filled in, and there needs to be at least one reward.
+                    cardRewardCount = sum([(1 if rewardInfo[n] is not None else 0) for n in range(1, 4)])
+                    ovrRewardCount = sum([(1 if rewardInfo[n] is not None else 0) for n in range(4)])
+                    if cardRewardCount > 1 or ovrRewardCount == 0:
+                        self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
+                        return
+                        
+                    # can they take the reward at the current time?
+                    if rewardInfo[3] is not None and hasPack:
+                        self.message(channel, "%s, you can't receive your next free reward while you have an open booster! Deal with it and try again." % tags['display-name'], isWhisper)
+                        return
+                    elif cardRewardCount != 0 and hasPack and storeInPack:
+                        self.message(channel, "%s, you can't use pack-mode for your free reward while you have an open booster! You might be able to get it directly into your hand instead." % tags['display-name'], isWhisper)
+                        return
+                    elif (rewardInfo[1] is not None or rewardInfo[2] is not None) and not storeInPack and currentCards(tags['user-id']) >= handLimit(tags['user-id']):
+                        self.message(channel, "%s, your hand is full! Disenchant something, !upgrade your hand or use !freebie pack instead." % tags['display-name'], isWhisper)
+                        return
+                        
+                    # if we made it this far they can receive it. process it
+                    if rewardInfo[0] is not None:
+                        addPoints(tags['user-id'], rewardInfo[0])
+                        if cardRewardCount == 0:
+                            self.message(channel, "%s, you got your daily free reward: %d points!" % (tags['display-name'], rewardInfo[0]), isWhisper)
+                        
+                    pointsPrefix = "%d points and " if rewardInfo[0] is not None else ""
+                    if rewardInfo[1] is not None or rewardInfo[2] is not None:
+                        if rewardInfo[1] is not None:
+                            wid = rewardInfo[1]
+                        else:
+                            wid = dropCard(rarity=rewardInfo[2], bannedCards=getUniqueCards(tags['user-id']))
+                        
+                        row = getWaifuById(wid)
+                        recordPullMetrics(row['id'])
+                        logDrop(str(tags['user-id']), row['id'], row['base_rarity'], "freebie", channel, isWhisper)
+                        if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
+                            threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
 
-                    cur.execute("UPDATE users SET lastFree = %s WHERE id = %s", [current_milli_time(), tags['user-id']])
-                    self.message(channel,
-                                 "{username}, you dropped a new waifu: [{id}][{rarity}] {name} from {series} - {link}{pack}".format(
-                                     **msgArgs), isWhisper)
+                        if storeInPack:
+                            cur.execute(
+                                "INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, 'freebie', 0, %s, 'open')",
+                                [tags['user-id'], current_milli_time()])
+                            boosterid = cur.lastrowid
+                            cur.execute("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)",
+                                        [boosterid, row['id']])
+                        else:
+                            giveCard(tags['user-id'], row['id'], row['base_rarity'])
+                            attemptPromotions(row['id'])
+                            
+                        droplink = config["siteHost"] + "/booster?user=" + sender
+                        msgArgs = {"username": tags['display-name'], "id": row['id'],
+                                   "rarity": config["rarity%dName" % row['base_rarity']],
+                                   "name": row['name'], "series": row['series'],
+                                   "link": row['image'] if not storeInPack else "",
+                                   "pack": " ( %s )" % droplink if storeInPack else "",
+                                   "points": pointsPrefix}
+                        
+                        self.message(channel, "{username}, you got your daily free reward: {points}[{id}][{rarity}] {name} from {series} - {link}{pack}".format(**msgArgs), isWhisper)
+                       
+                            
+                    if rewardInfo[3] is not None:
+                        try:
+                            packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, rewardInfo[3], False)
+                            if checkHandUpgrade(tags['user-id']):
+                                messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
+                            self.message(channel, "%s, you got your daily free reward: {points}a booster - %s/booster?user=%s" % (tags['display-name'], pointsPrefix, config['siteHost'], sender), isWhisper)
+                        except InvalidBoosterException:
+                            self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
+                            return
+
+                    cur.execute("UPDATE users SET lastFree = %s, rewardSeqSeed = %s, rewardSeqIndex = %s WHERE id = %s", [current_milli_time(), seed, index + 1, tags['user-id']])
                     return
             if command == "disenchant" or command == "de":
                 if len(args) == 0 or (len(args) == 1 and len(args[0]) == 0):
