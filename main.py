@@ -1956,7 +1956,7 @@ class NepBot(NepBotClass):
                 cards = getHand(tags['user-id'])
                 if len(cards) == 0:
                     self.message(channel,
-                                 "%s, you don't currently have any waifus! Get your first one with !freewaifu" % tags[
+                                 "%s, you don't have any waifus! Get your first with !freewaifu" % tags[
                                      'display-name'], isWhisper=isWhisper)
                     return
 
@@ -1972,11 +1972,11 @@ class NepBot(NepBotClass):
                         whisperChannel = "#%s" % sender
                         if currentData['bounties'] > 0:
                             self.message(whisperChannel,
-                                         "{user}, you can have {limit} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
+                                         "{user}, you have {curr} waifus, {bounties} bounties and {limit} total spaces. {link}".format(
                                              **msgArgs), True)
                         else:
                             self.message(whisperChannel,
-                                         "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(
+                                         "{user}, you have {curr} waifus and {limit} total spaces. {link}".format(
                                              **msgArgs), True)
                         messages = ["Your current hand is: "]
                         for row in cards:
@@ -1992,16 +1992,16 @@ class NepBot(NepBotClass):
                             self.message(whisperChannel, message, True)
                     elif not isWhisper:
                         self.message(channel,
-                                     "%s, you can't use verbose checkhand because you don't follow the bot! Follow it and try again." %
+                                     "%s, to use verbose checkhand, follow the bot! Follow it and try again." %
                                      tags['display-name'])
                 else:
                     if currentData['bounties'] > 0:
                         self.message(channel,
-                                     "{user}, you can have {limit} waifus (currently held: {curr} waifus and {bounties} active bounties) and your current hand is: {link}".format(
+                                     "{user}, you have {curr} waifus, {bounties} bounties and {limit} total spaces. {link}".format(
                                          **msgArgs), isWhisper)
                     else:
                         self.message(channel,
-                                     "{user}, you can have {limit} waifus (currently held: {curr}) and your current hand is: {link}".format(
+                                     "{user}, you have {curr} waifus and {limit} total spaces. {link}".format(
                                          **msgArgs), isWhisper)
                 return
             if command == "points":
@@ -2162,12 +2162,12 @@ class NepBot(NepBotClass):
 
                 if len(disenchants) == 1:
                     buytext = " (bounty filled)" if ordersFilled > 0 else ""
-                    self.message(channel, "Successfully disenchanted waifu %d%s and added %d points to %s's account" % (
-                        disenchants[0]['id'], buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                    self.message(channel, "Successfully disenchanted waifu %d%s. %s gained %d points" % (
+                        disenchants[0]['id'], buytext, str(tags['display-name']), pointsGain), isWhisper=isWhisper)
                 else:
                     buytext = " (%d bounties filled)" % ordersFilled if ordersFilled > 0 else ""
                     self.message(channel,
-                                 "Successfully disenchanted %d waifus%s and added %d points to %s's account" % (
+                                 "Successfully disenchanted %d waifus%s. Added %d points to %s's account" % (
                                      len(disenchants), buytext, pointsGain, str(tags['display-name'])),
                                  isWhisper=isWhisper)
 
@@ -2178,7 +2178,7 @@ class NepBot(NepBotClass):
             if command == "buy":
                 if len(args) != 1:
                     if len(args) > 0 and args[0].lower() == "booster":
-                        self.message(channel, "%s -> Did you mean !booster buy?" % tags['display-name'], isWhisper)
+                        self.message(channel, "%s, did you mean !booster buy?" % tags['display-name'], isWhisper)
                     else:
                         self.message(channel, "Usage: !buy <rarity> (So !buy uncommon for an uncommon)",
                                      isWhisper=isWhisper)
@@ -2330,7 +2330,7 @@ class NepBot(NepBotClass):
                         self.message(channel, "You can't keep that many waifus! !disenchant some!", isWhisper=isWhisper)
                         cur.close()
                         return
-
+                    trash = (keepingCount == 0)
                     # if we made it through the whole pack without tripping confirmation, we can actually do it now
                     for waifu in keepCards:
                         giveCard(tags['user-id'], waifu['id'], waifu['base_rarity'])
@@ -2350,19 +2350,19 @@ class NepBot(NepBotClass):
                     attemptPromotions(*cards)
 
                     # compile the message to be sent in chat
-                    response = "You take your booster pack and: "
+                    response = "You %s your booster pack%s" % (("trash", "") if trash else ("take"," and: "))
 
                     if len(keepCards) > 0:
                         response += " keep " + ', '.join(str(x['id']) for x in keepCards) + ";"
-                    if len(deCards) > 0:
-                        response += " disenchant " + ', '.join(str(x['id']) for x in deCards)
+                    if len(deCards) > 0 and not trash:
+                        response += " disenchant the rest"
 
                     if ordersFilled > 0:
-                        response += " (%d bounties filled);" % ordersFilled
+                        response += " (filling %d bounties);" % ordersFilled
                     elif len(deCards) > 0:
                         response += ";"
 
-                    self.message(channel, response + " netting a total of " + str(gottenpoints) + " points.",
+                    self.message(channel, response + ((" netting " + str(gottenpoints) + " points.") if gottenpoints>0 else ""),
                                  isWhisper=isWhisper)
                     cur.execute("UPDATE boosters_opened SET status = 'closed', updated = %s WHERE id = %s",
                                 [current_milli_time(), boosterinfo[0]])
@@ -2371,7 +2371,7 @@ class NepBot(NepBotClass):
                 if cmd == "buy":
                     if boosterinfo is not None:
                         self.message(channel,
-                                     "You already have an open booster. Select the waifus you want to keep or disenchant first!",
+                                     "You already have an open booster. Close it first!",
                                      isWhisper=isWhisper)
                         cur.close()
                         return
@@ -2387,14 +2387,14 @@ class NepBot(NepBotClass):
                             messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
 
                         droplink = config["siteHost"] + "/booster?user=" + sender
-                        self.message(channel, "{user}, you open a {type} booster pack and you get: {droplink}".format(
+                        self.message(channel, "{user}, you open a {type} booster: {droplink}".format(
                             user=tags['display-name'], type=packname, droplink=droplink), isWhisper=isWhisper)
                     except InvalidBoosterException:
                         self.message(channel, "Invalid booster type. Packs available right now: %s." % visiblepacks,
                                      isWhisper=isWhisper)
                     except CantAffordBoosterException as exc:
                         self.message(channel,
-                                     "{user}, sorry, you don't have enough points to buy a {name} booster pack. You need {points}.".format(
+                                     "{user}, you don't have enough points for a {name} pack. You need {points}.".format(
                                          user=tags['display-name'], name=packname, points=exc.cost),
                                      isWhisper=isWhisper)
 
@@ -3428,14 +3428,14 @@ class NepBot(NepBotClass):
                         return
                     else:
                         self.message(channel,
-                                     "{user}, you do not have enough points to force a hand upgrade now. It currently would cost you {price} points.".format(
+                                     "{user}, you do not have enough points to upgrade your hand for {price} points.".format(
                                          user=tags['display-name'], price=str(directPrice)), isWhisper=isWhisper)
                         return
 
                 currLimit = handLimit(tags['user-id'])
-                msgArgs = (tags['display-name'], currLimit, spendingsToNext, currLimit + 1, directPrice)
-                self.message(channel, ("%s, you have currently earnt a hand size of %d from pack spending. " +
-                                       "Spend another %d points on boosters to earn space #%d, or use !upgrade buy to jump there directly for %d points.") % msgArgs,
+                msgArgs = (tags['display-name'], currLimit, currLimit + 1, spendingsToNext, directPrice)
+                self.message(channel, ("%s, you currently have %d slots from pack spending. " +
+                                       "For space #%d, spend %d more points or use !upgrade buy for %d points.") % msgArgs,
                              isWhisper)
 
                 return
