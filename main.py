@@ -2162,8 +2162,8 @@ class NepBot(NepBotClass):
 
                 if len(disenchants) == 1:
                     buytext = " (bounty filled)" if ordersFilled > 0 else ""
-                    self.message(channel, "Successfully disenchanted waifu %d%s. Added %d points to %s's account" % (
-                        disenchants[0]['id'], buytext, pointsGain, str(tags['display-name'])), isWhisper=isWhisper)
+                    self.message(channel, "Successfully disenchanted waifu %d%s. %s gained %d points" % (
+                        disenchants[0]['id'], buytext, str(tags['display-name']), pointsGain), isWhisper=isWhisper)
                 else:
                     buytext = " (%d bounties filled)" % ordersFilled if ordersFilled > 0 else ""
                     self.message(channel,
@@ -2178,7 +2178,7 @@ class NepBot(NepBotClass):
             if command == "buy":
                 if len(args) != 1:
                     if len(args) > 0 and args[0].lower() == "booster":
-                        self.message(channel, "%s, Did you mean !booster buy?" % tags['display-name'], isWhisper)
+                        self.message(channel, "%s, did you mean !booster buy?" % tags['display-name'], isWhisper)
                     else:
                         self.message(channel, "Usage: !buy <rarity> (So !buy uncommon for an uncommon)",
                                      isWhisper=isWhisper)
@@ -2394,7 +2394,7 @@ class NepBot(NepBotClass):
                                      isWhisper=isWhisper)
                     except CantAffordBoosterException as exc:
                         self.message(channel,
-                                     "{user}, sorry, you don't have enough points to buy a {name} booster. You need {points}.".format(
+                                     "{user}, you don't have enough points for a {name} pack. You need {points}.".format(
                                          user=tags['display-name'], name=packname, points=exc.cost),
                                      isWhisper=isWhisper)
 
