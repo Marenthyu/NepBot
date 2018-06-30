@@ -60,7 +60,7 @@ try:
     f = open("nepbot.cfg", "r")
     lines = f.readlines()
     for line in lines:
-        name, value = line.split("=")
+        name, value = line.split("=", 1)
         value = str(value).strip("\n")
         logger.info("Reading config value '%s' = '<redacted>'", name)
         if name == "dbpassword":
@@ -730,6 +730,7 @@ def naturalJoinNames(names):
         return names[0]
     return ", ".join(names[:-1]) + " and " + names[-1]
 
+
 def getWaifuRepresentationString(waifuid, baserarity=None, cardrarity=None, waifuname=None):
     if baserarity == None or cardrarity == None or waifuname == None:
         waifuData = getWaifuById(waifuid)
@@ -747,6 +748,7 @@ def getWaifuRepresentationString(waifuid, baserarity=None, cardrarity=None, waif
         waifuid, config["rarity" + str(cardrarity) + "Name"], promoteStars, waifuname)
 
     return retStr
+
 
 def sendSetAlert(channel, user, name, waifus, points, discord=True):
     logger.info("Alerting for set claim %s", name)
@@ -774,7 +776,8 @@ def sendSetAlert(channel, user, name, waifus, points, discord=True):
         {
             "type": "rich",
             "title": "{user} completed the set {name}!".format(user=str(user), name=name),
-            "description": "They gathered {waifus} and received {points} points as their reward.".format(waifus=naturalJoinNames(waifus), points=str(points)),
+            "description": "They gathered {waifus} and received {points} points as their reward.".format(
+                waifus=naturalJoinNames(waifus), points=str(points)),
             "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
             "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"]),
             "footer": {
@@ -821,7 +824,8 @@ def getWaifuById(id):
     cur.close()
     # print("Fetched Waifu from id: " + str(ret))
     return ret
-    
+
+
 def getWaifuOwners(id, rarity):
     with db.cursor() as cur:
         baseRarityName = config["rarity%dName" % rarity]
@@ -848,7 +852,7 @@ def getWaifuOwners(id, rarity):
             ownerDescriptions.append(owner + " (" + ", ".join(ownerData[owner]) + ")")
         else:
             ownerDescriptions.append(owner)
-            
+
     return ownerDescriptions
 
 
@@ -1625,8 +1629,8 @@ class NepBot(NepBotClass):
             self.leavechannels = []
             try:
                 # print("Activitymap: " + str(activitymap))
-                doneusers = []
-                validactivity = []
+                doneusers = set([])
+                validactivity = set([])
                 for channel in self.channels:
                     # print("Fetching for channel " + str(channel))
                     channelName = str(channel).replace("#", "")
@@ -1640,57 +1644,66 @@ class NepBot(NepBotClass):
                                 chatters = data["chatters"]
                                 a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters[
                                     "global_mods"] + chatters["viewers"]
+                                logger.debug('a for chatters info: %s' % a)
                         else:
                             for viewer in self.channels[channel]['users']:
                                 a.append(viewer)
-                        for viewer in a:
-                            if viewer not in doneusers:
-                                doneusers.append(viewer)
-                            if isLive[channelName] and viewer not in validactivity:
-                                validactivity.append(viewer)
+                        if isLive[channelName]:
+                            validactivity.update(set(a))
+                            doneusers.update(validactivity)
+
+                        # for viewer in a:
+                        #     logger.debug('viewer: %s ' % viewer)
+                        #     if viewer not in doneusers:
+                        #         doneusers.append(viewer)
+                        #     if isLive[channelName] and viewer not in validactivity:
+                        #         validactivity.append(viewer)
                     except Exception:
                         logger.error("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
                         logger.error("Error: %s", str(sys.exc_info()))
 
                 # process all users
                 logger.debug("Caught users, giving points and creating accounts, amount to do = %d" % len(doneusers))
-                newUsers = []
+                newUsers = set([])
 
                 maxPointsInactive = int(config["maxPointsInactive"])
                 overflowPoints = 0
 
-                while len(doneusers) > 0:
-                    currentSlice = doneusers[:100]
-                    with busyLock:
-                        cur = db.cursor()
+                doneusers = list(doneusers)
+                with busyLock:
+                    cur = db.cursor()
+                    cur.execute('START TRANSACTION')
+                    while len(doneusers) > 0:
+                        logger.debug('Slicing... remaining length: %s' % len(doneusers))
+                        currentSlice = doneusers[:100]
+
                         cur.execute("SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(
                             ["%s"] * len(currentSlice)), currentSlice)
 
                         foundUsersData = cur.fetchall()
-                        cur.close()
-                    foundUsers = [row[0] for row in foundUsersData]
-                    newUsers += [user for user in currentSlice if user not in foundUsers]
-                    if len(foundUsers) > 0:
-                        updateData = []
-                        for viewerInfo in foundUsersData:
-                            pointGain = int(config["passivePoints"])
-                            if viewerInfo[0] in activitymap and viewerInfo[0] in validactivity:
-                                pointGain += max(10 - int(activitymap[viewerInfo[0]]), 0)
-                            pointGain = int(pointGain * float(config["pointsMultiplier"]))
-                            if viewerInfo[2] is None:
-                                maxPointGain = max(maxPointsInactive - viewerInfo[1], 0)
-                                if pointGain > maxPointGain:
-                                    overflowPoints += pointGain - maxPointGain
-                                    pointGain = maxPointGain
-                            if pointGain > 0:
-                                updateData.append((pointGain, viewerInfo[0]))
 
-                        with busyLock:
-                            cur = db.cursor()
+                        foundUsers = set([row[0] for row in foundUsersData])
+                        newUsers.update(set(currentSlice) - foundUsers)
+                        if len(foundUsers) > 0:
+                            updateData = set([])
+                            for viewerInfo in foundUsersData:
+                                pointGain = int(config["passivePoints"])
+                                if viewerInfo[0] in activitymap and viewerInfo[0] in validactivity:
+                                    pointGain += max(10 - int(activitymap[viewerInfo[0]]), 0)
+                                pointGain = int(pointGain * float(config["pointsMultiplier"]))
+                                if viewerInfo[2] is None:
+                                    maxPointGain = max(maxPointsInactive - viewerInfo[1], 0)
+                                    if pointGain > maxPointGain:
+                                        overflowPoints += pointGain - maxPointGain
+                                        pointGain = maxPointGain
+                                if pointGain > 0:
+                                    updateData.add((pointGain, viewerInfo[0]))
+
                             cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
-                            cur.close()
 
-                    doneusers = doneusers[100:]
+                        doneusers = doneusers[100:]
+                    cur.execute('COMMIT')
+                    cur.close()
 
                 if overflowPoints > 0:
                     logger.debug("Paying %d overflow points to the bot account" % overflowPoints)
@@ -1700,71 +1713,73 @@ class NepBot(NepBotClass):
                                     [overflowPoints, config["username"]])
                         cur.close()
 
-                # now deal with user names that aren't already in the DB
-                if len(newUsers) > 10000:
-                    logger.warning(
-                        "DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
-                    newUsers = newUsers[:10000]
-                while len(newUsers) > 0:
-                    currentSlice = newUsers[:100]
-                    r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
-                                     params={"login": currentSlice})
-                    if r.status_code == 429:
-                        logger.warning("Rate Limit Exceeded! Skipping account creation!")
-                        r.raise_for_status()
-                    j = r.json()
-                    if "data" not in j:
-                        # error, what do?
-                        r.raise_for_status()
+                with busyLock:
+                    cur = db.cursor()
+                    cur.execute('START TRANSACTION')
+                    # now deal with user names that aren't already in the DB
+                    newUsers = list(newUsers)
+                    if len(newUsers) > 10000:
+                        logger.warning(
+                            "DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
+                        newUsers = newUsers[:10000]
+                    while len(newUsers) > 0:
+                        logger.debug('Slicing #2... %s remaining' % len(newUsers))
+                        currentSlice = newUsers[:100]
+                        r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
+                                         params={"login": currentSlice})
+                        logger.debug('Response from twitch API got. Entering data....')
+                        if r.status_code == 429:
+                            logger.warning("Rate Limit Exceeded! Skipping account creation!")
+                            r.raise_for_status()
+                        j = r.json()
+                        if "data" not in j:
+                            # error, what do?
+                            r.raise_for_status()
 
-                    currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
-                    with busyLock:
-                        cur = db.cursor()
+                        currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
+
                         cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
                                     [id for id in currentIdMapping])
                         foundIdsData = cur.fetchall()
-                        cur.close()
-                    localIds = [row[0] for row in foundIdsData]
 
-                    # users to update the names for (id already exists)
-                    updateNames = [(currentIdMapping[id], id) for id in currentIdMapping if id in localIds]
-                    if len(updateNames) > 0:
-                        with busyLock:
-                            cur = db.cursor()
+                        localIds = [row[0] for row in foundIdsData]
+
+                        # users to update the names for (id already exists)
+                        updateNames = [(currentIdMapping[id], id) for id in currentIdMapping if id in localIds]
+                        if len(updateNames) > 0:
                             cur.executemany("UPDATE users SET name = %s WHERE id = %s", updateNames)
-                            cur.close()
 
-                    # new users (id does not exist)
-                    newAccounts = [(id, currentIdMapping[id]) for id in currentIdMapping if id not in localIds]
-                    if len(newAccounts) > 0:
-                        with busyLock:
-                            cur = db.cursor()
+                        # new users (id does not exist)
+                        newAccounts = [(id, currentIdMapping[id]) for id in currentIdMapping if id not in localIds]
+                        if len(newAccounts) > 0:
                             cur.executemany("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)",
                                             newAccounts)
-                            cur.close()
-                    # actually give points
-                    updateData = []
-                    for id in currentIdMapping:
-                        viewer = currentIdMapping[id]
-                        pointGain = int(config["passivePoints"])
-                        if viewer in activitymap and viewer in validactivity:
-                            pointGain += max(10 - int(activitymap[viewer]), 0)
-                        pointGain = int(pointGain * float(config["pointsMultiplier"]))
-                        updateData.append((pointGain, viewer))
 
-                    with busyLock:
-                        cur = db.cursor()
+                        logger.debug('Creation done, give points...')
+                        # actually give points
+                        updateData = []
+                        for id in currentIdMapping:
+                            viewer = currentIdMapping[id]
+                            pointGain = int(config["passivePoints"])
+                            if viewer in activitymap and viewer in validactivity:
+                                pointGain += max(10 - int(activitymap[viewer]), 0)
+                            pointGain = int(pointGain * float(config["pointsMultiplier"]))
+                            updateData.append((pointGain, viewer))
+
                         cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
-                        cur.close()
 
-                    # done with this slice
-                    newUsers = newUsers[100:]
+                        # done with this slice
+                        newUsers = newUsers[100:]
+                    cur.execute('COMMIT')
+                    cur.close()
 
                 for user in activitymap:
                     activitymap[user] = activitymap[user] + 1
             except Exception:
                 logger.warning("We had an error during passive point gain. skipping this cycle.")
                 logger.warning("Error: ", str(sys.exc_info()))
+
+            logger.debug("Done with new accounts?")
 
             if self.autoupdate:
                 logger.debug("Updating Title and Game with horaro info")
@@ -2350,7 +2365,7 @@ class NepBot(NepBotClass):
                     attemptPromotions(*cards)
 
                     # compile the message to be sent in chat
-                    response = "You %s your booster pack%s" % (("trash", "") if trash else ("take"," and: "))
+                    response = "You %s your booster pack%s" % (("trash", "") if trash else ("take", " and: "))
 
                     if len(keepCards) > 0:
                         response += " keep " + ', '.join(str(x['id']) for x in keepCards) + ";"
@@ -2362,7 +2377,8 @@ class NepBot(NepBotClass):
                     elif len(deCards) > 0:
                         response += ";"
 
-                    self.message(channel, response + ((" netting " + str(gottenpoints) + " points.") if gottenpoints>0 else ""),
+                    self.message(channel, response + (
+                        (" netting " + str(gottenpoints) + " points.") if gottenpoints > 0 else ""),
                                  isWhisper=isWhisper)
                     cur.execute("UPDATE boosters_opened SET status = 'closed', updated = %s WHERE id = %s",
                                 [current_milli_time(), boosterinfo[0]])
