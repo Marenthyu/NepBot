@@ -15,7 +15,6 @@ import math
 import functools
 from string import ascii_letters
 from collections import defaultdict, OrderedDict
-from random import Random
 
 import sys
 import re
@@ -1408,7 +1407,7 @@ def generateRewardsSeed(cycleLength, numGoodRewards):
         seed = random.randrange(0, 0x10000000000000000)
         if numGoodRewards == 0 or cycleLength == numGoodRewards:
             return seed
-        generator = Random(seed)
+        generator = random.Random(seed)
         order = [x for x in range(cycleLength)]
         generator.shuffle(order)
         hasSeed = True
@@ -2078,7 +2077,7 @@ class NepBot(NepBotClass):
                         index = 0
                         
                     # retrieve their reward for this time
-                    generator = Random(seed)
+                    generator = random.Random(seed)
                     seq = [x for x in range(freeData[0])]
                     generator.shuffle(seq)
                     rewardNum = seq[index]
