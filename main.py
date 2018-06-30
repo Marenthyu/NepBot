@@ -1404,6 +1404,7 @@ def generateRewardsSeed(cycleLength, numGoodRewards):
     # uses 0 to (numGoodRewards-1) to represent the good rewards
     # and other numbers to represent the bad
     hasSeed = False
+    start = current_milli_time()
     while not hasSeed:
         seed = random.randrange(0, 0x10000000000000000)
         if numGoodRewards == 0 or cycleLength == numGoodRewards:
@@ -1423,6 +1424,7 @@ def generateRewardsSeed(cycleLength, numGoodRewards):
             lastPos = pos
         if cycleLength - lastPos >= (cycleLength/numGoodRewards)*2:
             hasSeed = False
+    print(current_milli_time()-start)
     return seed
     
 # returns (cycle length, number of good rewards) for use elsewhere
@@ -2066,7 +2068,7 @@ class NepBot(NepBotClass):
                         
                     cur.execute("SELECT COUNT(*) FROM boosters_opened WHERE userid = %s AND status = 'open'", [tags['user-id']])
                     hasPack = cur.fetchone()[0] > 0
-                    storeInPack = len(args) > 0 and args[0].lower() == "pack"
+                    spaceInHand = currentCards(tags['user-id']) < handLimit(tags['user-id'])
                     
                     freeData = getRewardsMetadata()
                     
@@ -2106,13 +2108,10 @@ class NepBot(NepBotClass):
                         
                     # can they take the reward at the current time?
                     if rewardInfo[3] is not None and hasPack:
-                        self.message(channel, "%s, you can't receive your next free reward while you have an open booster! Deal with it and try again." % tags['display-name'], isWhisper)
+                        self.message(channel, "%s, your next reward is a booster and you have one open!" % tags['display-name'], isWhisper)
                         return
-                    elif cardRewardCount != 0 and hasPack and storeInPack:
-                        self.message(channel, "%s, you can't use pack-mode for your free reward while you have an open booster! You might be able to get it directly into your hand instead." % tags['display-name'], isWhisper)
-                        return
-                    elif (rewardInfo[1] is not None or rewardInfo[2] is not None) and not storeInPack and currentCards(tags['user-id']) >= handLimit(tags['user-id']):
-                        self.message(channel, "%s, your hand is full! Disenchant something, !upgrade your hand or use !freebie pack instead." % tags['display-name'], isWhisper)
+                    elif (rewardInfo[1] is not None or rewardInfo[2] is not None) and hasPack and not spaceInHand:
+                        self.message(channel, "%s, your hand is full and you have a booster open!" % tags['display-name'], isWhisper)
                         return
                         
                     # if we made it this far they can receive it. process it
@@ -2134,7 +2133,7 @@ class NepBot(NepBotClass):
                         if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                             threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
 
-                        if storeInPack:
+                        if not spaceInHand:
                             cur.execute(
                                 "INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, 'freebie', 0, %s, 'open')",
                                 [tags['user-id'], current_milli_time()])
@@ -2149,8 +2148,8 @@ class NepBot(NepBotClass):
                         msgArgs = {"username": tags['display-name'], "id": row['id'],
                                    "rarity": config["rarity%dName" % row['base_rarity']],
                                    "name": row['name'], "series": row['series'],
-                                   "link": row['image'] if not storeInPack else "",
-                                   "pack": " ( %s )" % droplink if storeInPack else "",
+                                   "link": row['image'] if spaceInHand else "",
+                                   "pack": " ( %s )" % droplink if not spaceInHand else "",
                                    "points": pointsPrefix}
                         
                         self.message(channel, "{username}, you got your daily free reward: {points}[{id}][{rarity}] {name} from {series} - {link}{pack}".format(**msgArgs), isWhisper)
