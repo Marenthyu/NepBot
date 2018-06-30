@@ -1404,7 +1404,6 @@ def generateRewardsSeed(cycleLength, numGoodRewards):
     # uses 0 to (numGoodRewards-1) to represent the good rewards
     # and other numbers to represent the bad
     hasSeed = False
-    start = current_milli_time()
     while not hasSeed:
         seed = random.randrange(0, 0x10000000000000000)
         if numGoodRewards == 0 or cycleLength == numGoodRewards:
@@ -1424,7 +1423,6 @@ def generateRewardsSeed(cycleLength, numGoodRewards):
             lastPos = pos
         if cycleLength - lastPos >= (cycleLength/numGoodRewards)*2:
             hasSeed = False
-    print(current_milli_time()-start)
     return seed
     
 # returns (cycle length, number of good rewards) for use elsewhere
