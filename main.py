@@ -2118,7 +2118,7 @@ class NepBot(NepBotClass):
                         if cardRewardCount == 0:
                             self.message(channel, "%s, you got your daily free reward: %d points!" % (tags['display-name'], rewardInfo[0]), isWhisper)
                         
-                    pointsPrefix = "%d points and " if rewardInfo[0] is not None else ""
+                    pointsPrefix = "%d points and " % rewardInfo[0] if rewardInfo[0] is not None else ""
                     if rewardInfo[1] is not None or rewardInfo[2] is not None:
                         if rewardInfo[1] is not None:
                             wid = rewardInfo[1]
