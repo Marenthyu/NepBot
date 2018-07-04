@@ -334,7 +334,7 @@ function claimedsets(req, res, query) {
         function (err, result) {
             if (err) throw err;
             con.query("SELECT setID, rarity_sets.name as setNam, waifus.id as waifuID, waifus.Name as waifuName, waifus.base_rarity as waifuRarity, waifus.image as image, waifus.series as waifuSeries," +
-                "grouping as sort_index, rarity_sets.reward as setReward, users.name as userName " +
+                "rarity_sets.grouping as sort_index, rarity_sets.reward as setReward, users.name as userName " +
                 "FROM rarity_sets_cards JOIN rarity_sets ON rarity_sets_cards.setID = rarity_sets.id " +
                 "JOIN waifus ON cardID = waifus.id " +
                 "JOIN users ON rarity_sets.claimed_by = users.id " +
