@@ -1742,6 +1742,7 @@ class NepBot(NepBotClass):
                         "DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
                     newUsers = newUsers[:10000]
                 while len(newUsers) > 0:
+                    logger.debug("Adding new users...")
                     currentSlice = newUsers[:100]
                     r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
                                      params={"login": currentSlice})
@@ -1756,6 +1757,8 @@ class NepBot(NepBotClass):
                     currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
                     with busyLock:
                         cur = db.cursor()
+                        logger.debug("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
+                                    [id for id in currentIdMapping])
                         cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
                                     [id for id in currentIdMapping])
                         foundIdsData = cur.fetchall()
@@ -1766,6 +1769,7 @@ class NepBot(NepBotClass):
                     updateNames = [(currentIdMapping[id], id) for id in currentIdMapping if id in localIds]
                     if len(updateNames) > 0:
                         with busyLock:
+                            logger.debug("Updating names...")
                             cur = db.cursor()
                             cur.executemany("UPDATE users SET name = %s WHERE id = %s", updateNames)
                             cur.close()
@@ -1801,6 +1805,7 @@ class NepBot(NepBotClass):
             except Exception:
                 logger.warning("We had an error during passive point gain. skipping this cycle.")
                 logger.warning("Error: %s", str(sys.exc_info()))
+                logger.warning("Last run query: %s", cur._last_executed)
 
             if self.autoupdate:
                 logger.debug("Updating Title and Game with horaro info")
