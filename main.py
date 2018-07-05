@@ -1757,8 +1757,7 @@ class NepBot(NepBotClass):
                     currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
                     with busyLock:
                         cur = db.cursor()
-                        logger.debug("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
-                                    [id for id in currentIdMapping])
+                        logger.debug("currentIdMapping: %s", currentIdMapping)
                         cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
                                     [id for id in currentIdMapping])
                         foundIdsData = cur.fetchall()
