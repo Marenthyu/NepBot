@@ -1677,7 +1677,7 @@ class NepBot(NepBotClass):
                                 a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters[
                                     "global_mods"] + chatters["viewers"]
                         else:
-                            debug.log("Users in %s: %s", [channel, str(self.channels[channel]['users'])])
+                            logger.debug("Users in %s: %s", [channel, str(self.channels[channel]['users'])])
                             for viewer in self.channels[channel]['users']:
                                 a.append(viewer)
                         for viewer in a:
