@@ -1756,6 +1756,7 @@ class NepBot(NepBotClass):
 
                     currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
                     logger.debug("currentIdMapping: %s", currentIdMapping)
+                    foundIdsData = []
                     if len(currentIdMapping) > 0:
                         with busyLock:
                             cur = db.cursor()
