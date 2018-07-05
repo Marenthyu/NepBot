@@ -1755,13 +1755,14 @@ class NepBot(NepBotClass):
                         r.raise_for_status()
 
                     currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
-                    with busyLock:
-                        cur = db.cursor()
-                        logger.debug("currentIdMapping: %s", currentIdMapping)
-                        cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
-                                    [id for id in currentIdMapping])
-                        foundIdsData = cur.fetchall()
-                        cur.close()
+                    logger.debug("currentIdMapping: %s", currentIdMapping)
+                    if len(currentIdMapping) > 0:
+                        with busyLock:
+                            cur = db.cursor()
+                            cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
+                                        [id for id in currentIdMapping])
+                            foundIdsData = cur.fetchall()
+                            cur.close()
                     localIds = [row[0] for row in foundIdsData]
 
                     # users to update the names for (id already exists)
