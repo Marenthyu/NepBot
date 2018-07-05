@@ -1800,7 +1800,7 @@ class NepBot(NepBotClass):
                     activitymap[user] = activitymap[user] + 1
             except Exception:
                 logger.warning("We had an error during passive point gain. skipping this cycle.")
-                logger.warning("Error: ", str(sys.exc_info()))
+                logger.warning("Error: %s", str(sys.exc_info()))
 
             if self.autoupdate:
                 logger.debug("Updating Title and Game with horaro info")
@@ -1826,7 +1826,7 @@ class NepBot(NepBotClass):
                     updateBoth(gamesdict[game] if game in gamesdict else game, title=title)
                 except Exception:
                     logger.warning("Error updating from Horaro. Skipping this cycle.")
-                    logger.warning("Error: ", str(sys.exc_info()))
+                    logger.warning("Error: %s", str(sys.exc_info()))
 
             if config["marathonHelpAutopost"] == 'on':
                 nextPost = int(config["marathonHelpAutopostLast"]) + int(config["marathonHelpAutopostPeriod"]) * 1000
