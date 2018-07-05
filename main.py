@@ -1743,6 +1743,7 @@ class NepBot(NepBotClass):
                     newUsers = newUsers[:10000]
                 while len(newUsers) > 0:
                     logger.debug("Adding new users...")
+                    logger.debug("New users to add: %s", str(newUsers))
                     currentSlice = newUsers[:100]
                     r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
                                      params={"login": currentSlice})
