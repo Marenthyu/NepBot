@@ -1072,7 +1072,7 @@ memes = ["🤔", "🏆", "✌", "🌲", "🍀", "🖐", "👌", "🤑", "🤣", 
 
 
 def formatTimeDelta(ms):
-    baseRepr = str(datetime.timedelta(milliseconds=ms, microseconds=0))
+    baseRepr = str(datetime.timedelta(milliseconds=int(ms), microseconds=0))
     output = baseRepr[:-3] if "." in baseRepr else baseRepr
     if "memeMode" in config and config["memeMode"] == "meme":
         for i in range(10):
@@ -2063,7 +2063,7 @@ class NepBot(NepBotClass):
                     res = cur.fetchone()
                     nextFree = 79200000 + int(res[0])
                     if nextFree > current_milli_time():
-                        a = datetime.timedelta(milliseconds=nextFree - current_milli_time(), microseconds=0)
+                        a = datetime.timedelta(milliseconds=int(nextFree - current_milli_time()), microseconds=0)
                         datestring = "{0}".format(a).split(".")[0]
                         self.message(channel,
                                      str(tags[
@@ -3917,7 +3917,7 @@ class NepBot(NepBotClass):
                         lastPayout = cur.fetchone()[0]
                         currTime = current_milli_time()
                         if lastPayout > currTime - 79200000 and not isMarathonChannel:
-                            a = datetime.timedelta(milliseconds=lastPayout + 79200000 - currTime, microseconds=0)
+                            a = datetime.timedelta(milliseconds=int(lastPayout + 79200000 - currTime), microseconds=0)
                             datestring = "{0}".format(a).split(".")[0]
                             self.message(channel, "Bet payout may be used again in this channel in %s." % datestring,
                                          isWhisper)
