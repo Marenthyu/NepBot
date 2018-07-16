@@ -767,13 +767,13 @@ function profile(req, res, query) {
                 badge = badge.replace(/{CARDNAME}/g, row.name);
                 badges += badge;
             }
-            con.query("SELECT waifus.id, waifus.Name, waifus.image, waifus.base_rarity, waifus.series FROM waifus WHERE id = ?", resultOuter[0].favourite, function (err, resultInner) {
+            con.query("SELECT waifus.id, waifus.Name, waifus.image, waifus.base_rarity, waifus.series, has_waifu.rarity FROM waifus LEFT JOIN has_waifu ON (has_waifu.waifuid = waifus.id AND has_waifu.userid = ?) WHERE id = ? ORDER BY has_waifu.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
                 if (err) throw err;
 
                 let row = resultInner[0];
 
                 row.amount = 1;
-                row.rarity = row.base_rarity;
+                row.rarity = (row.rarity && row.rarity > row.base_rarity) ? row.rarity : row.base_rarity;
 
                 let card = bootstraphandcard;
 

@@ -154,7 +154,7 @@ def loadConfig():
                                  + ["rarity%dLength" % rarity for rarity in alertRarityRange] \
                                  + ["rarity%dSound" % rarity for rarity in alertRarityRange]
         waifu_regex = re.compile('(\[(?P<id>[0-9]+?)])?(?P<name>.+?) *- *(?P<series>.+) *- *(?P<rarity>[0-' + str(
-            int(config["numNormalRarities"]) - 1) + ']) *- *(?P<link>.+?)$')
+            int(config["numNormalRarities"]) + int(config["numSpecialRarities"]) - 1) + ']) *- *(?P<link>.+?)$')
         logger.debug("Alert config values: %s", str(validalertconfigvalues))
         logger.debug("Waifu regex: %s", str(waifu_regex))
         logger.info("Fetching admin list...")
