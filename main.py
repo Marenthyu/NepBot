@@ -813,11 +813,11 @@ def getWaifuById(id):
     except ValueError:
         return None
     cur = db.cursor()
-    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup, pulls, last_pull FROM waifus WHERE id=%s",
+    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite FROM waifus WHERE id=%s",
                 [id])
     row = cur.fetchone()
     ret = {"id": row[0], "name": row[1], "image": row[2], "base_rarity": row[3], "series": row[4], "can_lookup": row[5],
-           "pulls": row[6], "last_pull": row[7]}
+           "pulls": row[6], "last_pull": row[7], "can_favourite": row[8]}
     cur.close()
     # print("Fetched Waifu from id: " + str(ret))
     return ret
@@ -4914,6 +4914,9 @@ class NepBot(NepBotClass):
                         self.message(channel, tags[
                             "display-name"] + ", sorry, but that Waifu doesn't exist. Try a different one!",
                                      isWhisper)
+                        return
+                    elif newFavW["can_favourite"] == 0:
+                        self.message(channel, "%s, sorry, but that Waifu can't be set as your favourite. Try a different one!" % tags['display-name'], isWhisper)
                         return
                     elif hasOrIsLowRarity:
                         self.message(channel, "Updated your favourite Waifu to be " + newFavW["name"] + "! naroDesu",
