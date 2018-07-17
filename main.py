@@ -1351,8 +1351,8 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         addSpending(userid, cost)
 
         # pity pull data update
-        cur.execute("UPDATE users SET pullScalingData = %s WHERE id = %s",
-                    [":".join(str(round(n)) for n in scalingData), userid])
+        cur.execute("UPDATE users SET pullScalingData = %s, eventTokens = eventTokens + %s WHERE id = %s",
+                    [":".join(str(round(n)) for n in scalingData), tokensDropped, userid])
 
         # insert opened booster
         cur.execute(
