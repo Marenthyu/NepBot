@@ -4850,6 +4850,11 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !bounty cancel <ID>", isWhisper=isWhisper)
                         return
             if command == "raritychange" and sender in superadmins:
+                hasConfirmed = False
+                if len(args) > 0 and args[-1].lower() == "yes":
+                    hasConfirmed = True
+                    args = args[:-1]
+                
                 if len(args) < 2:
                     self.message(channel, "Usage: !raritychange <ID> <rarity>", isWhisper)
                     return
@@ -4870,6 +4875,14 @@ class NepBot(NepBotClass):
                     self.message(channel, "[%d] %s is already %s base rarity!" % (
                         waifu['id'], waifu['name'], config['rarity%dName' % rarity]), isWhisper)
                     return
+                    
+                if not hasConfirmed and rarity > waifu['base_rarity'] and waifu['base_rarity'] < int(config["numNormalRarities"]) - 1:
+                    # check for promoted copies existing
+                    with db.cursor() as cur:
+                        cur.execute("SELECT COUNT(*) FROM has_waifu WHERE waifuid = %s AND rarity BETWEEN %s AND %s", [waifu['id'], waifu['base_rarity'] + 1, int(config["numNormalRarities"]) - 1])
+                        if cur.fetchone()[0] > 0:
+                            self.message(channel, "WARNING: You are trying to increase the rarity of a card which people have already promoted. This may cause undesirable results. Append ' yes' to your command if you want to do this anyway.", isWhisper)
+                            return
 
                 # limit check
                 oldRarityLimit = int(config['rarity%dMax' % waifu['base_rarity']])
@@ -4892,8 +4905,15 @@ class NepBot(NepBotClass):
                 # okay, do it
                 with db.cursor() as cur:
                     cur.execute("UPDATE waifus SET base_rarity = %s WHERE id = %s", [rarity, waifu['id']])
-                    cur.execute("UPDATE has_waifu SET rarity = %s WHERE waifuid = %s AND rarity < %s",
-                                [rarity, waifu['id'], rarity])
+                    
+                    cur.execute("SELECT userid, amount FROM has_waifu WHERE waifuid = %s AND rarity < %s", [waifu['id'], rarity])
+                    lowerCopies = cur.fetchall()
+                    if len(lowerCopies) > 0:
+                        cur.execute("DELETE FROM has_waifu WHERE waifuid = %s AND rarity < %s", [waifu['id'], rarity])
+                        for copy in lowerCopies:
+                            giveCard(copy[0], waifu['id'], rarity, copy[1])
+                        
+                        attemptPromotions(waifu['id'])
 
                     # cancel all bounties
                     cur.execute(
