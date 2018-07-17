@@ -5,6 +5,7 @@ let mysql = require('mysql');
 let url = require('url');
 let fs = require('fs');
 let request = require('request');
+let async = require('async');
 
 let download = function (uri, filename, callback) {
     request.head(uri, function (err, res, body) {
@@ -21,6 +22,7 @@ let dbpw = null;
 let dbname = null;
 let dbuser = null;
 let dbhost = null;
+let config = {};
 for (let line of cfglines) {
     let lineparts = line.split("=");
     if (lineparts[0] === "dbpassword") {
@@ -125,6 +127,16 @@ let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '{SERIES}' +
     '</div>' +
     '</div>';
+let bootstraphandeventtoken = '<div class="card card-tcg">' +
+    '<div class="card-body card-body-tcg">' +
+    '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
+    '{AMOUNTHOLDER}' +
+    '{PROMOTEDHOLDER}' +
+    '</div>' +
+    '<div class="card-footer text-center">' +
+    '<b>{CARDNAME}</b><br />' +
+    '</div>' +
+    '</div>';
 let bootstraphandamtholder = '<div class="amount-holder rarity-{RARITY}">x{AMOUNT}</div>';
 let bootstraphandpromoholder = '<div class="promotion-holder rarity-{RARITY}">{STARS}</div>';
 let bootstrapboostertpl = fs.readFileSync('bootstrapboostertemplate.htm', 'utf8');
@@ -142,6 +154,16 @@ let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-info">' +
     '{CARDNAME}<br />' +
     '{SERIES}' +
+    '</div>' +
+    '</div>' +
+    '</div>';
+let bootstrapboostereventtoken = '<div class="card card-tcg card-{RARITY}">' +
+    '<div class="card-body card-body-tcg">' +
+    '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
+    '</div>' +
+    '<div class="card-footer text-center">' +
+    '<div class="card-info">' +
+    '<b>{CARDNAME}</b>' +
     '</div>' +
     '</div>' +
     '</div>';
@@ -453,33 +475,52 @@ function bootstraphand(req, res, query) {
             res.end();
             return;
         }
-        if (wantJSON) {
-            let sanitizedResult = [];
-            for (let row of result) {
-                let obj = {
-                    "id": row.id,
-                    "Name": row.Name,
-                    "series": row.series,
-                    "image": row.image,
-                    "base_rarity": row.base_rarity,
-                    "rarity": row.rarity,
-                    "amount": row.amount
-                };
-                sanitizedResult.push(obj);
+        con.query("SELECT eventTokens FROM users WHERE users.name = ?", query.user, function(err, resultTokens) {
+            if (resultTokens.length === 0) {
+                if (wantJSON) {
+                    res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
+                    res.write(JSON.stringify({"error": {"status": 404, "explanation": "User not found"}}))
+                } else {
+                    res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
+                    res.write(bootstraphandtpl.replace(/{CARDS}/g, "404 - This user doesn't exist.").replace(/{NAME}/g, escapeHtml(query.user)));
+
+                }
+                res.end();
+                return;
             }
-            res.writeHead(200, {'Content-Type': 'application/json'});
-            res.write(JSON.stringify({'user': query.user, "cards": sanitizedResult}))
-        } else {
-            res.writeHead(200, {'Content-Type': 'text/html'});
-            let cards = '';
-            for (let row of result) {
-                let card = bootstraphandcard;
-                card = getCardHtml(card, row);
-                cards += card;
+            if (wantJSON) {
+                let sanitizedResult = [];
+                for (let row of result) {
+                    let obj = {
+                        "id": row.id,
+                        "Name": row.Name,
+                        "series": row.series,
+                        "image": row.image,
+                        "base_rarity": row.base_rarity,
+                        "rarity": row.rarity,
+                        "amount": row.amount
+                    };
+                    sanitizedResult.push(obj);
+                }
+                res.writeHead(200, {'Content-Type': 'application/json'});
+                res.write(JSON.stringify({'user': query.user, "cards": sanitizedResult, "eventTokens": resultTokens[0].eventTokens}))
+            } else {
+                res.writeHead(200, {'Content-Type': 'text/html'});
+                let cards = '';
+                for (let row of result) {
+                    let card = bootstraphandcard;
+                    card = getCardHtml(card, row);
+                    cards += card;
+                }
+                if(resultTokens[0].eventTokens > 0) {
+                    let card = bootstraphandeventtoken;
+                    card = getCardHtml(card, { "id": "", "Name": "<b>" + config.eventTokenName + "</b>", "series": "", "image": config.eventTokenImage, "base_rarity": 9, "rarity": 9, "amount": resultTokens[0].eventTokens});
+                    cards += card;
+                }
+                res.write(bootstraphandtpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user));
             }
-            res.write(bootstraphandtpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user));
-        }
-        res.end();
+            res.end();
+        });
     });
 }
 
@@ -513,37 +554,64 @@ function bootstrapbooster(req, res, query) {
             res.end();
             return;
         }
-        if (wantJSON) {
-            res.writeHead(200, {'Content-Type': 'application/json'});
-            let sanitizedResult = [];
-            for (let row of result) {
-                let obj = {};
-                obj.id = row.id;
-                obj.Name = row.Name;
-                obj.image = row.image;
-                obj.rarity = row.base_rarity;
-                obj.series = row.series;
-                sanitizedResult.push(obj);
-            }
-            res.write(JSON.stringify({"user": query.user, "cards": sanitizedResult}));
-        } else {
-            res.writeHead(200, {'Content-Type': 'text/html'});
-            let cards = '';
-            for (let row of result) {
-                let card = bootstrapboostercard;
-                card = card.replace(/{ID}/g, row.id.toString());
-                card = card.replace(/{IMAGE}/g, row.image.toString());
-                card = card.replace(/{CARDNAME}/g, row.Name.toString());
-                card = card.replace(/{SERIES}/g, row.series.toString());
-                card = card.replace(/{RARITY}/g, getRarityName(row.base_rarity));
-                cards += card;
-            }
-            let responsestr = bootstrapboostertpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, escapeHtml(query.user));
-            res.write(responsestr);
+        con.query("SELECT boosters_opened.eventTokens FROM boosters_opened JOIN users ON boosters_opened.userid = users.id WHERE users.name = ? AND boosters_opened.status = 'open'", query.user, function(err, resultTokens) {
+            if(resultTokens.length === 0) {
+                if (wantJSON) {
+                    res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
+                    res.write(JSON.stringify({
+                        "error": {
+                            "status": 404,
+                            "explanation": "User not found or does not have an open booster."
+                        }
+                    }))
+                } else {
+                    res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
+                    res.write(bootstrapboostertpl.replace(/{CARDS}/g, "404 - This user doesn't exist or has no open booster.").replace(/{NAME}/g, escapeHtml(query.user)));
 
-        }
+                }
+                res.end();
+                return;
+            }
+            if (wantJSON) {
+                res.writeHead(200, {'Content-Type': 'application/json'});
+                let sanitizedResult = [];
+                for (let row of result) {
+                    let obj = {};
+                    obj.id = row.id;
+                    obj.Name = row.Name;
+                    obj.image = row.image;
+                    obj.rarity = row.base_rarity;
+                    obj.series = row.series;
+                    sanitizedResult.push(obj);
+                }
+                res.write(JSON.stringify({"user": query.user, "cards": sanitizedResult, "eventTokens": resultTokens[0].eventTokens}));
+            } else {
+                res.writeHead(200, {'Content-Type': 'text/html'});
+                let cards = '';
+                for (let row of result) {
+                    let card = bootstrapboostercard;
+                    card = card.replace(/{ID}/g, row.id.toString());
+                    card = card.replace(/{IMAGE}/g, row.image.toString());
+                    card = card.replace(/{CARDNAME}/g, row.Name.toString());
+                    card = card.replace(/{SERIES}/g, row.series.toString());
+                    card = card.replace(/{RARITY}/g, getRarityName(row.base_rarity));
+                    cards += card;
+                }
+                for(let i = 0; i < resultTokens[0].eventTokens; i++) {
+                    let card = bootstrapboostereventtoken;
+                    card = card.replace(/{ID}/g, "");
+                    card = card.replace(/{IMAGE}/g, config.eventTokenImage);
+                    card = card.replace(/{CARDNAME}/g, config.eventTokenName);
+                    card = card.replace(/{RARITY}/g, "promo");
+                    cards += card;
+                }
+                let responsestr = bootstrapboostertpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, escapeHtml(query.user));
+                res.write(responsestr);
 
-        res.end();
+            }
+
+            res.end();
+        });
     });
 }
 
@@ -813,95 +881,108 @@ function profile(req, res, query) {
 
 }
 
-
-http.createServer(function (req, res) {
-    let q = url.parse(req.url, true);
-    try {
-        switch (q.pathname.replace("/", "")) {
-            case "hand": {
-                bootstraphand(req, res, q.query);
-                break;
-            }
-            case "sets": {
-                smartsets(req, res, q.query);
-                break;
-            }
-            case "smartsets": {
-                smartsets(req, res, q.query);
-                break;
-            }
-            case "smartsetsdata": {
-                smartsetsdata(req, res, q.query);
-                break;
-            }
-
-            case "claimedsets": {
-                claimedsets(req, res, q.query);
-                break;
-            }
-            case "booster": {
-                bootstrapbooster(req, res, q.query);
-                break;
-            }
-            case "fancybooster": {
-                res.writeHead(410, 'Gone');
-                res.end();
-                break;
-            }
-            case "help": {
-                res.writeHead(302, {'Location': 'http://t.fuelr.at/heq'});
-                res.end();
-                break;
-            }
-            case "fixes": {
-                res.writeHead(302, {'Location': 'https://goo.gl/forms/ymaZWjM6ZyGl2DXj2'});
-                res.end();
-                break;
-            }
-            case "waifus-bootstrap.css": {
-                res.writeHead(200, {'Content-Type': 'text/css'});
-                res.write(bootstrapwaifucss);
-                res.end();
-                break;
-            }
-            case "discord": {
-                res.writeHead(302, {'Location': 'https://discord.gg/qCtqzyF'});
-                res.end();
-                break;
-            }
-            case "live": {
-                res.writeHead(410, 'Gone');
-                res.end();
-                break;
-            }
-            case "teasing": {
-                teaser(req, res, q.query);
-                break;
-            }
-            case "api": {
-                api(req, res, q.query);
-                break;
-            }
-            case "profile": {
-                profile(req, res, q.query);
-                break;
-            }
-            case "pullfeed": {
-                pullfeed(req, res, q.query);
-                break;
-            }
-            default: {
-                res.writeHead(404, {'Content-Type': 'text/html'});
-                res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
-                res.end();
-            }
+function readConfig(callback) {
+    config = {};
+    con.query("SELECT * FROM config", function(err, result) {
+        for(let row of result) {
+            config[row.name] = row.value;
         }
-    } catch (err) {
-        res.writeHead(500, "Internal Server Error", {"Content-Type": "text/html"});
-        res.write("Something went wrong. Sorry. Blame Marenthyu! Tell him this: " + err.toString());
-        res.end();
-        console.log(err.toString());
-    }
+        callback();
+    });
+}
+
+function bootServer(callback) {
+    http.createServer(function (req, res) {
+        let q = url.parse(req.url, true);
+        try {
+            switch (q.pathname.replace("/", "")) {
+                case "hand": {
+                    bootstraphand(req, res, q.query);
+                    break;
+                }
+                case "sets": {
+                    smartsets(req, res, q.query);
+                    break;
+                }
+                case "smartsets": {
+                    smartsets(req, res, q.query);
+                    break;
+                }
+                case "smartsetsdata": {
+                    smartsetsdata(req, res, q.query);
+                    break;
+                }
+
+                case "claimedsets": {
+                    claimedsets(req, res, q.query);
+                    break;
+                }
+                case "booster": {
+                    bootstrapbooster(req, res, q.query);
+                    break;
+                }
+                case "fancybooster": {
+                    res.writeHead(410, 'Gone');
+                    res.end();
+                    break;
+                }
+                case "help": {
+                    res.writeHead(302, {'Location': 'http://t.fuelr.at/heq'});
+                    res.end();
+                    break;
+                }
+                case "fixes": {
+                    res.writeHead(302, {'Location': 'https://goo.gl/forms/ymaZWjM6ZyGl2DXj2'});
+                    res.end();
+                    break;
+                }
+                case "waifus-bootstrap.css": {
+                    res.writeHead(200, {'Content-Type': 'text/css'});
+                    res.write(bootstrapwaifucss);
+                    res.end();
+                    break;
+                }
+                case "discord": {
+                    res.writeHead(302, {'Location': 'https://discord.gg/qCtqzyF'});
+                    res.end();
+                    break;
+                }
+                case "live": {
+                    res.writeHead(410, 'Gone');
+                    res.end();
+                    break;
+                }
+                case "teasing": {
+                    teaser(req, res, q.query);
+                    break;
+                }
+                case "api": {
+                    api(req, res, q.query);
+                    break;
+                }
+                case "profile": {
+                    profile(req, res, q.query);
+                    break;
+                }
+                case "pullfeed": {
+                    pullfeed(req, res, q.query);
+                    break;
+                }
+                default: {
+                    res.writeHead(404, {'Content-Type': 'text/html'});
+                    res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
+                    res.end();
+                }
+            }
+        } catch (err) {
+            res.writeHead(500, "Internal Server Error", {"Content-Type": "text/html"});
+            res.write("Something went wrong. Sorry. Blame Marenthyu! Tell him this: " + err.toString());
+            res.end();
+            console.log(err.toString());
+        }
 
 
-}).listen(8088);
+    }).listen(8088);
+}
+
+async.series([readConfig, bootServer]);

@@ -1236,11 +1236,11 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
 
         if buying:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
                 [packname])
         else:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, " + rarityColumns + " FROM boosters WHERE name = %s",
                 [packname])
 
         packinfo = cur.fetchone()
@@ -1255,13 +1255,23 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         pgRarity = packinfo[4]
         pgCount = packinfo[5]
         useEventWeightings = packinfo[6] != 0
-        normalChances = packinfo[7:]
+        numTokens = packinfo[7]
+        tokenChance = packinfo[8]
+        normalChances = packinfo[9:]
+        
+        if numTokens >= numCards:
+            raise InvalidBoosterException()
 
         if buying:
             if not hasPoints(userid, cost):
                 raise CantAffordBoosterException(cost)
 
             addPoints(userid, -cost)
+            
+        tokensDropped = 0
+        for n in range(numTokens):
+            if random.random() < tokenChance:
+                tokensDropped += 1
 
         minScalingRarity = int(config["pullScalingMinRarity"])
         maxScalingRarity = int(config["pullScalingMaxRarity"])
@@ -1279,7 +1289,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         cards = []
         alertwaifus = []
         uniques = getUniqueCards(userid)
-        for i in range(numCards):
+        for i in range(numCards - tokensDropped):
             # scale chances of the card appropriately
             currentChances = list(normalChances)
             guaranteedRarity = 0
@@ -1330,7 +1340,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             if listed and buyable:
                 for r in range(numScalingRarities):
                     if r + minScalingRarity != waifu['base_rarity']:
-                        scalingData[r] += cost / numCards
+                        scalingData[r] += cost / (numCards - tokensDropped)
                     else:
                         scalingData[r] = 0
 
@@ -1346,8 +1356,8 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
 
         # insert opened booster
         cur.execute(
-            "INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, %s, %s, %s, 'open')",
-            [userid, packname, cost if buying else 0, current_milli_time()])
+            "INSERT INTO boosters_opened (userid, boostername, paid, created, status, eventTokens) VALUES(%s, %s, %s, %s, 'open', %s)",
+            [userid, packname, cost if buying else 0, current_milli_time(), tokensDropped])
         boosterid = cur.lastrowid
         cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)",
                         [(boosterid, card) for card in cards])
