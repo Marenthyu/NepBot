@@ -2713,6 +2713,11 @@ class NepBot(NepBotClass):
                         except ValueError:
                             self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
                             return
+                            
+                    # actual specials can't be traded
+                    if have["rarity"] == firstSpecialRarity or want["rarity"] == firstSpecialRarity:
+                        self.message(channel, "Sorry, cards of that rarity cannot be traded.", isWhisper)
+                        return
 
                     payup = ourid
                     firstSpecialRarity = int(config["numNormalRarities"])
@@ -2721,7 +2726,7 @@ class NepBot(NepBotClass):
                     if not canTradeDirectly:
                         if have["rarity"] >= firstSpecialRarity or want["rarity"] >= firstSpecialRarity:
                             self.message(channel,
-                                         "Sorry, special-rarity cards can only be traded for other special-rarity cards.",
+                                         "Sorry, irregular rarity cards can only be traded for other irregular rarity cards.",
                                          isWhisper=isWhisper)
                             return
                         if len(args) != 4:
