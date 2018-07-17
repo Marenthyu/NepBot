@@ -419,6 +419,22 @@ def setFavourite(userid, waifu):
 def setDescription(userid, newDesc):
     with db.cursor() as cur:
         cur.execute("UPDATE users SET profileDescription=%s WHERE id = %s", [newDesc, userid])
+        
+def checkFavouriteValidity(userid):
+    with db.cursor() as cur:
+        cur.execute("SELECT favourite FROM users WHERE id = %s", [userid])
+        favourite = getWaifuById(cur.fetchone()[0])
+        valid = True
+        if favourite["can_favourite"] == 0:
+            valid = False
+        elif favourite["base_rarity"] >= int(config["numNormalRarities"]):
+            # must be owned
+            cur.execute("SELECT COUNT(*) FROM has_waifu WHERE waifuid = %s AND userid = %s", [favourite["id"], userid])
+            valid = cur.fetchone()[0] > 0
+            
+        if not valid:
+            # reset favourite
+            cur.execute("UPDATE users SET favourite = 1 WHERE id = %s", [userid])
 
 
 def getBadgeByID(id):
@@ -2196,6 +2212,7 @@ class NepBot(NepBotClass):
                 disenchants = []
                 dontHave = []
                 hand = getHand(tags['user-id'])
+                disenchantingSpecial = False
 
                 for arg in args:
                     # handle disenchanting
@@ -2251,6 +2268,9 @@ class NepBot(NepBotClass):
                     if row['id'] not in checkPromos:
                         checkPromos.append(row['id'])
                     takeCard(tags['user-id'], row['id'], row['rarity'])
+                    
+                    if row['base_rarity'] >= int(config["numNormalRarities"]):
+                        disenchantingSpecial = True
 
                     baseValue = int(config["rarity" + str(row['rarity']) + "Value"])
                     profit = attemptBountyFill(self, row['id'])
@@ -2266,6 +2286,9 @@ class NepBot(NepBotClass):
 
                 addPoints(tags['user-id'], pointsGain)
                 attemptPromotions(*checkPromos)
+                
+                if disenchantingSpecial:
+                    checkFavouriteValidity(tags['user-id'])
 
                 if len(disenchants) == 1:
                     buytext = " (bounty filled)" if ordersFilled > 0 else ""
@@ -2638,6 +2661,10 @@ class NepBot(NepBotClass):
                             giveCard(otherid, want, want_rarity)
 
                             attemptPromotions(want, have)
+                            if want_rarity >= int(config["numNormalRarities"]):
+                                checkFavouriteValidity(ourid)
+                            if have_rarity >= int(config["numNormalRarities"]):
+                                checkFavouriteValidity(otherid)
 
                             # points
                             addPoints(payup, -(tradepoints + cost))
@@ -4835,7 +4862,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "Usage: !raritychange <ID> <rarity>", isWhisper)
                     return
 
-                if waifu['base_rarity'] >= int(config['numNormalRarities']):
+                if waifu['base_rarity'] == int(config['numNormalRarities']):
                     self.message(channel, "You shouldn't be changing a special waifu into another rarity.", isWhisper)
                     return
 
@@ -4881,6 +4908,9 @@ class NepBot(NepBotClass):
                     cur.execute(
                         "UPDATE bounties SET status='cancelled', updated=%s WHERE waifuid = %s AND status='open'",
                         [current_milli_time(), waifu['id']])
+                        
+                    if rarity >= int(config["numNormalRarities"]):
+                        cur.execute("UPDATE users SET favourite = 1 WHERE favourite = %s AND (SELECT COUNT(*) FROM has_waifu WHERE has_waifu.userid = users.id AND has_waifu.waifuid = %s) = 0", [waifu['id']] * 2)
 
                 # done
                 self.message(channel, "Successfully changed [%d] %s's base rarity to %s." % (
