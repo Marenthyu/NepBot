@@ -163,7 +163,8 @@ let bootstrapboostereventtoken = '<div class="card card-tcg card-{RARITY}">' +
     '</div>' +
     '<div class="card-footer text-center">' +
     '<div class="card-info">' +
-    '<b>{CARDNAME}</b>' +
+    '<b>{CARDNAME}</b><br />' +
+    '<small>(sent directly to account)</small>' + 
     '</div>' +
     '</div>' +
     '</div>';
@@ -434,7 +435,7 @@ function claimedsets(req, res, query) {
 function getCardHtml(template, row) {
     template = template.replace(/{AMOUNTHOLDER}/g, row.amount > 1 ? bootstraphandamtholder : '');
     template = template.replace(/{PROMOTEDHOLDER}/g, row.rarity > row.base_rarity ? bootstraphandpromoholder : '');
-    if (row.rarity > row.base_rarity) {
+    if (row.rarity > row.base_rarity && row.rarity < 8) {
         template = template.replace(/{STARS}/g, "★".repeat(row.rarity - row.base_rarity));
     }
     else {
