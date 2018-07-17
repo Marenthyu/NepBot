@@ -514,7 +514,7 @@ function bootstraphand(req, res, query) {
                 }
                 if(resultTokens[0].eventTokens > 0) {
                     let card = bootstraphandeventtoken;
-                    card = getCardHtml(card, { "id": "", "Name": "<b>" + config.eventTokenName + "</b>", "series": "", "image": config.eventTokenImage, "base_rarity": 9, "rarity": 9, "amount": resultTokens[0].eventTokens});
+                    card = getCardHtml(card, { "id": "", "Name": config.eventTokenName, "series": "", "image": config.eventTokenImage, "base_rarity": 9, "rarity": 9, "amount": resultTokens[0].eventTokens});
                     cards += card;
                 }
                 res.write(bootstraphandtpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user));
