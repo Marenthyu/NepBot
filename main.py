@@ -5087,8 +5087,8 @@ class NepBot(NepBotClass):
                             cur.execute("INSERT INTO godimage_requests (requesterid, waifuid, image, is_global, state, created) VALUES(%s, %s, %s, %s, 'pending', %s)", insertArgs)
 
                             # notify the discordhook of the new request
-                            waifuInfo = getWaifuById(waifuid)
-                            discordArgs = {"user": tags['display-name'], "id": waifuid, "name": waifuInfo["name"], "image": args[2], "type": "a global" if do_global else "an"}
+                            waifu = getWaifuById(waifuid)
+                            discordArgs = {"user": tags['display-name'], "id": waifuid, "name": waifu["name"], "image": args[2], "type": "a global" if do_global else "an"}
                             discordbody = {
                                 "username": "WTCG Admin", 
                                 "content" : "{user} requested {type} image change for [{id}] {name} to <{image}>!\nUse `!godimage check {id}` in any chat to check it.".format(**discordArgs)
@@ -5110,7 +5110,36 @@ class NepBot(NepBotClass):
                         
                         return
                 elif subcmd == "cancel":
-                    pass
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !godimage cancel <id>", isWhisper)
+                        return
+                    try:
+                        waifuid = int(args[1])
+                    except ValueError:
+                        self.message(channel, "Usage: !godimage cancel <id>", isWhisper)
+                        return
+                    waifu = getWaifuById(waifuid)
+                    if waifu is None:
+                        self.message(channel, "Usage: !godimage cancel <id>", isWhisper)
+                        return
+                    with db.cursor() as cur:
+                        cur.execute("UPDATE godimage_requests SET state = 'cancelled', updated = %s WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [current_milli_time(), tags['user-id'], waifuid])
+                        if cur.rowcount > 0:
+                            # send discord notif
+                            discordArgs = {"user": tags['display-name'], "id": waifuid, "name": waifu["name"]}
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "{user} cancelled their image change request for [{id}] {name}.".format(**discordArgs)
+                            }
+                            sendAdminDiscordAlert(discordbody)
+                            self.message(channel, "You cancelled your image change request for [%d] %s." % (waifuid, waifu["name"]), isWhisper)
+                        elif waifu["can_lookup"]:
+                            self.message(channel, "You didn't have a pending image change request for that waifu.", isWhisper)
+                        else:
+                            self.message(channel, "Usage: !godimage cancel <id>", isWhisper)
+                        return
+
+
                 elif subcmd == "queue" and canManageImages:
                     pass
                 elif subcmd == "check" and canManageImages:
