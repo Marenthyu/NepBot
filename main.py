@@ -5079,12 +5079,6 @@ class NepBot(NepBotClass):
                         if waifu["base_rarity"] == godRarity:
                             self.message(channel, "Base god rarity waifus cannot have their picture changed!", isWhisper)
                             return
-                        
-                        try:
-                            validateImageURL(args[2])
-                        except ValueError as ex:
-                            self.message(channel, "Invalid link specified. %s" % str(ex), isWhisper)
-                            return
 
                         if canManageImages:
                             # automatically do the change
@@ -5106,6 +5100,14 @@ class NepBot(NepBotClass):
                             self.message(channel, "Image change processed successfully.", isWhisper)
                             return
                         else:
+                            try:
+                                validateImageURL(args[2])
+                            except ValueError as ex:
+                                self.message(channel, "Invalid link specified. %s" % str(ex), isWhisper)
+                                return
+                            except Exception:
+                                self.message(channel, "There was an unknown problem with the link you specified. Please try again later.", isWhisper)
+                                return
                             # cancel any old pending requests for this waifu
                             cur.execute("UPDATE godimage_requests SET state = 'cancelled', updated = %s WHERE waifuid = %s AND state = 'pending'", [current_milli_time(), waifuid])
 
