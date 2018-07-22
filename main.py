@@ -2202,7 +2202,7 @@ class NepBot(NepBotClass):
                             packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, rewardInfo[3], False)
                             if checkHandUpgrade(tags['user-id']):
                                 messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
-                            self.message(channel, "%s, you got your daily free reward: {points}a booster - %s/booster?user=%s" % (tags['display-name'], pointsPrefix, config['siteHost'], sender), isWhisper)
+                            self.message(channel, "%s, you got your daily free reward: %sa booster - %s/booster?user=%s" % (tags['display-name'], pointsPrefix, config['siteHost'], sender), isWhisper)
                         except InvalidBoosterException:
                             self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
                             return
@@ -2224,6 +2224,7 @@ class NepBot(NepBotClass):
                 dontHave = []
                 hand = getHand(tags['user-id'])
                 disenchantingSpecial = False
+                godRarity = int(config["numNormalRarities"]) - 1
 
                 for arg in args:
                     # handle disenchanting
@@ -2294,6 +2295,15 @@ class NepBot(NepBotClass):
                         waifuData['base_rarity'] = row['rarity']  # cheat to make it show any promoted rarity override
                         threading.Thread(target=sendDisenchantAlert,
                                          args=(channel, waifuData, tags["display-name"])).start()
+
+                    if row['rarity'] == godRarity:
+                        # check image change
+                        with db.cursor() as cur:
+                            cur.execute("UPDATE godimage_requests SET state='cancelled' WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [tags['user-id'], row['id']])
+                            if cur.rowcount > 0:
+                                # request was cancelled
+                                waifuData = getWaifuById(row['id'])
+                                self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you disenchanted it." % (row['id'], waifuData['name']), True)
 
                 addPoints(tags['user-id'], pointsGain)
                 attemptPromotions(*checkPromos)
@@ -2665,14 +2675,26 @@ class NepBot(NepBotClass):
 
                             # move the cards
                             # should preserve God image changes through the trade
-                            if int(config["rarity%dMax" % want_rarity]) == 1:
+                            godRarity = int(config["numNormalRarities"]) - 1
+                            if want_rarity == godRarity:
                                 cur.execute("UPDATE has_waifu SET userid = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [otherid, ourid, want, want_rarity])
+                                cur.execute("UPDATE godimage_requests SET state = 'cancelled' WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [ourid, want])
+                                if cur.rowcount > 0:
+                                    # a request was actually cancelled
+                                    wantdata = getWaifuById(want)
+                                    self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you traded it away." % (want, wantdata['name']), True)
+
                             else:
                                 takeCard(ourid, want, want_rarity)
                                 giveCard(otherid, want, want_rarity)
                                 
-                            if int(config["rarity%dMax" % have_rarity]) == 1:
+                            if have_rarity == godRarity:
                                 cur.execute("UPDATE has_waifu SET userid = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [ourid, otherid, have, have_rarity])
+                                cur.execute("UPDATE godimage_requests SET state = 'cancelled' WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [otherid, have])
+                                if cur.rowcount > 0:
+                                    # a request was actually cancelled
+                                    havedata = getWaifuById(have)
+                                    self.message("#%s" % otherparty, "Your image change request for [%d] %s was cancelled since you traded it away." % (have, havedata['name']), True)
                             else:
                                 takeCard(otherid, have, have_rarity)
                                 giveCard(ourid, have, have_rarity)
@@ -2759,12 +2781,12 @@ class NepBot(NepBotClass):
                             return
                             
                     # actual specials can't be traded
+                    firstSpecialRarity = int(config["numNormalRarities"])
                     if have["rarity"] == firstSpecialRarity or want["rarity"] == firstSpecialRarity:
                         self.message(channel, "Sorry, cards of that rarity cannot be traded.", isWhisper)
                         return
 
                     payup = ourid
-                    firstSpecialRarity = int(config["numNormalRarities"])
                     canTradeDirectly = (want["rarity"] == have["rarity"]) or (
                             want["rarity"] >= firstSpecialRarity and have["rarity"] >= firstSpecialRarity)
                     if not canTradeDirectly:
@@ -2983,11 +3005,11 @@ class NepBot(NepBotClass):
                 if subcmd == "setup":
                     cur = db.cursor()
                     cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
-                    row = cur.fetchone();
+                    row = cur.fetchone()
                     if row is None:
                         self.message(channel,
                                      "The bot is not in your channel, so alerts can't be set up for you. Ask an admin to let it join!",
-                                     iswhisper=isWhisper)
+                                     isWhisper=isWhisper)
                         return
                     if row[0] is None:
                         self.message("#jtv",
@@ -3014,7 +3036,7 @@ class NepBot(NepBotClass):
                             rarity = int(config["numNormalRarities"]) - 1
                     cur = db.cursor()
                     cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
-                    row = cur.fetchone();
+                    row = cur.fetchone()
                     cur.close()
                     if row is None or row[0] is None:
                         self.message(channel,
@@ -4029,7 +4051,6 @@ class NepBot(NepBotClass):
 
                                 prizeToken = config["betPrizeTier%dToken" % prizeTier]
                                 prizePack = config["betPrizeTier%dBooster" % prizeTier]
-                                prizeName = config["betPrizeTier%dName" % prizeTier]
 
                                 prizes[prizeToken].append(winner["name"])
                                 cur.execute(
@@ -4957,7 +4978,7 @@ class NepBot(NepBotClass):
                     try:
                         newFav = int(args[1])
                     except ValueError:
-                        self.message(channel, args[1] + " is not a number. Please try again.");
+                        self.message(channel, args[1] + " is not a number. Please try again.")
                         return
                     newFavW = getWaifuById(newFav)
                     if newFavW is None:
