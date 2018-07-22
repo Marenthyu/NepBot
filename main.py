@@ -5047,10 +5047,16 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !godimage change[global] <id> <link>", isWhisper)
                         return
 
+                    waifu = getWaifuById(waifuid)
+
                     with db.cursor() as cur:
                         cur.execute("SELECT COUNT(*) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [tags['user-id'], waifuid, godRarity])
                         if cur.fetchone()[0] == 0:
                             self.message(channel, "You don't own that waifu at god rarity!", isWhisper)
+                            return
+
+                        if waifu["base_rarity"] == godRarity:
+                            self.message(channel, "Base god rarity waifus cannot have their picture changed!", isWhisper)
                             return
                         
                         try:
@@ -5087,7 +5093,6 @@ class NepBot(NepBotClass):
                             cur.execute("INSERT INTO godimage_requests (requesterid, waifuid, image, is_global, state, created) VALUES(%s, %s, %s, %s, 'pending', %s)", insertArgs)
 
                             # notify the discordhook of the new request
-                            waifu = getWaifuById(waifuid)
                             discordArgs = {"user": tags['display-name'], "id": waifuid, "name": waifu["name"], "image": args[2], "type": "a global" if do_global else "an"}
                             discordbody = {
                                 "username": "WTCG Admin", 
