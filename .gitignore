@@ -5,3 +5,4 @@ debug.log*
 node_modules
 package-lock.json
 __pycache__
+private_functions.py

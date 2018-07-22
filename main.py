@@ -15,6 +15,7 @@ import math
 import functools
 from string import ascii_letters
 from collections import defaultdict, OrderedDict
+from private_functions import validateImageURL, processImageURL
 
 import sys
 import re
@@ -1954,7 +1955,7 @@ class NepBot(NepBotClass):
 
         activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup",
                           "alerts", "redeem", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway",
-                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners"]
+                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners", "freebie", "godimage"]
 
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
@@ -3305,7 +3306,6 @@ class NepBot(NepBotClass):
                             self.message(channel, message, isWhisper)
 
                     return
-
             if command == "war":
                 if len(args) != 1:
                     self.message(channel, "Usage: !war <id>", isWhisper)
@@ -3366,7 +3366,6 @@ class NepBot(NepBotClass):
                         self.message(channel, msg, isWhisper)
 
                     return
-
             if command == "vote":
                 if len(args) < 3:
                     self.message(channel, "Usage: !vote <warid> <choice> <points>", isWhisper)
@@ -3469,7 +3468,6 @@ class NepBot(NepBotClass):
                     self.message(channel, "%s -> Successfully added %d points to %s in the %s bidwar." % (
                         tags['display-name'], points, theirchoice, title), isWhisper)
                     return
-
             if command == "incentives" and (isMarathonChannel or isWhisper):
                 with db.cursor() as cur:
                     cur.execute("SELECT id, title, amount, required FROM incentives WHERE status = 'open'")
@@ -3500,7 +3498,6 @@ class NepBot(NepBotClass):
                             self.message(channel, message, isWhisper)
 
                     return
-
             if command == "donate" and isMarathonChannel:
                 if len(args) != 2:
                     self.message(channel,
@@ -3561,7 +3558,6 @@ class NepBot(NepBotClass):
                                      isWhisper)
 
                     return
-
             if command == "upgrade":
                 user = tags['user-id']
 
@@ -3677,7 +3673,6 @@ class NepBot(NepBotClass):
                     config["promoschanged"] = "yes"
                     cur.execute("REPLACE INTO config(name, value) VALUES('promoschanged', 'yes')")
                 return
-
             if command == "bet":
                 if len(args) < 1:
                     self.message(channel,
@@ -5031,6 +5026,102 @@ class NepBot(NepBotClass):
                     self.message(channel, "... and this was enough to upgrade your hand to a new slot! naroYay",
                                  isWhisper)
                 return
+            if command == "godimage":
+                canManageImages = sender in superadmins
+                godRarity = int(config["numNormalRarities"]) - 1
+                if len(args) < 1:
+                    if canManageImages:
+                        self.message(channel, "Usage: !godimage change / changeglobal / queue / check / acceptsingle / acceptglobal / reject", isWhisper)
+                    else:
+                        self.message(channel, "Usage: !godimage change / changeglobal / list / cancel", isWhisper)
+                    return
+                subcmd = args[0].lower()
+                if subcmd in ["change", "changeglobal", "request", "requestglobal"]:
+                    do_global = subcmd in ["changeglobal", "requestglobal"]
+                    if len(args) < 3:
+                        self.message(channel, "Usage: !godimage change[global] <id> <link>", isWhisper)
+                        return
+                    try:
+                        waifuid = int(args[1])
+                    except ValueError:
+                        self.message(channel, "Usage: !godimage change[global] <id> <link>", isWhisper)
+                        return
+
+                    with db.cursor() as cur:
+                        cur.execute("SELECT COUNT(*) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [tags['user-id'], waifuid, godRarity])
+                        if cur.fetchone()[0] == 0:
+                            self.message(channel, "You don't own that waifu at god rarity!", isWhisper)
+                            return
+                        
+                        try:
+                            validateImageURL(args[2])
+                        except ValueError as ex:
+                            self.message(channel, "Invalid link specified. %s" % str(ex), isWhisper)
+                            return
+
+                        if canManageImages:
+                            # automatically do the change
+                            try:
+                                hostedURL = processImageURL(args[2])
+                            except Exception as ex:
+                                self.message(channel, "Could not process image. %s" % str(ex), isWhisper)
+                                return
+                            
+                            if do_global:
+                                cur.execute("UPDATE waifus SET image = %s WHERE id = %s", [hostedURL, waifuid])
+                            else:
+                                cur.execute("UPDATE has_waifu SET custom_image = %s WHERE waifuid = %s AND userid = %s AND rarity = %s", [hostedURL, tags['user-id'], waifuid, godRarity])
+
+                            # log the change for posterity
+                            insertArgs = [tags['user-id'], waifuid, args[2], do_global, tags['user-id'], current_milli_time()]
+                            cur.execute("INSERT INTO godimage_requests (requesterid, waifuid, image, is_global, state, moderatorid, created) VALUES(%s, %s, %s, %s, 'auto_accepted', %s, %s)", insertArgs)
+
+                            self.message(channel, "Image change processed successfully.", isWhisper)
+                            return
+                        else:
+                            # cancel any old pending requests for this waifu
+                            cur.execute("UPDATE godimage_requests SET state = 'cancelled', updated = %s WHERE waifuid = %s AND state = 'pending'", [current_milli_time(), waifuid])
+
+                            # record a new request
+                            insertArgs = [tags['user-id'], waifuid, args[2], do_global, current_milli_time()]
+                            cur.execute("INSERT INTO godimage_requests (requesterid, waifuid, image, is_global, state, created) VALUES(%s, %s, %s, %s, 'pending', %s)", insertArgs)
+
+                            # notify the discordhook of the new request
+                            waifuInfo = getWaifuById(waifuid)
+                            discordArgs = {"user": tags['display-name'], "id": waifuid, "name": waifuInfo["name"], "image": args[2], "type": "a global" if do_global else "an"}
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "{user} requested {type} image change for [{id}] {name} to <{image}>!\nUse `!godimage check {id}` in any chat to check it.".format(**discordArgs)
+                            }
+                            sendAdminDiscordAlert(discordbody)
+
+                            self.message(channel, "Your request has been placed. You will be notified when bot staff accept or decline it.", isWhisper)
+                            return
+                elif subcmd == "list":
+                    with db.cursor() as cur:
+                        cur.execute("SELECT waifus.id, waifus.name FROM godimage_requests gr JOIN waifus ON gr.waifuid = waifus.id WHERE gr.requesterid = %s AND gr.state = 'pending'", [tags['user-id']])
+                        reqs = cur.fetchall()
+
+                        if len(reqs) == 0:
+                            self.message(channel, "You don't have any pending god image change requests.", isWhisper)
+                        else:
+                            reqList = ", ".join(["[%d] %s" % (req[0], req[1]) for req in reqs])
+                            self.message(channel, "%s, you have pending image change requests for: %s." % (tags['display-name'], reqList), isWhisper)
+                        
+                        return
+                elif subcmd == "cancel":
+                    pass
+                elif subcmd == "queue" and canManageImages:
+                    pass
+                elif subcmd == "check" and canManageImages:
+                    pass
+                elif subcmd == "acceptsingle" and canManageImages:
+                    pass
+                elif subcmd == "acceptglobal" and canManageImages:
+                    pass
+                elif subcmd == "reject" and canManageImages:
+                    pass
+
 
 
 curg = db.cursor()
