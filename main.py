@@ -5138,18 +5138,98 @@ class NepBot(NepBotClass):
                         else:
                             self.message(channel, "Usage: !godimage cancel <id>", isWhisper)
                         return
-
-
                 elif subcmd == "queue" and canManageImages:
-                    pass
-                elif subcmd == "check" and canManageImages:
-                    pass
-                elif subcmd == "acceptsingle" and canManageImages:
-                    pass
-                elif subcmd == "acceptglobal" and canManageImages:
-                    pass
-                elif subcmd == "reject" and canManageImages:
-                    pass
+                    with db.cursor() as cur:
+                        cur.execute("SELECT waifuid FROM godimage_requests WHERE state = 'pending' ORDER BY created ASC")
+                        queue = cur.fetchall()
+                        if len(queue) == 0:
+                            self.message(channel, "The request queue is currently empty.", isWhisper)
+                        else:
+                            queueStr = ", ".join(str(item[0]) for item in queue)
+                            self.message(channel, "Current requested IDs for image changes: %s. !godimage check <id> to see each request." % queueStr, isWhisper)
+                        return
+                elif canManageImages and subcmd in ["check", "acceptsingle", "acceptglobal", "reject"]:
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !godimage %s <id>" % subcmd, isWhisper)
+                        return
+                    try:
+                        waifuid = int(args[1])
+                    except ValueError:
+                        self.message(channel, "Usage: !godimage %s <id>" % subcmd, isWhisper)
+                        return
+                    with db.cursor() as cur:
+                        cur.execute("SELECT gr.id, gr.image, gr.is_global, users.id, users.name, waifus.id, waifus.name FROM godimage_requests gr" 
+                        + " JOIN users ON gr.requesterid = users.id"
+                        + " JOIN waifus ON gr.waifuid = waifus.id"
+                        + " WHERE gr.waifuid = %s AND gr.state = 'pending'", [waifuid])
+                        request = cur.fetchone()
+                        if request is None:
+                            self.message(channel, "There is no pending request for that waifu.", isWhisper)
+                            return
+
+                        if subcmd == "check":
+                            msgArgs = {"user": request[4], "id": request[5], "name": request[6], "image": request[1]}
+                            if request[2]:
+                                self.message(channel, ("{user} requested [{id}] {name}'s global image to be changed to {image} ." + 
+                                " You can accept this request with !godimage acceptglobal {id}," +
+                                " change it for only their copy with !godimage acceptsingle {id}," +
+                                " or deny it entirely with !godimage reject {id} <reason>.").format(**msgArgs), isWhisper)
+                            else:
+                                self.message(channel, ("{user} requested their copy of [{id}] {name}'s image to be changed to {image} ." + 
+                                " You can accept this request with !godimage acceptsingle {id}" +
+                                " or deny it with !godimage reject {id} <reason>.").format(**msgArgs), isWhisper)
+                        elif subcmd == "reject":
+                            if len(args) < 3:
+                                self.message(channel, "You must provide a reason to reject the request. If it is porn/illegal/etc, just ban the user.", isWhisper)
+                                return
+                            rejectionReason = " ".join(args[2:])
+                            queryArgs = [tags['user-id'], current_milli_time(), rejectionReason, request[0]]
+                            cur.execute("UPDATE godimage_requests SET state = 'rejected', moderatorid = %s, updated = %s, rejection_reason = %s WHERE id = %s", queryArgs)
+
+                            # notify them
+                            self.message("#%s" % request[4], "Your image change request for [%d] %s was rejected with the following reason: %s" % (request[5], request[6], rejectionReason), True)
+
+                            self.message(channel, "Request rejected and user notified.", isWhisper)
+                        elif subcmd == "acceptglobal":
+                            if not request[2]:
+                                self.message(channel, "A non-global request cannot be accepted for a global image change. Use !godimage acceptsingle %d instead." % request[5], isWhisper)
+                                return
+                            
+                            # update it
+                            try:
+                                hostedURL = processImageURL(request[1])
+                            except Exception as ex:
+                                self.message(channel, "Could not process image. %s. Check the URL yourself and if it is invalid reject their request." % str(ex), isWhisper)
+                                return
+                            cur.execute("UPDATE waifus SET image = %s WHERE id = %s", [hostedURL, request[5]])
+                            cur.execute("UPDATE has_waifu SET custom_image = NULL WHERE waifuid = %s", [request[5]])
+
+                            queryArgs = [tags['user-id'], current_milli_time(), request[0]]
+                            cur.execute("UPDATE godimage_requests SET state = 'accepted_global', moderatorid = %s, updated = %s WHERE id = %s", queryArgs)
+
+                            # notify them
+                            self.message("#%s" % request[4], "Your global image change request for [%d] %s was accepted, the image has been changed." % (request[5], request[6]), True)
+                            self.message(channel, "Request accepted. The new image for [%d] %s is %s" % (request[5], request[6], hostedURL))
+                        else:
+                            # update it
+                            try:
+                                hostedURL = processImageURL(request[1])
+                            except Exception as ex:
+                                self.message(channel, "Could not process image. %s. Check the URL yourself and if it is invalid reject their request." % str(ex), isWhisper)
+                                return
+                            cur.execute("UPDATE has_waifu SET custom_image = %s WHERE userid = %s AND waifuid = %s", [hostedURL, request[3], request[5]])
+
+                            queryArgs = [tags['user-id'], current_milli_time(), request[0]]
+                            cur.execute("UPDATE godimage_requests SET state = 'accepted_single', moderatorid = %s, updated = %s WHERE id = %s", queryArgs)
+
+                            # notify them
+                            if request[2]:
+                                self.message("#%s" % request[4], "Your image change request for [%d] %s was accepted, but only for your own copy." % (request[5], request[6]), True)
+                            else:
+                                self.message("#%s" % request[4], "Your image change request for your copy of [%d] %s was accepted." % (request[5], request[6]), True)
+
+                            self.message(channel, "Request accepted. The new image for %s's copy of [%d] %s is %s" % (request[4], request[5], request[6], hostedURL))
+                        return
 
 
 
