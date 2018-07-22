@@ -312,11 +312,11 @@ def getHand(twitchid):
         return []
     cur = db.cursor()
     cur.execute(
-        "SELECT amount, waifus.name, waifus.id, rarity, series, image, base_rarity FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < %s) DESC, waifus.id ASC",
+        "SELECT amount, waifus.name, waifus.id, rarity, series, image, base_rarity, custom_image FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < %s) DESC, waifus.id ASC",
         [tID, int(config["numNormalRarities"])])
     rows = cur.fetchall()
     cur.close()
-    return [{"name": row[1], "amount": row[0], "id": row[2], "rarity": row[3], "series": row[4], "image": row[5],
+    return [{"name": row[1], "amount": row[0], "id": row[2], "rarity": row[3], "series": row[4], "image": row[7] or row[5],
              "base_rarity": row[6]} for row in rows]
 
 
@@ -576,6 +576,16 @@ def sendDiscordAlert(data):
                 req2 = requests.post(
                     url,
                     json=data)
+
+
+def sendAdminDiscordAlert(data):
+    with discordLock:
+        req2 = requests.post(config["adminDiscordHook"], json=data)
+        while req2.status_code == 429:
+            time.sleep((int(req2.headers["Retry-After"]) / 1000) + 1)
+            req2 = requests.post(
+                config["adminDiscordHook"],
+                json=data)
 
 
 def sendDrawAlert(channel, waifu, user, discord=True):
@@ -2652,13 +2662,19 @@ class NepBot(NepBotClass):
                                     "you" if nonpayer == ourid else otherparty), isWhisper=isWhisper)
                                 return
 
-                            # take cards
-                            takeCard(ourid, want, want_rarity)
-                            takeCard(otherid, have, have_rarity)
-
-                            # give cards
-                            giveCard(ourid, have, have_rarity)
-                            giveCard(otherid, want, want_rarity)
+                            # move the cards
+                            # should preserve God image changes through the trade
+                            if int(config["rarity%dMax" % want_rarity]) == 1:
+                                cur.execute("UPDATE has_waifu SET userid = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [otherid, ourid, want, want_rarity])
+                            else:
+                                takeCard(ourid, want, want_rarity)
+                                giveCard(otherid, want, want_rarity)
+                                
+                            if int(config["rarity%dMax" % have_rarity]) == 1:
+                                cur.execute("UPDATE has_waifu SET userid = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [ourid, otherid, have, have_rarity])
+                            else:
+                                takeCard(otherid, have, have_rarity)
+                                giveCard(ourid, have, have_rarity)
 
                             attemptPromotions(want, have)
                             if want_rarity >= int(config["numNormalRarities"]):
