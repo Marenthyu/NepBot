@@ -4936,7 +4936,10 @@ class NepBot(NepBotClass):
 
                 # okay, do it
                 with db.cursor() as cur:
-                    cur.execute("UPDATE waifus SET base_rarity = %s WHERE id = %s", [rarity, waifu['id']])
+                    if rarity < int(config['numNormalRarities']):
+                        cur.execute("UPDATE waifus SET normal_weighting = LEAST(GREATEST(normal_weighting, (SELECT MIN(w1.normal_weighting) FROM (SELECT * FROM waifus) w1 WHERE w1.base_rarity = %s)), (SELECT MAX(w2.normal_weighting) FROM (SELECT * FROM waifus) w2 WHERE w2.base_rarity = %s)), base_rarity = %s WHERE id = %s", [rarity, rarity, rarity, waifu['id']])
+                    else:
+                        cur.execute("UPDATE waifus SET base_rarity = %s WHERE id = %s", [rarity, waifu['id']])
                     
                     cur.execute("SELECT userid, amount FROM has_waifu WHERE waifuid = %s AND rarity < %s", [waifu['id'], rarity])
                     lowerCopies = cur.fetchall()
@@ -5116,12 +5119,12 @@ class NepBot(NepBotClass):
                             cur.execute("INSERT INTO godimage_requests (requesterid, waifuid, image, is_global, state, created) VALUES(%s, %s, %s, %s, 'pending', %s)", insertArgs)
 
                             # notify the discordhook of the new request
-                            discordArgs = {"user": tags['display-name'], "id": waifuid, "name": waifu["name"], "image": args[2], "type": "a global" if do_global else "an"}
+                            discordArgs = {"user": tags['display-name'], "id": waifuid, "name": waifu["name"], "image": args[2], "type": "a global" if do_global else "an individual"}
                             discordbody = {
                                 "username": "WTCG Admin", 
                                 "content" : "{user} requested {type} image change for [{id}] {name} to <{image}>!\nUse `!godimage check {id}` in any chat to check it.".format(**discordArgs)
                             }
-                            sendAdminDiscordAlert(discordbody)
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
 
                             self.message(channel, "Your request has been placed. You will be notified when bot staff accept or decline it.", isWhisper)
                             return
@@ -5159,7 +5162,7 @@ class NepBot(NepBotClass):
                                 "username": "WTCG Admin", 
                                 "content" : "{user} cancelled their image change request for [{id}] {name}.".format(**discordArgs)
                             }
-                            sendAdminDiscordAlert(discordbody)
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
                             self.message(channel, "You cancelled your image change request for [%d] %s." % (waifuid, waifu["name"]), isWhisper)
                         elif waifu["can_lookup"]:
                             self.message(channel, "You didn't have a pending image change request for that waifu.", isWhisper)
