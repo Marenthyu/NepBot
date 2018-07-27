@@ -2028,7 +2028,8 @@ class NepBot(NepBotClass):
 
         activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup",
                           "alerts", "redeem", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway",
-                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners", "freebie", "godimage", "freepacks"]
+                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners", "freebie", "godimage",
+                          "freepacks", "freepack", "pudding"]
 
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
@@ -3828,7 +3829,7 @@ class NepBot(NepBotClass):
                     config["promoschanged"] = "yes"
                     cur.execute("REPLACE INTO config(name, value) VALUES('promoschanged', 'yes')")
                 return
-            if command == "freepacks" or (command == "bet" and len(args) > 0 and args[0].lower() == "packs"):
+            if command == "freepacks" or command == "freepack" or (command == "bet" and len(args) > 0 and args[0].lower() == "packs"):
                 if len(args) > 0 and args[0].lower() in ["open", "claim", "redeem"]:
                     if len(args) < 2:
                         self.message(channel, "Usage: !freepacks open <booster name>", isWhisper)
@@ -4386,7 +4387,7 @@ class NepBot(NepBotClass):
                 return
             if command == "givefreepack" and sender in superadmins:
                 if len(args) < 2:
-                    self.message(channel, "Usage: !givefreepack <username> <booster name> [<amount>] (default 1)", isWhisper)
+                    self.message(channel, "Usage: !givefreepack <username> <booster name> [<amount> (default 1)]", isWhisper)
                     return
                 
                 if len(args) >= 3:
