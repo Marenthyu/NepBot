@@ -2189,8 +2189,13 @@ class NepBot(NepBotClass):
                                 messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
                             self.message(channel, "%s, you open a %s booster for %d pudding: %s/booster?user=%s" % (tags['display-name'], booster[0], cost, config["siteHost"], sender), isWhisper)
                         except InvalidBoosterException:
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "Booster type %s is broken, please fix it." % booster[0]
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
                             self.message(channel,
-                                        "Go tell an admin that this booster type is broken.",
+                                        "There was an error processing your booster, please try again later.",
                                         isWhisper)
                             return
                 elif subcmd == "list":
@@ -3341,12 +3346,6 @@ class NepBot(NepBotClass):
                     cur.close()
                     return
 
-                if len(redeemablerows) > 1:
-                    self.message(channel, "Go tell an admin that token %s is broken (duplicate token name)." % args[0],
-                                 isWhisper)
-                    cur.close()
-                    return
-
                 redeemdata = redeemablerows[0]
 
                 # already claimed by this user?
@@ -3383,9 +3382,14 @@ class NepBot(NepBotClass):
                             messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
                         received.append("a free booster: %s/booster?user=%s" % (config["siteHost"], sender))
                     except InvalidBoosterException:
+                        discordbody = {
+                            "username": "WTCG Admin", 
+                            "content" : "Booster type %s is broken, please fix it." % redeemdata[3]
+                        }
+                        threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
                         self.message(channel,
-                                     "Go tell an admin that token %s is broken (invalid booster attached)." % args[0],
-                                     isWhisper)
+                                    "There was an error processing your redeem, please try again later.",
+                                    isWhisper)
                         cur.close()
                         return
 
@@ -3851,8 +3855,13 @@ class NepBot(NepBotClass):
                             cur.execute("UPDATE freepacks SET remaining = remaining - 1 WHERE userid = %s AND boostername = %s", [tags['user-id'], args[1]])
                             self.message(channel, "%s, you open a free %s booster: %s/booster?user=%s" % (tags['display-name'], result[1], config["siteHost"], sender), isWhisper)
                         except InvalidBoosterException:
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "Booster type %s is broken, please fix it." % args[1]
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
                             self.message(channel,
-                                        "Go tell an admin that this booster type is broken.",
+                                        "There was an error opening your free pack, please try again later.",
                                         isWhisper)
                             return
                         return
