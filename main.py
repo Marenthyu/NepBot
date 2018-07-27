@@ -3695,10 +3695,58 @@ class NepBot(NepBotClass):
                     config["promoschanged"] = "yes"
                     cur.execute("REPLACE INTO config(name, value) VALUES('promoschanged', 'yes')")
                 return
+            if command == "freepacks" or (command == "bet" and len(args) > 0 and args[0].lower() == "packs"):
+                if len(args) > 0 and args[0].lower() in ["open", "claim", "redeem"]:
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !freepacks open <booster name>", isWhisper)
+                        return
+                    with db.cursor() as cur:
+                        cur.execute("SELECT remaining, boostername FROM freepacks WHERE userid = %s AND boostername = %s", [tags['user-id'], args[1]])
+                        result = cur.fetchone()
+
+                        if result is None or result[0] == 0:
+                            self.message(channel, "You don't have any free packs of that type left to claim!", isWhisper)
+                            return
+
+                        # can they actually open it?
+                        cur.execute("SELECT COUNT(*) FROM boosters_opened WHERE userid = %s AND status = 'open'",
+                                [tags['user-id']])
+                        boosteropen = cur.fetchone()[0] or 0
+
+                        if boosteropen > 0:
+                            self.message(channel,
+                                        "%s, you can't open a free pack with an open booster! !booster show to check it." %
+                                        tags['display-name'], isWhisper)
+                            return
+
+                        # all good
+                        try:
+                            packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, args[1], False)
+                            if checkHandUpgrade(tags['user-id']):
+                                messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
+                            cur.execute("UPDATE freepacks SET remaining = remaining - 1 WHERE userid = %s AND boostername = %s", [tags['user-id'], args[1]])
+                            self.message(channel, "%s, you open a free %s booster: %s/booster?user=%s" % (tags['display-name'], result[1], config["siteHost"], sender), isWhisper)
+                        except InvalidBoosterException:
+                            self.message(channel,
+                                        "Go tell an admin that this booster type is broken.",
+                                        isWhisper)
+                            return
+                        return
+                else:
+                    with db.cursor() as cur:
+                        cur.execute("SELECT boostername, remaining FROM freepacks WHERE userid = %s AND remaining > 0", [tags['user-id']])
+                        freepacks = cur.fetchall()
+
+                        if len(freepacks) == 0:
+                            self.message(channel, "%s, you don't have any free pack entitlements right now." % tags['display-name'], isWhisper)
+                        else:
+                            freeStr = ", ".join("%s x%d" % (fp[0], fp[1]) for fp in freepacks)
+                            self.message(channel, "%s, your current free packs: %s. !freepacks open <name> to open one." % (tags['display-name'], freeStr), isWhisper)
+                        return
             if command == "bet":
                 if len(args) < 1:
                     self.message(channel,
-                                 "Usage: !bet <time> OR !bet status OR !bet packs OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
+                                 "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
                                  isWhisper)
                     return
                 canAdminBets = sender in superadmins or (sender in admins and isMarathonChannel)
@@ -4099,26 +4147,6 @@ class NepBot(NepBotClass):
                                     self.message('#' + winnerName,
                                                  "You won a %s from the bet in %s's channel. Redeem it in any chat with !redeem %s" % whisperArgs,
                                                  True)
-
-                        cur.close()
-                        return
-                    elif subcmd == "packs":
-                        # check any packs they might have left to claim
-                        cur = db.cursor()
-                        cur.execute(
-                            "SELECT token, COUNT(*) FROM tokens WHERE claimable = 1 AND bet_prize = 1 AND only_redeemable_by = %s GROUP BY token",
-                            [tags['user-id']])
-                        prizes = cur.fetchall()
-
-                        if len(prizes) > 0:
-                            prizeStr = ", ".join("%s%s (!redeem %s)" % (
-                                betPrizeNames[row[0]], " x%d" % row[1] if row[1] > 1 else "", row[0]) for row in prizes)
-                            self.message(channel, "%s, you have the following unclaimed bet prizes: %s" % (
-                                tags['display-name'], prizeStr), isWhisper)
-                        else:
-                            self.message(channel,
-                                         "%s, you have no unclaimed bet prizes right now. Participate in more bets to earn free packs!" %
-                                         tags['display-name'], isWhisper)
 
                         cur.close()
                         return
