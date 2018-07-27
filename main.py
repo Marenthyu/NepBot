@@ -1438,8 +1438,9 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                         [(boosterid, card) for card in cards])
 
         # alerts
+        alertname = display_name if display_name.lower() == username.lower() else "%s (%s)" % (display_name, username)
         for w in alertwaifus:
-            threading.Thread(target=sendDrawAlert, args=(channel, w, str(display_name))).start()
+            threading.Thread(target=sendDrawAlert, args=(channel, w, alertname)).start()
 
         return boosterid
 
@@ -4209,7 +4210,7 @@ class NepBot(NepBotClass):
                                     if abs(winner["timedelta"]) < 10:
                                         booster = config["almostExactBooster"]
                                     giveFreeBooster(winner["id"], booster)
-                                    msg = "You won a %s booster from the bet in %s's channel. Open it in any chat with !freepacks open %s ." % (booster, channel[1:], booster)
+                                    msg = "You won a %s booster from the bet in %s's channel. Open it in any chat with !freepacks open %s" % (booster, channel[1:], booster)
                                     prizeStrings.append("%s - %s pack" % (winner["name"], booster))
                                     cur.execute("UPDATE placed_bets SET prizePack = %s WHERE betid = %s AND userid = %s",
                                             [booster, betRow[0], winner["id"]])
@@ -4223,7 +4224,7 @@ class NepBot(NepBotClass):
                                         pudding *= 0.5
                                     pudding = round(pudding)
                                     addPudding(winner["id"], pudding)
-                                    msg = "You won %d pudding from the bet in %s's channel. Check and spend it with !pudding ." % (pudding, channel[1:])
+                                    msg = "You won %d pudding from the bet in %s's channel. Check and spend it with !pudding" % (pudding, channel[1:])
                                     prizeStrings.append("%s - %d pudding" % (winner["name"], pudding))
                                     cur.execute("UPDATE placed_bets SET prizePudding = %s WHERE betid = %s AND userid = %s",
                                             [pudding, betRow[0], winner["id"]])
@@ -4235,7 +4236,7 @@ class NepBot(NepBotClass):
                             runHours = resultData["result"] / 3600000.0
                             bcPrize = round(max(min(runHours, 5) * 20 + min(max(runHours - 5, 0), 5) * 30 + max(runHours - 10, 0) * 40, maxPrize / 2))
                             prizeStrings.append("%s (broadcaster) - %d pudding" % (channel[1:], bcPrize))
-                            whispers.append((channel, "You were rewarded %d pudding for running your recent bet. Check and spend it with !pudding ." % bcPrize))
+                            whispers.append((channel, "You were rewarded %d pudding for running your recent bet. Check and spend it with !pudding" % bcPrize))
                             # skip using addPudding to save a database lookup
                             cur.execute("UPDATE users SET puddingCurrent = puddingCurrent + %s WHERE name = %s", [bcPrize, channel[1:]])
                             
@@ -4397,9 +4398,9 @@ class NepBot(NepBotClass):
 
                     giveFreeBooster(userData[0], args[1], amount)
                     if amount > 1:
-                        self.message('#%s' % userData[1], "You were given %d free %s packs by an admin. Check them using !freepacks ." % (amount, args[1]), True)
+                        self.message('#%s' % userData[1], "You were given %d free %s packs by an admin. Check them using !freepacks" % (amount, args[1]), True)
                     else:
-                        self.message('#%s' % userData[1], "You were given a free %s pack by an admin. Open it using !freepacks open %s ." % (args[1], args[1]), True)
+                        self.message('#%s' % userData[1], "You were given a free %s pack by an admin. Open it using !freepacks open %s" % (args[1], args[1]), True)
 
                     self.message(channel, "Successfully gave %d %s packs to %s." % (amount, args[1], userData[1]), isWhisper)
                     return
