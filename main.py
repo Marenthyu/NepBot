@@ -4257,6 +4257,41 @@ class NepBot(NepBotClass):
                 else:
                     self.message(channel, "Debug mode is off. Debug command disabled.")
                 return
+            if command == "givefreepack" and sender in superadmins:
+                if len(args) < 2:
+                    self.message(channel, "Usage: !givefreepack <username> <booster name> [<amount>] (default 1)", isWhisper)
+                    return
+                
+                if len(args) >= 3:
+                    try:
+                        amount = int(args[2])
+                    except ValueError:
+                        self.message(channel, "Invalid amount specified.", isWhisper)
+                        return
+                else:
+                    amount = 1
+
+                with db.cursor() as cur:
+                    cur.execute("SELECT id, name FROM users WHERE name = %s", [args[0]])
+                    userData = cur.fetchone()
+                    if userData is None:
+                        self.message(channel, "Invalid username specified.", isWhisper)
+                        return
+
+                    cur.execute("SELECT COUNT(*) FROM boosters WHERE name = %s", [args[1]])
+                    if cur.fetchone()[0] == 0:
+                        self.message(channel, "Invalid booster name specified.", isWhisper)
+                        return
+
+                    giveFreeBooster(userData[0], args[1], amount)
+                    if amount > 1:
+                        self.message('#%s' % userData[1], "You were given %d free %s packs by an admin. Check them using !freepacks ." % (amount, args[1]), True)
+                    else:
+                        self.message('#%s' % userData[1], "You were given a free %s pack by an admin. Open it using !freepacks open %s ." % (args[1], args[1]), True)
+
+                    self.message(channel, "Successfully gave %d %s packs to %s." % (amount, args[1], userData[1]), isWhisper)
+                    return
+                    
             if command == "nepcord":
                 self.message(channel,
                              "To join the discussion in the official Waifu TCG Discord Channel, go to %s/discord" %
