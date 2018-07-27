@@ -3019,47 +3019,50 @@ class NepBot(NepBotClass):
                             waifu["owned"] = " (not dropped yet)"
 
                         # bounty info
-                        with db.cursor() as cur:
-                            cur.execute(
-                                "SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM bounties WHERE waifuid = %s AND status='open'",
-                                [waifu['id']])
-                            allordersinfo = cur.fetchone()
-
-                            if allordersinfo[0] > 0:
-                                cur.execute(
-                                    "SELECT amount FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'",
-                                    [tags['user-id'], waifu['id']])
-                                myorderinfo = cur.fetchone()
-                                minfo = {"count": allordersinfo[0], "highest": allordersinfo[1]}
-                                if myorderinfo is not None:
-                                    minfo["mine"] = myorderinfo[0]
-                                    if myorderinfo[0] == allordersinfo[1]:
-                                        waifu[
-                                            "bountyinfo"] = " {count} current bounties, your bid is highest at {highest} points.".format(
-                                            **minfo)
-                                    else:
-                                        waifu[
-                                            "bountyinfo"] = "{count} current bounties, your bid of {mine} points is lower than the highest at {highest} points.".format(
-                                            **minfo)
-                                else:
-                                    waifu[
-                                        "bountyinfo"] = "{count} current bounties, the highest bid is {highest} points.".format(
-                                        **minfo)
-                            else:
-                                waifu["bountyinfo"] = "No current bounties on this waifu."
-
-                        # last pull
-                        if waifu["pulls"] == 0 or waifu["last_pull"] is None or waifu["base_rarity"] >= int(
-                                config["numNormalRarities"]):
+                        if waifu["base_rarity"] >= int(config["numNormalRarities"]):
+                            waifu["bountyinfo"] = ""
                             waifu["lp"] = ""
                         else:
-                            lpdiff = (current_milli_time() - waifu["last_pull"]) // 86400000
-                            if lpdiff == 0:
-                                waifu["lp"] = " Last pulled less than a day ago."
-                            elif lpdiff == 1:
-                                waifu["lp"] = " Last pulled 1 day ago."
+                            with db.cursor() as cur:
+                                cur.execute(
+                                    "SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM bounties WHERE waifuid = %s AND status='open'",
+                                    [waifu['id']])
+                                allordersinfo = cur.fetchone()
+
+                                if allordersinfo[0] > 0:
+                                    cur.execute(
+                                        "SELECT amount FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'",
+                                        [tags['user-id'], waifu['id']])
+                                    myorderinfo = cur.fetchone()
+                                    minfo = {"count": allordersinfo[0], "highest": allordersinfo[1]}
+                                    if myorderinfo is not None:
+                                        minfo["mine"] = myorderinfo[0]
+                                        if myorderinfo[0] == allordersinfo[1]:
+                                            waifu[
+                                                "bountyinfo"] = " {count} current bounties, your bid is highest at {highest} points.".format(
+                                                **minfo)
+                                        else:
+                                            waifu[
+                                                "bountyinfo"] = "{count} current bounties, your bid of {mine} points is lower than the highest at {highest} points.".format(
+                                                **minfo)
+                                    else:
+                                        waifu[
+                                            "bountyinfo"] = "{count} current bounties, the highest bid is {highest} points.".format(
+                                            **minfo)
+                                else:
+                                    waifu["bountyinfo"] = "No current bounties on this waifu."
+
+                            # last pull
+                            if waifu["pulls"] == 0 or waifu["last_pull"] is None:
+                                waifu["lp"] = ""
                             else:
-                                waifu["lp"] = " Last pulled %d days ago." % lpdiff
+                                lpdiff = (current_milli_time() - waifu["last_pull"]) // 86400000
+                                if lpdiff == 0:
+                                    waifu["lp"] = " Last pulled less than a day ago."
+                                elif lpdiff == 1:
+                                    waifu["lp"] = " Last pulled 1 day ago."
+                                else:
+                                    waifu["lp"] = " Last pulled %d days ago." % lpdiff
 
                         self.message(channel,
                                      '[{id}][{rarity}] {name} from {series} - {image}{owned}. {bountyinfo}{lp}'.format(
