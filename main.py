@@ -903,6 +903,32 @@ def addPoints(userid, amount):
     cur.close()
 
 
+def hasPudding(userid, amount):
+    with db.cursor() as cur:
+        cur.execute("SELECT puddingCurrent, puddingPrevious, puddingExpiring FROM users WHERE id = %s", [userid])
+        pinfo = cur.fetchone()
+        return pinfo is not None and int(sum(pinfo)) >= amount
+
+def addPudding(userid, amount):
+    with db.cursor() as cur:
+        cur.execute("UPDATE users SET puddingCurrent = puddingCurrent + %s WHERE id = %s", [amount, userid])
+
+def takePudding(userid, amount):
+    with db.cursor() as cur:
+        cur.execute("SELECT puddingCurrent, puddingPrevious, puddingExpiring FROM users WHERE id = %s", [userid])
+        pinfo = cur.fetchone()
+        if pinfo is None or int(sum(pinfo)) < amount:
+            raise ValueError()
+        # take from the pudding starting from the expiring amount first
+        idx = 2
+        while amount > 0:
+            new_val = max(int(pinfo[idx]) - amount, 0)
+            amount -= int(pinfo[idx]) - new_val
+            pinfo[idx] = new_val
+            idx -= 1
+        # save the updated values
+        cur.execute("UPDATE users SET puddingCurrent = %s, puddingPrevious = %s, puddingExpiring = %s WHERE id = %s", pinfo + [userid])
+
 def maxWaifuID():
     cur = db.cursor()
     cur.execute("SELECT MAX(id) FROM waifus")
@@ -1680,6 +1706,23 @@ class NepBot(NepBotClass):
                         config["last_weighting_update"] = str(current_milli_time())
                         cur.execute("UPDATE config SET value = %s WHERE name = 'last_weighting_update'",
                                     [config["last_weighting_update"]])
+
+                    # pudding expiry?
+                    now = datetime.datetime.now()
+                    ymdNow = now.strftime("%Y-%m-%d")
+                    if ymdNow != config["last_pudding_check"]:
+                        config["last_pudding_check"] = ymdNow
+                        cur.execute("UPDATE config SET value = %s WHERE name = 'last_pudding_check'", [ymdNow])
+                        
+                        if now.day == 1:
+                            # move pudding down a category, alert people with expiring pudding
+                            cur.execute("UPDATE users SET puddingExpiring = puddingPrevious, puddingPrevious = puddingCurrent, puddingCurrent = 0")
+                            cur.execute("SELECT name, puddingExpiring FROM users WHERE puddingExpiring > 0")
+                            for userRow in cur.fetchall():
+                                self.message("#%s" % userRow[0], "You have %d pudding expiring on the 8th of this month. !pudding to see your balance and to spend it." % userRow[1], True)
+                        elif now.day == 8:
+                            # actually expire pudding from 2 months ago
+                            cur.execute("UPDATE users SET puddingExpiring = 0")
             logger.debug("Checking live status of channels...")
             checkAndRenewAppAccessToken()
 
