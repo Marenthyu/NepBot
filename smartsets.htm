@@ -112,7 +112,8 @@
         for (set of data.sets) {
             title = user !== "null" ? set.name + " (" + set.cardsOwned + "/" + set.totalCards + ")" : set.name;
             buttons += buttonTemplate.replace(/{ID}/g, set.id).replace(/{UNIQ}/g, uniqid).replace(/{TITLE}/g, title);
-            setbox = '<div class="collapse" id="set' + set.id + '-' + uniqid + '"><div class="card card-body" style="display: inline-block;">Reward: ' + set.reward + '<br />';
+            reward = set.rewardPudding + ' pudding';
+            setbox = '<div class="collapse" id="set' + set.id + '-' + uniqid + '"><div class="card card-body" style="display: inline-block;">Reward: ' + reward + '<br />';
             for (row of set.cards) {
                 let card = cardtemplate;
                 card = card.replace(/{ID}/g, row.id.toString());

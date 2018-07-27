@@ -255,23 +255,23 @@ function smartsetsdata(req, res, query) {
     let sets_query = "";
     let parameter = "";
     if (query.type === 'setname') {
-        sets_query = "SELECT id, name, reward FROM sets WHERE name LIKE (?) AND claimed_by IS NULL";
+        sets_query = "SELECT id, name, reward, rewardPudding FROM sets WHERE name LIKE (?) AND claimed_by IS NULL";
         parameter = "%" + query.q + "%";
     }
     else if (query.type === 'waifuname') {
-        sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.name LIKE(?) AND claimed_by IS NULL";
+        sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward, sets.rewardPudding FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.name LIKE(?) AND claimed_by IS NULL";
         parameter = "%" + query.q + "%";
     }
     else if (query.type === 'waifuseries') {
-        sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.series LIKE(?) AND claimed_by IS NULL";
+        sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward, sets.rewardPudding FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.series LIKE(?) AND claimed_by IS NULL";
         parameter = "%" + query.q + "%";
     }
     else if (query.type === 'progress') {
-        sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward FROM set_cards JOIN sets ON set_cards.setID = sets.id LEFT JOIN has_waifu ON set_cards.cardID = has_waifu.waifuid JOIN users ON has_waifu.userid = users.id WHERE users.name = ? AND claimed_by IS NULL";
+        sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward, sets.rewardPudding FROM set_cards JOIN sets ON set_cards.setID = sets.id LEFT JOIN has_waifu ON set_cards.cardID = has_waifu.waifuid JOIN users ON has_waifu.userid = users.id WHERE users.name = ? AND claimed_by IS NULL";
         parameter = query.user;
     }
     else if (query.type === 'allsets') {
-        sets_query = "SELECT id, name, reward FROM sets WHERE claimed_by IS NULL";
+        sets_query = "SELECT id, name, reward, rewardPudding FROM sets WHERE claimed_by IS NULL";
         parameter = null;
     }
     else {
@@ -290,6 +290,7 @@ function smartsetsdata(req, res, query) {
                     id: row.id,
                     name: row.name,
                     reward: row.reward,
+                    rewardPudding: row.rewardPudding,
                     totalCards: 0,
                     cardsOwned: 0,
                     cards: []
@@ -347,7 +348,7 @@ function smartsetsdata(req, res, query) {
 function claimedsets(req, res, query) {
     con.query("SELECT setID, sets.name as setNam, waifus.id as waifuID, " +
         "waifus.Name as waifuName, waifus.base_rarity as waifuRarity, waifus.image as image, waifus.series as waifuSeries, " +
-        "sort_index, sets.reward as setReward, users.name as userName " +
+        "sort_index, sets.reward as setReward, sets.rewardPudding as setRewardPudding, users.name as userName " +
         "FROM set_cards " +
         "JOIN sets ON set_cards.setID = sets.id " +
         "JOIN waifus ON cardID = waifus.id " +
@@ -357,7 +358,7 @@ function claimedsets(req, res, query) {
         function (err, result) {
             if (err) throw err;
             con.query("SELECT setID, rarity_sets.name as setNam, waifus.id as waifuID, waifus.Name as waifuName, waifus.base_rarity as waifuRarity, waifus.image as image, waifus.series as waifuSeries," +
-                "rarity_sets.grouping as sort_index, rarity_sets.reward as setReward, users.name as userName " +
+                "rarity_sets.grouping as sort_index, rarity_sets.reward as setReward, 0 as setRewardPudding, users.name as userName " +
                 "FROM rarity_sets_cards JOIN rarity_sets ON rarity_sets_cards.setID = rarity_sets.id " +
                 "JOIN waifus ON cardID = waifus.id " +
                 "JOIN users ON rarity_sets.claimed_by = users.id " +
@@ -414,7 +415,13 @@ function claimedsets(req, res, query) {
                         res.write(setsethead);
                         res.write(row.setID + "");
                         res.write(setsetbetween);
-                        res.write("Reward: " + row.setReward + " - Claimed by: " + row.userName + "<br/>");
+                        if(row.setReward > 0) {
+                            res.write("Reward: " + row.setReward + " points");
+                        }
+                        else {
+                            res.write("Reward: " + row.setRewardPudding + " pudding");
+                        }
+                        res.write(" - Claimed by: " + row.userName + "<br/>");
                     }
                     res.write(setimagehead);
                     res.write(white);

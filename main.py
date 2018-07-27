@@ -785,7 +785,7 @@ def getWaifuRepresentationString(waifuid, baserarity=None, cardrarity=None, waif
 
     return retStr
 
-def sendSetAlert(channel, user, name, waifus, points, discord=True):
+def sendSetAlert(channel, user, name, waifus, pudding, discord=True):
     logger.info("Alerting for set claim %s", name)
     with busyLock:
         with db.cursor() as cur:
@@ -811,7 +811,7 @@ def sendSetAlert(channel, user, name, waifus, points, discord=True):
         {
             "type": "rich",
             "title": "{user} completed the set {name}!".format(user=str(user), name=name),
-            "description": "They gathered {waifus} and received {points} points as their reward.".format(waifus=naturalJoinNames(waifus), points=str(points)),
+            "description": "They gathered {waifus} and received {pudding} pudding as their reward.".format(waifus=naturalJoinNames(waifus), pudding=str(pudding)),
             "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
             "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"]),
             "footer": {
@@ -4332,18 +4332,18 @@ class NepBot(NepBotClass):
 
                     # normal sets
                     cur.execute(
-                        "SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets WHERE sets.claimed_by IS NULL AND sets.id NOT IN (SELECT DISTINCT setID FROM set_cards LEFT OUTER JOIN (SELECT * FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.id = %s) AS a ON waifuid = cardID JOIN sets ON set_cards.setID = sets.id JOIN waifus ON cardID = waifus.id WHERE a.name IS NULL)",
+                        "SELECT DISTINCT sets.id, sets.name, sets.rewardPudding FROM sets WHERE sets.claimed_by IS NULL AND sets.id NOT IN (SELECT DISTINCT setID FROM set_cards LEFT OUTER JOIN (SELECT * FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.id = %s) AS a ON waifuid = cardID JOIN sets ON set_cards.setID = sets.id JOIN waifus ON cardID = waifus.id WHERE a.name IS NULL)",
                         [tags["user-id"]])
                     rows = cur.fetchall()
                     for row in rows:
                         claimed += 1
                         cur.execute("UPDATE sets SET claimed_by = %s, claimed_at = %s WHERE sets.id = %s",
                                     [tags["user-id"], current_milli_time(), row[0]])
-                        addPoints(tags["user-id"], int(row[2]))
+                        addPudding(tags["user-id"], int(row[2]))
                         badgeid = addBadge(row[1], config["setBadgeDescription"], config["setBadgeDefaultImage"])
                         giveBadge(tags['user-id'], badgeid)
                         self.message(channel,
-                                     "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(
+                                     "Successfully claimed the Set {set} and rewarded {user} with {reward} pudding!".format(
                                          set=row[1], user=tags["display-name"], reward=row[2]), isWhisper)
                         cur.execute(
                             "SELECT waifus.name FROM set_cards INNER JOIN waifus ON set_cards.cardID = waifus.id WHERE setID = %s",
