@@ -118,6 +118,7 @@ superadmins = []
 activitymap = {}
 blacklist = []
 config = {}
+packAmountRewards = {}
 emotewaremotes = []
 revrarity = {}
 visiblepacks = ""
@@ -136,7 +137,7 @@ waifu_regex = None
 
 
 def loadConfig():
-    global revrarity, blacklist, visiblepacks, admins, superadmins, validalertconfigvalues, waifu_regex, emotewaremotes, discordhooks
+    global revrarity, blacklist, visiblepacks, admins, superadmins, validalertconfigvalues, waifu_regex, emotewaremotes, discordhooks, packAmountRewards
     with db.cursor() as curg:
         curg.execute("SELECT * FROM config")
         logger.info("Importing config from database")
@@ -186,6 +187,15 @@ def loadConfig():
             curg.execute("SELECT url FROM discordHooks ORDER BY priority DESC")
             discrows = curg.fetchall()
             discordhooks = [row[0] for row in discrows]
+
+        # pack amount rewards
+        packAmountRewards = {}
+        curg.execute("SELECT boostername, de_amount, reward_booster FROM pack_amount_rewards")
+        rewardRows = curg.fetchall()
+        for row in rewardRows:
+            if row[0] not in packAmountRewards:
+                packAmountRewards[row[0]] = {}
+            packAmountRewards[row[0]][int(row[1])] = row[2]
 
 
 def checkAndRenewAppAccessToken():
@@ -1256,7 +1266,7 @@ def addSpending(userid, amount):
         cur.execute("UPDATE users SET spending=spending + %s WHERE id = %s", [amount, userid])
 
 
-def openBooster(userid, username, channel, isWhisper, packname, buying=True):
+def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True):
     with db.cursor() as cur:
         rarityColumns = ", ".join(
             "rarity" + str(i) + "UpgradeChance" for i in range(int(config["numNormalRarities"]) - 1))
@@ -1316,6 +1326,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         cards = []
         alertwaifus = []
         uniques = getUniqueCards(userid)
+        totalDE = 0
         for i in range(numCards - tokensDropped):
             # scale chances of the card appropriately
             currentChances = list(normalChances)
@@ -1360,6 +1371,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
 
             # check its rarity and adjust scaling data
             waifu = getWaifuById(card)
+            totalDE += int(config["rarity%dValue" % waifu['base_rarity']])
 
             if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                 alertwaifus.append(waifu)
@@ -1377,6 +1389,13 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         recordPullMetrics(*cards)
         addSpending(userid, cost)
 
+        # did they win a free amount-based reward pack?
+        if packname in packAmountRewards and totalDE in packAmountRewards[packname]:
+            reward = packAmountRewards[packname][totalDE]
+            giveFreeBooster(userid, reward)
+            msgArgs = (reward, packname, totalDE, reward)
+            bot.message("#%s" % username, "You won a free %s pack due to getting a %s pack worth %d points. Open it with !freepacks open %s" % msgArgs, True)
+
         # pity pull data update
         cur.execute("UPDATE users SET pullScalingData = %s, eventTokens = eventTokens + %s WHERE id = %s",
                     [":".join(str(round(n)) for n in scalingData), tokensDropped, userid])
@@ -1391,7 +1410,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
 
         # alerts
         for w in alertwaifus:
-            threading.Thread(target=sendDrawAlert, args=(channel, w, str(username))).start()
+            threading.Thread(target=sendDrawAlert, args=(channel, w, str(display_name))).start()
 
         return boosterid
 
@@ -2205,7 +2224,7 @@ class NepBot(NepBotClass):
                             
                     if rewardInfo[3] is not None:
                         try:
-                            packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, rewardInfo[3], False)
+                            packid = openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, rewardInfo[3], False)
                             if checkHandUpgrade(tags['user-id']):
                                 messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
                             self.message(channel, "%s, you got your daily free reward: %sa booster - %s/booster?user=%s" % (tags['display-name'], pointsPrefix, config['siteHost'], sender), isWhisper)
@@ -2539,7 +2558,7 @@ class NepBot(NepBotClass):
 
                     packname = args[1].lower()
                     try:
-                        openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, True)
+                        openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, packname, True)
                         if checkHandUpgrade(tags['user-id']):
                             messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
 
@@ -3259,7 +3278,7 @@ class NepBot(NepBotClass):
                         return
 
                     try:
-                        packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3],
+                        packid = openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, redeemdata[3],
                                              False)
                         if checkHandUpgrade(tags['user-id']):
                             messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
@@ -3727,7 +3746,7 @@ class NepBot(NepBotClass):
 
                         # all good
                         try:
-                            packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, args[1], False)
+                            packid = openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, args[1], False)
                             if checkHandUpgrade(tags['user-id']):
                                 messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
                             cur.execute("UPDATE freepacks SET remaining = remaining - 1 WHERE userid = %s AND boostername = %s", [tags['user-id'], args[1]])
