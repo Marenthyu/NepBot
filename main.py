@@ -1395,6 +1395,12 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
 
         return boosterid
 
+def giveFreeBooster(userid, boostername, amount=1):
+    with db.cursor() as cur:
+        cur.execute("INSERT INTO freepacks (userid, boostername, remaining, total) VALUES(%s, %s, %s, %s)"
+        + " ON DUPLICATE KEY UPDATE remaining = remaining + %s, total = total + %s",
+        [userid, boostername, amount, amount, amount, amount])
+
 
 def infoCommandAvailable(userid, username, displayName, bot, channel, isWhisper):
     with db.cursor() as cur:
@@ -1955,7 +1961,7 @@ class NepBot(NepBotClass):
 
         activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup",
                           "alerts", "redeem", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway",
-                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners", "freebie", "godimage"]
+                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners", "freebie", "godimage", "freepacks"]
 
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
@@ -4097,15 +4103,12 @@ class NepBot(NepBotClass):
                                     if isMarathonChannel and prizeTier < 5:
                                         prizeTier += 1
 
-                                prizeToken = config["betPrizeTier%dToken" % prizeTier]
                                 prizePack = config["betPrizeTier%dBooster" % prizeTier]
 
-                                prizes[prizeToken].append(winner["name"])
-                                cur.execute(
-                                    "INSERT INTO tokens (token, boostername, claimable, bet_prize, type, only_redeemable_by) VALUES(%s, %s, 1, 1, 'single', %s)",
-                                    [prizeToken, prizePack, winner["id"]])
-                                cur.execute("UPDATE placed_bets SET prizeToken = %s WHERE betid = %s AND userid = %s",
-                                            [prizeToken, betRow[0], winner["id"]])
+                                prizes[prizePack].append(winner["name"])
+                                giveFreeBooster(winner["id"], prizePack)
+                                cur.execute("UPDATE placed_bets SET prizePack = %s WHERE betid = %s AND userid = %s",
+                                            [prizePack, betRow[0], winner["id"]])
 
                             # broadcaster prize
                             # run length in hours * 500, rounded to nearest 50
@@ -4123,8 +4126,8 @@ class NepBot(NepBotClass):
                                 [bcPrize, payoutTime, betRow[0]])
 
                             messages = ["Paid out the following prizes: "]
-                            for prizeToken in prizes:
-                                msg = betPrizeNames[prizeToken] + " - " + ", ".join(prizes[prizeToken]) + "; "
+                            for prizePack in prizes:
+                                msg = prizePack + " pack - " + ", ".join(prizes[prizePack]) + "; "
                                 if len(messages[-1] + msg) > 400:
                                     messages.append(msg)
                                 else:
@@ -4141,11 +4144,11 @@ class NepBot(NepBotClass):
 
                             # alert each person individually as well
                             # sent after the messages to the channel itself deliberately
-                            for prizeToken in prizes:
-                                for winnerName in prizes[prizeToken]:
-                                    whisperArgs = (betPrizeNames[prizeToken], channel[1:], prizeToken)
+                            for prizePack in prizes:
+                                for winnerName in prizes[prizePack]:
+                                    whisperArgs = (prizePack, channel[1:], prizePack)
                                     self.message('#' + winnerName,
-                                                 "You won a %s from the bet in %s's channel. Redeem it in any chat with !redeem %s" % whisperArgs,
+                                                 "You won a %s pack from the bet in %s's channel. Open it in any chat with !freepacks open %s" % whisperArgs,
                                                  True)
 
                         cur.close()
