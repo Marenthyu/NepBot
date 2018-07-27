@@ -2269,10 +2269,7 @@ class NepBot(NepBotClass):
                         return
                         
                     # can they take the reward at the current time?
-                    if rewardInfo[3] is not None and hasPack:
-                        self.message(channel, "%s, your next reward is a booster and you have one open!" % tags['display-name'], isWhisper)
-                        return
-                    elif (rewardInfo[1] is not None or rewardInfo[2] is not None) and hasPack and not spaceInHand:
+                    if (rewardInfo[1] is not None or rewardInfo[2] is not None) and hasPack and not spaceInHand:
                         self.message(channel, "%s, your hand is full and you have a booster open!" % tags['display-name'], isWhisper)
                         return
                         
@@ -2318,14 +2315,19 @@ class NepBot(NepBotClass):
                        
                             
                     if rewardInfo[3] is not None:
-                        try:
-                            packid = openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, rewardInfo[3], False)
-                            if checkHandUpgrade(tags['user-id']):
-                                messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
-                            self.message(channel, "%s, you got your daily free reward: %sa booster - %s/booster?user=%s" % (tags['display-name'], pointsPrefix, config['siteHost'], sender), isWhisper)
-                        except InvalidBoosterException:
-                            self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
-                            return
+                        if hasPack:
+                            # send the pack to freepacks
+                            giveFreeBooster(tags['user-id'], rewardInfo[3])
+                            self.message(channel, "%s, you got your daily free reward: %sa %s booster (sent to !freepacks)" % (tags['display-name'], pointsPrefix, rewardInfo[3]), isWhisper)
+                        else:
+                            try:
+                                packid = openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, rewardInfo[3], False)
+                                if checkHandUpgrade(tags['user-id']):
+                                    messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
+                                self.message(channel, "%s, you got your daily free reward: %sa %s booster - %s/booster?user=%s" % (tags['display-name'], pointsPrefix, rewardInfo[3], config['siteHost'], sender), isWhisper)
+                            except InvalidBoosterException:
+                                self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
+                                return
 
                     cur.execute("UPDATE users SET lastFree = %s, rewardSeqSeed = %s, rewardSeqIndex = %s WHERE id = %s", [current_milli_time(), seed, index + 1, tags['user-id']])
                     return
