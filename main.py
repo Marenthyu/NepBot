@@ -2070,7 +2070,8 @@ class NepBot(NepBotClass):
     def message(self, channel, message, isWhisper=False):
         logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
         if isWhisper:
-            super().message("#jtv", "/w " + str(channel).replace("#", "") + " " + str(message))
+            pass
+            #super().message("#jtv", "/w " + str(channel).replace("#", "") + " " + str(message))
         elif not silence:
             super().message(channel, message)
         else:
@@ -3895,8 +3896,6 @@ class NepBot(NepBotClass):
                     return
                 else:
                     subcmd = str(args[0]).lower()
-                    betPrizeNames = {config["betPrizeTier%dToken" % tier]: config["betPrizeTier%dName" % tier] for tier
-                                     in range(1, 8)}
 
                     if canManageBets and subcmd == "open":
                         if openBet(channel):
@@ -4197,45 +4196,50 @@ class NepBot(NepBotClass):
                                 return
 
                             # calculate first run of prizes
-                            prizes = defaultdict(list)
+                            minPrize = int(config["betMinPrize"])
+                            maxPrize = int(config["betMaxPrize"]) * min(1 + numEntries/10, 2)
+                            canWinBigPrizes = resultData["result"] >= 1800000
+                            whispers = []
+                            prizeStrings = []
                             place = 0
                             for winner in resultData["winners"]:
                                 place += 1
 
-                                if abs(winner["timedelta"]) < 10 and resultData["result"] >= 1800000:
-                                    prizeTier = 7
-                                elif abs(winner["timedelta"]) < 1000 and resultData["result"] >= 1800000:
-                                    prizeTier = 6
+                                if abs(winner["timedelta"]) < 1000 and canWinBigPrizes:
+                                    booster = config["sameSecondBooster"]
+                                    if abs(winner["timedelta"]) < 10:
+                                        booster = config["almostExactBooster"]
+                                    giveFreeBooster(winner["id"], booster)
+                                    msg = "You won a %s booster from the bet in %s's channel. Open it in any chat with !freepacks open %s ." % (booster, channel[1:], booster)
+                                    prizeStrings.append("%s - %s pack" % (winner["name"], booster))
+                                    cur.execute("UPDATE placed_bets SET prizePack = %s WHERE betid = %s AND userid = %s",
+                                            [booster, betRow[0], winner["id"]])
                                 else:
-                                    prizeTier = 1
-
-                                    if place == 1:
-                                        prizeTier += 1
-                                    if place <= 3 and numEntries >= 10:
-                                        prizeTier += 1
-                                    if place <= numEntries // 2:
-                                        prizeTier += 1
-                                    if abs(winner["timedelta"]) < 60000 and resultData["result"] >= 3600000:
-                                        prizeTier += 1
-                                    if isMarathonChannel and prizeTier < 5:
-                                        prizeTier += 1
-
-                                prizePack = config["betPrizeTier%dBooster" % prizeTier]
-
-                                prizes[prizePack].append(winner["name"])
-                                giveFreeBooster(winner["id"], prizePack)
-                                cur.execute("UPDATE placed_bets SET prizePack = %s WHERE betid = %s AND userid = %s",
-                                            [prizePack, betRow[0], winner["id"]])
+                                    pudding = minPrize + (maxPrize - minPrize) * (numEntries - place) / (numEntries - 1)
+                                    if isMarathonChannel:
+                                        pudding *= 1.5
+                                    if canWinBigPrizes and abs(winner["timedelta"]) < resultData["result"] / 120:
+                                        pudding *= 1.5
+                                    if winner["bet"] < resultData["result"] / 2 or winner["bet"] > resultData["result"] * 2:
+                                        pudding *= 0.5
+                                    pudding = round(pudding)
+                                    addPudding(winner["id"], pudding)
+                                    msg = "You won %d pudding from the bet in %s's channel. Check and spend it with !pudding ." % (pudding, channel[1:])
+                                    prizeStrings.append("%s - %d pudding" % (winner["name"], pudding))
+                                    cur.execute("UPDATE placed_bets SET prizePudding = %s WHERE betid = %s AND userid = %s",
+                                            [pudding, betRow[0], winner["id"]])
+                                whispers.append(('#' + winner["name"], msg))
 
                             # broadcaster prize
-                            # run length in hours * 500, rounded to nearest 50
+                            # run length in hours * 20, rounded to nearest whole pudding
                             # scales up a bit as the hours go on
                             runHours = resultData["result"] / 3600000.0
-                            bcPrize = min(runHours, 5) * 500 + min(max(runHours - 5, 0), 5) * 750 + max(runHours - 10,
-                                                                                                        0) * 1000
-                            bcPrize = max(int(round(bcPrize / 50.0) * 50), 50)
-
-                            cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
+                            bcPrize = round(max(min(runHours, 5) * 20 + min(max(runHours - 5, 0), 5) * 30 + max(runHours - 10, 0) * 40, maxPrize / 2))
+                            prizeStrings.append("%s (broadcaster) - %d pudding" % (channel[1:], bcPrize))
+                            whispers.append((channel, "You were rewarded %d pudding for running your recent bet. Check and spend it with !pudding ." % bcPrize))
+                            # skip using addPudding to save a database lookup
+                            cur.execute("UPDATE users SET puddingCurrent = puddingCurrent + %s WHERE name = %s", [bcPrize, channel[1:]])
+                            
                             # start cooldown for next bet payout at max(endTime, lastPayout + 22h)
                             payoutTime = max(betRow[2], lastPayout + 79200000)
                             cur.execute(
@@ -4243,30 +4247,22 @@ class NepBot(NepBotClass):
                                 [bcPrize, payoutTime, betRow[0]])
 
                             messages = ["Paid out the following prizes: "]
-                            for prizePack in prizes:
-                                msg = prizePack + " pack - " + ", ".join(prizes[prizePack]) + "; "
+                            first = True
+                            for prize in prizeStrings:
+                                msg = prize if first else "; " + prize
                                 if len(messages[-1] + msg) > 400:
-                                    messages.append(msg)
+                                    messages.append(prize)
                                 else:
                                     messages[-1] += msg
-
-                            msgBC = "{points} points - {name} (broadcaster)".format(name=channel[1:], points=bcPrize)
-                            if len(messages[-1] + msgBC) > 400:
-                                messages.append(msgBC)
-                            else:
-                                messages[-1] += msgBC
+                                first = False
 
                             for message in messages:
                                 self.message(channel, message, isWhisper)
 
                             # alert each person individually as well
                             # sent after the messages to the channel itself deliberately
-                            for prizePack in prizes:
-                                for winnerName in prizes[prizePack]:
-                                    whisperArgs = (prizePack, channel[1:], prizePack)
-                                    self.message('#' + winnerName,
-                                                 "You won a %s pack from the bet in %s's channel. Open it in any chat with !freepacks open %s" % whisperArgs,
-                                                 True)
+                            for whisper in whispers:
+                                self.message(whisper[0], whisper[1], True)
 
                         cur.close()
                         return
