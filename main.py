@@ -903,30 +903,33 @@ def addPoints(userid, amount):
     cur.close()
 
 
-def hasPudding(userid, amount):
+def getPuddingBalance(userid):
     with db.cursor() as cur:
         cur.execute("SELECT puddingCurrent, puddingPrevious, puddingExpiring FROM users WHERE id = %s", [userid])
         pinfo = cur.fetchone()
-        return pinfo is not None and int(sum(pinfo)) >= amount
+        return None if pinfo is None else [int(n) for n in pinfo]
+
+def hasPudding(userid, amount):
+    bal = getPuddingBalance(userid)
+    return bal is not None and sum(bal) >= amount
 
 def addPudding(userid, amount):
     with db.cursor() as cur:
         cur.execute("UPDATE users SET puddingCurrent = puddingCurrent + %s WHERE id = %s", [amount, userid])
 
 def takePudding(userid, amount):
+    pinfo = getPuddingBalance(userid)
+    if pinfo is None or sum(pinfo) < amount:
+        raise ValueError()
+    # take from the pudding starting from the expiring amount first
+    idx = 2
+    while amount > 0:
+        new_val = max(pinfo[idx] - amount, 0)
+        amount -= pinfo[idx] - new_val
+        pinfo[idx] = new_val
+        idx -= 1
+    # save the updated values
     with db.cursor() as cur:
-        cur.execute("SELECT puddingCurrent, puddingPrevious, puddingExpiring FROM users WHERE id = %s", [userid])
-        pinfo = cur.fetchone()
-        if pinfo is None or int(sum(pinfo)) < amount:
-            raise ValueError()
-        # take from the pudding starting from the expiring amount first
-        idx = 2
-        while amount > 0:
-            new_val = max(int(pinfo[idx]) - amount, 0)
-            amount -= int(pinfo[idx]) - new_val
-            pinfo[idx] = new_val
-            idx -= 1
-        # save the updated values
         cur.execute("UPDATE users SET puddingCurrent = %s, puddingPrevious = %s, puddingExpiring = %s WHERE id = %s", pinfo + [userid])
 
 def maxWaifuID():
@@ -1711,6 +1714,7 @@ class NepBot(NepBotClass):
                     now = datetime.datetime.now()
                     ymdNow = now.strftime("%Y-%m-%d")
                     if ymdNow != config["last_pudding_check"]:
+                        logger.debug("Processing pudding expiry...")
                         config["last_pudding_check"] = ymdNow
                         cur.execute("UPDATE config SET value = %s WHERE name = 'last_pudding_check'", [ymdNow])
                         
@@ -2154,12 +2158,54 @@ class NepBot(NepBotClass):
                                          **msgArgs), isWhisper)
                 return
             if command == "points":
-                # print("Checking points for " + sender)
-                cur = db.cursor()
-                cur.execute("SELECT points FROM users WHERE id = %s", [tags['user-id']])
-                self.message(channel, str(tags['display-name']) + ", you have " + str(cur.fetchone()[0]) + " points!",
-                             isWhisper=isWhisper)
-                cur.close()
+                with db.cursor() as cur:
+                    cur.execute("SELECT points FROM users WHERE id = %s", [tags['user-id']])
+                    points = cur.fetchone()[0]
+                    pudding = sum(getPuddingBalance(tags['user-id']))
+                    self.message(channel, "%s, you have %d points and %d pudding!" % (tags['display-name'], points, pudding), isWhisper)
+                    return
+            if command == "pudding":
+                subcmd = "" if len(args) < 1 else args[0].lower()
+                if subcmd == "booster":
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !pudding booster <name>", isWhisper)
+                        return
+                    # check that the pack is actually buyable
+                    with db.cursor() as cur:
+                        cur.execute("SELECT name, cost FROM boosters WHERE name = %s AND buyable = 1", [args[1]])
+                        booster = cur.fetchone()
+                        if booster is None:
+                            self.message(channel, "Invalid booster specified.", isWhisper)
+                            return
+                        cost = math.ceil(int(booster[1])/int(config["puddingExchangeRate"]))
+                        if not hasPudding(tags['user-id'], cost):
+                            self.message(channel, "%s, you can't afford a %s booster. They cost %d pudding." % (tags['display-name'], booster[0], cost), isWhisper)
+                            return
+                        takePudding(tags['user-id'], cost)
+                        try:
+                            openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, booster[0])
+                            if checkHandUpgrade(tags['user-id']):
+                                messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
+                            self.message(channel, "%s, you open a %s booster for %d pudding: %s/booster?user=%s" % (tags['display-name'], booster[0], cost, config["siteHost"], sender), isWhisper)
+                        except InvalidBoosterException:
+                            self.message(channel,
+                                        "Go tell an admin that this booster type is broken.",
+                                        isWhisper)
+                            return
+                elif subcmd == "list":
+                    with db.cursor() as cur:
+                        cur.execute("SELECT name, cost FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
+                        boosters = cur.fetchall()
+                        boosterInfo = ", ".join("%s / %d pudding" % (row[0], math.ceil(int(row[1])/int(config["puddingExchangeRate"]))) for row in boosters)
+                        self.message(channel, "Current buyable packs: %s. !pudding booster <name> to buy a booster with pudding." % boosterInfo, isWhisper)
+                else:
+                    # base: show pudding balance broken down
+                    pudding = getPuddingBalance(tags['user-id'])
+                    if sum(pudding) == 0:
+                        self.message(channel, "%s, you don't currently have any pudding. You can earn some by participating in bets or completing sets." % tags['display-name'], isWhisper)
+                    else:
+                        msgArgs = (tags['display-name'], sum(pudding), pudding[0], pudding[1], pudding[2])
+                        self.message(channel, "%s, you have %d total pudding: %d earned this month, %d earned last month, %d expiring soon. !pudding list to see what boosters you can buy, !pudding booster <name> to buy a booster with pudding." % msgArgs, isWhisper)
                 return
             if command == "freewaifu" or command == "freebie":
                 # print("Checking free waifu egliability for " + str(sender))
