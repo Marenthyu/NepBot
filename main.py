@@ -2070,8 +2070,7 @@ class NepBot(NepBotClass):
     def message(self, channel, message, isWhisper=False):
         logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
         if isWhisper:
-            pass
-            #super().message("#jtv", "/w " + str(channel).replace("#", "") + " " + str(message))
+            super().message("#jtv", "/w " + str(channel).replace("#", "") + " " + str(message))
         elif not silence:
             super().message(channel, message)
         else:
