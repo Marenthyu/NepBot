@@ -1713,7 +1713,7 @@ class NepBot(NepBotClass):
                     # pudding expiry?
                     now = datetime.datetime.now()
                     ymdNow = now.strftime("%Y-%m-%d")
-                    if ymdNow != config["last_pudding_check"]:
+                    if ymdNow > config["last_pudding_check"]:
                         logger.debug("Processing pudding expiry...")
                         config["last_pudding_check"] = ymdNow
                         cur.execute("UPDATE config SET value = %s WHERE name = 'last_pudding_check'", [ymdNow])
@@ -2493,7 +2493,7 @@ class NepBot(NepBotClass):
             if command == "booster":
                 if len(args) < 1:
                     self.message(channel,
-                                 "Usage: !booster buy <%s> OR !booster select <take/disenchant> (for each waifu) OR !booster show" % visiblepacks,
+                                 "Usage: !booster list OR !booster buy <%s> OR !booster select <take/disenchant> (for each waifu) OR !booster show" % visiblepacks,
                                  isWhisper=isWhisper)
                     return
 
@@ -2633,6 +2633,15 @@ class NepBot(NepBotClass):
                                 [current_milli_time(), boosterinfo[0]])
                     cur.close()
                     return
+
+                if cmd == "list":
+                    with db.cursor() as cur:
+                        cur.execute("SELECT name, cost FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
+                        boosters = cur.fetchall()
+                        boosterInfo = ", ".join("%s / %d points" % (row[0], row[1]) for row in boosters)
+                        self.message(channel, "Current buyable packs: %s. !booster buy <name> to buy a booster with points." % boosterInfo, isWhisper)
+                    return
+                
                 if cmd == "buy":
                     if boosterinfo is not None:
                         self.message(channel,
