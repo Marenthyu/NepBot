@@ -2179,6 +2179,16 @@ class NepBot(NepBotClass):
                         if booster is None:
                             self.message(channel, "Invalid booster specified.", isWhisper)
                             return
+                        # can they actually open it?
+                        cur.execute("SELECT COUNT(*) FROM boosters_opened WHERE userid = %s AND status = 'open'",
+                                [tags['user-id']])
+                        boosteropen = cur.fetchone()[0] or 0
+
+                        if boosteropen > 0:
+                            self.message(channel,
+                                        "%s, you have an open booster already! !booster show to check it." %
+                                        tags['display-name'], isWhisper)
+                            return
                         cost = math.ceil(int(booster[1])/int(config["puddingExchangeRate"]))
                         if not hasPudding(tags['user-id'], cost):
                             self.message(channel, "%s, you can't afford a %s booster. They cost %d pudding." % (tags['display-name'], booster[0], cost), isWhisper)
