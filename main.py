@@ -2185,7 +2185,7 @@ class NepBot(NepBotClass):
                             return
                         takePudding(tags['user-id'], cost)
                         try:
-                            openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, booster[0])
+                            openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, booster[0], False)
                             if checkHandUpgrade(tags['user-id']):
                                 messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
                             self.message(channel, "%s, you open a %s booster for %d pudding: %s/booster?user=%s" % (tags['display-name'], booster[0], cost, config["siteHost"], sender), isWhisper)
