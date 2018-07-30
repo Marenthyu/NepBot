@@ -2693,7 +2693,7 @@ class NepBot(NepBotClass):
                         [currTime, currTime - 86400000])
                     if len(args) < 2:
                         self.message(channel,
-                                     "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want> [points]",
+                                     "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want>",
                                      isWhisper=isWhisper)
                         return
                     subarg = args[0].lower()
@@ -2715,7 +2715,7 @@ class NepBot(NepBotClass):
 
                         if trade is None:
                             self.message(channel,
-                                         otherparty + " did not send you a trade. Send one with !trade " + otherparty + " <have> <want> [points]",
+                                         otherparty + " did not send you a trade. Send one with !trade " + otherparty + " <have> <want>",
                                          isWhisper=isWhisper)
                             return
 
@@ -2848,9 +2848,9 @@ class NepBot(NepBotClass):
                             self.message(channel, "Trade executed!", isWhisper=isWhisper)
                             return
 
-                    if len(args) not in [3, 4]:
+                    if len(args) < 3:
                         self.message(channel,
-                                     "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want> [points]",
+                                     "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want>",
                                      isWhisper=isWhisper)
                         return
 
@@ -2903,14 +2903,6 @@ class NepBot(NepBotClass):
                     except ValueError:
                         self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
                         return
-
-                    points = 0
-                    if len(args) == 4:
-                        try:
-                            points = int(args[3])
-                        except ValueError:
-                            self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
-                            return
                             
                     # actual specials can't be traded
                     firstSpecialRarity = int(config["numNormalRarities"])
@@ -2921,36 +2913,18 @@ class NepBot(NepBotClass):
                     payup = ourid
                     canTradeDirectly = (want["rarity"] == have["rarity"]) or (
                             want["rarity"] >= firstSpecialRarity and have["rarity"] >= firstSpecialRarity)
+                    points = 0
                     if not canTradeDirectly:
                         if have["rarity"] >= firstSpecialRarity or want["rarity"] >= firstSpecialRarity:
                             self.message(channel,
                                          "Sorry, irregular rarity cards can only be traded for other irregular rarity cards.",
                                          isWhisper=isWhisper)
                             return
-                        if len(args) != 4:
-                            self.message(channel,
-                                         "To trade waifus of different rarities, please append a point value the owner of the lower tier card has to pay to the command to make the trade fair. (see !help)",
-                                         isWhisper=isWhisper)
-                            return
                         highercost = int(config["rarity" + str(max(have["rarity"], want["rarity"])) + "Value"])
                         lowercost = int(config["rarity" + str(min(have["rarity"], want["rarity"])) + "Value"])
-                        costdiff = highercost - lowercost
-                        mini = int(costdiff / 2)
-                        maxi = int(costdiff)
-                        if points < mini:
-                            self.message(channel, "Minimum points to trade this difference in rarity is " + str(mini),
-                                         isWhisper=isWhisper)
-                            return
-                        if points > maxi:
-                            self.message(channel, "Maximum points to trade this difference in rarity is " + str(maxi),
-                                         isWhisper=isWhisper)
-                            return
+                        points = highercost - lowercost
                         if want["rarity"] < have["rarity"]:
                             payup = otherid
-
-                    elif points > 0:
-                        self.message(channel, "You cannot attach points on same-rarity trades.", isWhisper)
-                        return
 
                     # cancel any old trades with this pairing
                     cur.execute(
@@ -4249,7 +4223,7 @@ class NepBot(NepBotClass):
                             # run length in hours * 20, rounded to nearest whole pudding
                             # scales up a bit as the hours go on
                             runHours = resultData["result"] / 3600000.0
-                            bcPrize = round(max(min(runHours, 5) * 20 + min(max(runHours - 5, 0), 5) * 30 + max(runHours - 10, 0) * 40, maxPrize / 2))
+                            bcPrize = round(max(min(runHours, 5) * 30 + min(max(runHours - 5, 0), 5) * 45 + max(runHours - 10, 0) * 60, maxPrize / 2))
                             prizeStrings.append("%s (broadcaster) - %d pudding" % (channel[1:], bcPrize))
                             whispers.append((channel, "You were rewarded %d pudding for running your recent bet. Check and spend it with !pudding" % bcPrize))
                             # skip using addPudding to save a database lookup
