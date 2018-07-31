@@ -4214,7 +4214,9 @@ class NepBot(NepBotClass):
                                     cur.execute("UPDATE placed_bets SET prizePack = %s WHERE betid = %s AND userid = %s",
                                             [booster, betRow[0], winner["id"]])
                                 else:
-                                    pudding = minPrize + (maxPrize - minPrize) * (((numEntries - place) / (numEntries - 1)) ** 2)
+                                    pudding = minPrize + (maxPrize - minPrize) * (numEntries - place) / (numEntries - 1)
+                                    if place == 1:
+                                        pudding *= 1.3
                                     if isMarathonChannel:
                                         pudding *= 1.5
                                     if canWinBigPrizes and abs(winner["timedelta"]) < resultData["result"] / 120:
