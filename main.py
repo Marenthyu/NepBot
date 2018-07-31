@@ -5274,7 +5274,7 @@ class NepBot(NepBotClass):
                             if do_global:
                                 cur.execute("UPDATE waifus SET image = %s WHERE id = %s", [hostedURL, waifuid])
                             else:
-                                cur.execute("UPDATE has_waifu SET custom_image = %s WHERE waifuid = %s AND userid = %s AND rarity = %s", [hostedURL, tags['user-id'], waifuid, godRarity])
+                                cur.execute("UPDATE has_waifu SET custom_image = %s WHERE waifuid = %s AND userid = %s AND rarity = %s", [hostedURL, waifuid, tags['user-id'], godRarity])
 
                             # log the change for posterity
                             insertArgs = [tags['user-id'], waifuid, args[2], do_global, tags['user-id'], current_milli_time()]
@@ -5420,7 +5420,7 @@ class NepBot(NepBotClass):
 
                             # notify them
                             self.message("#%s" % request[4], "Your global image change request for [%d] %s was accepted, the image has been changed." % (request[5], request[6]), True)
-                            self.message(channel, "Request accepted. The new image for [%d] %s is %s" % (request[5], request[6], hostedURL))
+                            self.message(channel, "Request accepted. The new image for [%d] %s is %s" % (request[5], request[6], hostedURL), isWhisper)
                         else:
                             # update it
                             try:
@@ -5439,7 +5439,7 @@ class NepBot(NepBotClass):
                             else:
                                 self.message("#%s" % request[4], "Your image change request for your copy of [%d] %s was accepted." % (request[5], request[6]), True)
 
-                            self.message(channel, "Request accepted. The new image for %s's copy of [%d] %s is %s" % (request[4], request[5], request[6], hostedURL))
+                            self.message(channel, "Request accepted. The new image for %s's copy of [%d] %s is %s" % (request[4], request[5], request[6], hostedURL), isWhisper)
                         return
 
 
