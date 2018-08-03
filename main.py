@@ -3888,7 +3888,8 @@ class NepBot(NepBotClass):
                                  isWhisper)
                     return
                 canAdminBets = sender in superadmins or (sender in admins and isMarathonChannel)
-                canManageBets = canAdminBets or str(tags["badges"]).find("broadcaster") > -1
+                isBroadcaster = str(tags["badges"]).find("broadcaster") > -1
+                canManageBets = canAdminBets or isBroadcaster
 
                 bet = parseBetTime(args[0])
                 if bet:
@@ -3983,12 +3984,12 @@ class NepBot(NepBotClass):
                                         self.message(channel,
                                                      "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer. Your bet currently is %s" % (
                                                          numBets, formatTimeDelta(placedBet)))
-
-                                    else:
+                                    elif not isBroadcaster:
                                         self.message(channel,
                                                      "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer. You have not bet yet." % numBets)
-
-
+                                    else:
+                                        self.message(channel,
+                                                     "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer." % numBets)
                                 else:
                                     if hasBet:
                                         self.message(channel,
@@ -3996,7 +3997,7 @@ class NepBot(NepBotClass):
                                                          numBets, formatTimeDelta(placedBet)))
                                     else:
                                         self.message(channel,
-                                                     "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
+                                                     "Bets are currently open for a new contest. %d bets have been placed so far. You have not bet yet." % numBets)
 
 
 
@@ -4008,9 +4009,13 @@ class NepBot(NepBotClass):
                                         self.message(channel,
                                                      "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results. Your bet is %s" % (
                                                          formattedTime, numBets, formatTimeDelta(placedBet)))
-                                    else:
+                                    elif not isBroadcaster:
                                         self.message(channel,
                                                      "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results. You did not bet." % (
+                                                         formattedTime, numBets))
+                                    else:
+                                        self.message(channel,
+                                                     "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results." % (
                                                          formattedTime, numBets))
                                 else:
                                     if hasBet:
@@ -4023,19 +4028,20 @@ class NepBot(NepBotClass):
                                                          formattedTime, numBets))
                             else:
                                 formattedTime = formatTimeDelta(betRow[3] - betRow[2])
+                                paidOut = " and has been paid out" if betRow[1] == 'paid' else ""
                                 if canManageBets:
                                     self.message(channel,
-                                                 "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed. Use !bet results to see full results or !bet open to open a new one." % (
-                                                     formattedTime, numBets))
+                                                 "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed%s. Use !bet results to see full results or !bet open to open a new one." % (
+                                                     formattedTime, numBets, paidOut))
                                 else:
                                     self.message(channel,
-                                                 "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed." % (
-                                                     formattedTime, numBets))
+                                                 "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed%s." % (
+                                                     formattedTime, numBets, paidOut))
                         cur.close()
                         return
                     elif canManageBets and subcmd == "results":
                         cur = db.cursor()
-                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                        cur.execute("SELECT id, status FROM bets WHERE channel = %s AND `status` != 'open' ORDER BY id DESC LIMIT 1",
                                     [channel])
                         betRow = cur.fetchone()
                         if betRow is None:
@@ -4106,7 +4112,7 @@ class NepBot(NepBotClass):
                             return
 
                         with db.cursor() as cur:
-                            cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                            cur.execute("SELECT id, status FROM bets WHERE channel = %s AND `status` != 'open' ORDER BY id DESC LIMIT 1",
                                         [channel])
                             betRow = cur.fetchone()
 
