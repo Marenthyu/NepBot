@@ -4197,6 +4197,7 @@ class NepBot(NepBotClass):
                             # calculate first run of prizes
                             minPrize = int(config["betMinPrize"])
                             maxPrize = int(config["betMaxPrize"]) * min(1 + numEntries/10, 2)
+                            bbReward = int(config["baseBroadcasterReward"])
                             canWinBigPrizes = resultData["result"] >= 1800000
                             whispers = []
                             prizeStrings = []
@@ -4214,7 +4215,7 @@ class NepBot(NepBotClass):
                                     cur.execute("UPDATE placed_bets SET prizePack = %s WHERE betid = %s AND userid = %s",
                                             [booster, betRow[0], winner["id"]])
                                 else:
-                                    pudding = minPrize + (maxPrize - minPrize) * (numEntries - place) / (numEntries - 1)
+                                    pudding = minPrize + (maxPrize - minPrize) * (numEntries - place) / (numEntries - 1) / (1.4 if place > numEntries / 2 else 1)
                                     if place == 1:
                                         pudding *= 1.3
                                     if isMarathonChannel:
@@ -4235,7 +4236,7 @@ class NepBot(NepBotClass):
                             # run length in hours * 20, rounded to nearest whole pudding
                             # scales up a bit as the hours go on
                             runHours = resultData["result"] / 3600000.0
-                            bcPrize = round(max(min(runHours, 5) * 30 + min(max(runHours - 5, 0), 5) * 45 + max(runHours - 10, 0) * 60, maxPrize / 2))
+                            bcPrize = round(max(min(runHours, 5) * bbReward + min(max(runHours - 5, 0), 5) * bbReward * 1.5 + max(runHours - 10, 0) * bbReward * 2, maxPrize / 2))
                             prizeStrings.append("%s (broadcaster) - %d pudding" % (channel[1:], bcPrize))
                             whispers.append((channel, "You were rewarded %d pudding for running your recent bet. Check and spend it with !pudding" % bcPrize))
                             # skip using addPudding to save a database lookup
