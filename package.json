@@ -2,6 +2,7 @@
   "name": "nepBot",
   "version": "0.0.1",
   "dependencies": {
+    "async": "^2.6.1",
     "mysql": "^2.15.0",
     "request": "^2.83.0"
   }

@@ -15,6 +15,7 @@ import math
 import functools
 from string import ascii_letters
 from collections import defaultdict, OrderedDict
+from private_functions import validateImageURL, processImageURL
 
 import sys
 import re
@@ -117,6 +118,7 @@ superadmins = []
 activitymap = {}
 blacklist = []
 config = {}
+packAmountRewards = {}
 emotewaremotes = []
 revrarity = {}
 visiblepacks = ""
@@ -135,7 +137,7 @@ waifu_regex = None
 
 
 def loadConfig():
-    global revrarity, blacklist, visiblepacks, admins, superadmins, validalertconfigvalues, waifu_regex, emotewaremotes, discordhooks
+    global revrarity, blacklist, visiblepacks, admins, superadmins, validalertconfigvalues, waifu_regex, emotewaremotes, discordhooks, packAmountRewards
     with db.cursor() as curg:
         curg.execute("SELECT * FROM config")
         logger.info("Importing config from database")
@@ -154,7 +156,7 @@ def loadConfig():
                                  + ["rarity%dLength" % rarity for rarity in alertRarityRange] \
                                  + ["rarity%dSound" % rarity for rarity in alertRarityRange]
         waifu_regex = re.compile('(\[(?P<id>[0-9]+?)])?(?P<name>.+?) *- *(?P<series>.+) *- *(?P<rarity>[0-' + str(
-            int(config["numNormalRarities"]) - 1) + ']) *- *(?P<link>.+?)$')
+            int(config["numNormalRarities"]) + int(config["numSpecialRarities"]) - 1) + ']) *- *(?P<link>.+?)$')
         logger.debug("Alert config values: %s", str(validalertconfigvalues))
         logger.debug("Waifu regex: %s", str(waifu_regex))
         logger.info("Fetching admin list...")
@@ -185,6 +187,15 @@ def loadConfig():
             curg.execute("SELECT url FROM discordHooks ORDER BY priority DESC")
             discrows = curg.fetchall()
             discordhooks = [row[0] for row in discrows]
+
+        # pack amount rewards
+        packAmountRewards = {}
+        curg.execute("SELECT boostername, de_amount, reward_booster FROM pack_amount_rewards")
+        rewardRows = curg.fetchall()
+        for row in rewardRows:
+            if row[0] not in packAmountRewards:
+                packAmountRewards[row[0]] = {}
+            packAmountRewards[row[0]][int(row[1])] = row[2]
 
 
 def checkAndRenewAppAccessToken():
@@ -312,11 +323,11 @@ def getHand(twitchid):
         return []
     cur = db.cursor()
     cur.execute(
-        "SELECT amount, waifus.name, waifus.id, rarity, series, image, base_rarity FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < %s) DESC, waifus.id ASC",
+        "SELECT amount, waifus.name, waifus.id, rarity, series, image, base_rarity, custom_image FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < %s) DESC, waifus.id ASC",
         [tID, int(config["numNormalRarities"])])
     rows = cur.fetchall()
     cur.close()
-    return [{"name": row[1], "amount": row[0], "id": row[2], "rarity": row[3], "series": row[4], "image": row[5],
+    return [{"name": row[1], "amount": row[0], "id": row[2], "rarity": row[3], "series": row[4], "image": row[7] or row[5],
              "base_rarity": row[6]} for row in rows]
 
 
@@ -419,6 +430,22 @@ def setFavourite(userid, waifu):
 def setDescription(userid, newDesc):
     with db.cursor() as cur:
         cur.execute("UPDATE users SET profileDescription=%s WHERE id = %s", [newDesc, userid])
+        
+def checkFavouriteValidity(userid):
+    with db.cursor() as cur:
+        cur.execute("SELECT favourite FROM users WHERE id = %s", [userid])
+        favourite = getWaifuById(cur.fetchone()[0])
+        valid = True
+        if favourite["can_favourite"] == 0:
+            valid = False
+        elif favourite["base_rarity"] >= int(config["numNormalRarities"]):
+            # must be owned
+            cur.execute("SELECT COUNT(*) FROM has_waifu WHERE waifuid = %s AND userid = %s", [favourite["id"], userid])
+            valid = cur.fetchone()[0] > 0
+            
+        if not valid:
+            # reset favourite
+            cur.execute("UPDATE users SET favourite = 1 WHERE id = %s", [userid])
 
 
 def getBadgeByID(id):
@@ -560,6 +587,16 @@ def sendDiscordAlert(data):
                 req2 = requests.post(
                     url,
                     json=data)
+
+
+def sendAdminDiscordAlert(data):
+    with discordLock:
+        req2 = requests.post(config["adminDiscordHook"], json=data)
+        while req2.status_code == 429:
+            time.sleep((int(req2.headers["Retry-After"]) / 1000) + 1)
+            req2 = requests.post(
+                config["adminDiscordHook"],
+                json=data)
 
 
 def sendDrawAlert(channel, waifu, user, discord=True):
@@ -748,7 +785,7 @@ def getWaifuRepresentationString(waifuid, baserarity=None, cardrarity=None, waif
 
     return retStr
 
-def sendSetAlert(channel, user, name, waifus, points, discord=True):
+def sendSetAlert(channel, user, name, waifus, pudding, discord=True):
     logger.info("Alerting for set claim %s", name)
     with busyLock:
         with db.cursor() as cur:
@@ -774,7 +811,7 @@ def sendSetAlert(channel, user, name, waifus, points, discord=True):
         {
             "type": "rich",
             "title": "{user} completed the set {name}!".format(user=str(user), name=name),
-            "description": "They gathered {waifus} and received {points} points as their reward.".format(waifus=naturalJoinNames(waifus), points=str(points)),
+            "description": "They gathered {waifus} and received {pudding} pudding as their reward.".format(waifus=naturalJoinNames(waifus), pudding=str(pudding)),
             "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
             "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"]),
             "footer": {
@@ -813,11 +850,11 @@ def getWaifuById(id):
     except ValueError:
         return None
     cur = db.cursor()
-    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup, pulls, last_pull FROM waifus WHERE id=%s",
+    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite FROM waifus WHERE id=%s",
                 [id])
     row = cur.fetchone()
     ret = {"id": row[0], "name": row[1], "image": row[2], "base_rarity": row[3], "series": row[4], "can_lookup": row[5],
-           "pulls": row[6], "last_pull": row[7]}
+           "pulls": row[6], "last_pull": row[7], "can_favourite": row[8]}
     cur.close()
     # print("Fetched Waifu from id: " + str(ret))
     return ret
@@ -865,6 +902,35 @@ def addPoints(userid, amount):
     cur.execute("UPDATE users SET points = points + %s WHERE id = %s", [amount, userid])
     cur.close()
 
+
+def getPuddingBalance(userid):
+    with db.cursor() as cur:
+        cur.execute("SELECT puddingCurrent, puddingPrevious, puddingExpiring FROM users WHERE id = %s", [userid])
+        pinfo = cur.fetchone()
+        return None if pinfo is None else [int(n) for n in pinfo]
+
+def hasPudding(userid, amount):
+    bal = getPuddingBalance(userid)
+    return bal is not None and sum(bal) >= amount
+
+def addPudding(userid, amount):
+    with db.cursor() as cur:
+        cur.execute("UPDATE users SET puddingCurrent = puddingCurrent + %s WHERE id = %s", [amount, userid])
+
+def takePudding(userid, amount):
+    pinfo = getPuddingBalance(userid)
+    if pinfo is None or sum(pinfo) < amount:
+        raise ValueError()
+    # take from the pudding starting from the expiring amount first
+    idx = 2
+    while amount > 0:
+        new_val = max(pinfo[idx] - amount, 0)
+        amount -= pinfo[idx] - new_val
+        pinfo[idx] = new_val
+        idx -= 1
+    # save the updated values
+    with db.cursor() as cur:
+        cur.execute("UPDATE users SET puddingCurrent = %s, puddingPrevious = %s, puddingExpiring = %s WHERE id = %s", pinfo + [userid])
 
 def maxWaifuID():
     cur = db.cursor()
@@ -1229,18 +1295,18 @@ def addSpending(userid, amount):
         cur.execute("UPDATE users SET spending=spending + %s WHERE id = %s", [amount, userid])
 
 
-def openBooster(userid, username, channel, isWhisper, packname, buying=True):
+def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True):
     with db.cursor() as cur:
         rarityColumns = ", ".join(
             "rarity" + str(i) + "UpgradeChance" for i in range(int(config["numNormalRarities"]) - 1))
 
         if buying:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
                 [packname])
         else:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, " + rarityColumns + " FROM boosters WHERE name = %s",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, " + rarityColumns + " FROM boosters WHERE name = %s",
                 [packname])
 
         packinfo = cur.fetchone()
@@ -1255,13 +1321,23 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         pgRarity = packinfo[4]
         pgCount = packinfo[5]
         useEventWeightings = packinfo[6] != 0
-        normalChances = packinfo[7:]
+        numTokens = packinfo[7]
+        tokenChance = packinfo[8]
+        normalChances = packinfo[9:]
+        
+        if numTokens >= numCards:
+            raise InvalidBoosterException()
 
         if buying:
             if not hasPoints(userid, cost):
                 raise CantAffordBoosterException(cost)
 
             addPoints(userid, -cost)
+            
+        tokensDropped = 0
+        for n in range(numTokens):
+            if random.random() < tokenChance:
+                tokensDropped += 1
 
         minScalingRarity = int(config["pullScalingMinRarity"])
         maxScalingRarity = int(config["pullScalingMaxRarity"])
@@ -1279,7 +1355,8 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         cards = []
         alertwaifus = []
         uniques = getUniqueCards(userid)
-        for i in range(numCards):
+        totalDE = 0
+        for i in range(numCards - tokensDropped):
             # scale chances of the card appropriately
             currentChances = list(normalChances)
             guaranteedRarity = 0
@@ -1323,6 +1400,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
 
             # check its rarity and adjust scaling data
             waifu = getWaifuById(card)
+            totalDE += int(config["rarity%dValue" % waifu['base_rarity']])
 
             if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                 alertwaifus.append(waifu)
@@ -1330,7 +1408,7 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
             if listed and buyable:
                 for r in range(numScalingRarities):
                     if r + minScalingRarity != waifu['base_rarity']:
-                        scalingData[r] += cost / numCards
+                        scalingData[r] += cost / (numCards - tokensDropped)
                     else:
                         scalingData[r] = 0
 
@@ -1340,23 +1418,37 @@ def openBooster(userid, username, channel, isWhisper, packname, buying=True):
         recordPullMetrics(*cards)
         addSpending(userid, cost)
 
+        # did they win a free amount-based reward pack?
+        if packname in packAmountRewards and totalDE in packAmountRewards[packname]:
+            reward = packAmountRewards[packname][totalDE]
+            giveFreeBooster(userid, reward)
+            msgArgs = (reward, packname, totalDE, reward)
+            bot.message("#%s" % username, "You won a free %s pack due to getting a %s pack worth %d points. Open it with !freepacks open %s" % msgArgs, True)
+
         # pity pull data update
-        cur.execute("UPDATE users SET pullScalingData = %s WHERE id = %s",
-                    [":".join(str(round(n)) for n in scalingData), userid])
+        cur.execute("UPDATE users SET pullScalingData = %s, eventTokens = eventTokens + %s WHERE id = %s",
+                    [":".join(str(round(n)) for n in scalingData), tokensDropped, userid])
 
         # insert opened booster
         cur.execute(
-            "INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, %s, %s, %s, 'open')",
-            [userid, packname, cost if buying else 0, current_milli_time()])
+            "INSERT INTO boosters_opened (userid, boostername, paid, created, status, eventTokens) VALUES(%s, %s, %s, %s, 'open', %s)",
+            [userid, packname, cost if buying else 0, current_milli_time(), tokensDropped])
         boosterid = cur.lastrowid
         cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)",
                         [(boosterid, card) for card in cards])
 
         # alerts
+        alertname = display_name if display_name.lower() == username.lower() else "%s (%s)" % (display_name, username)
         for w in alertwaifus:
-            threading.Thread(target=sendDrawAlert, args=(channel, w, str(username))).start()
+            threading.Thread(target=sendDrawAlert, args=(channel, w, alertname)).start()
 
         return boosterid
+
+def giveFreeBooster(userid, boostername, amount=1):
+    with db.cursor() as cur:
+        cur.execute("INSERT INTO freepacks (userid, boostername, remaining, total) VALUES(%s, %s, %s, %s)"
+        + " ON DUPLICATE KEY UPDATE remaining = remaining + %s, total = total + %s",
+        [userid, boostername, amount, amount, amount, amount])
 
 
 def infoCommandAvailable(userid, username, displayName, bot, channel, isWhisper):
@@ -1618,6 +1710,24 @@ class NepBot(NepBotClass):
                         config["last_weighting_update"] = str(current_milli_time())
                         cur.execute("UPDATE config SET value = %s WHERE name = 'last_weighting_update'",
                                     [config["last_weighting_update"]])
+
+                    # pudding expiry?
+                    now = datetime.datetime.now()
+                    ymdNow = now.strftime("%Y-%m-%d")
+                    if ymdNow > config["last_pudding_check"]:
+                        logger.debug("Processing pudding expiry...")
+                        config["last_pudding_check"] = ymdNow
+                        cur.execute("UPDATE config SET value = %s WHERE name = 'last_pudding_check'", [ymdNow])
+                        
+                        if now.day == 1:
+                            # move pudding down a category, alert people with expiring pudding
+                            cur.execute("UPDATE users SET puddingExpiring = puddingPrevious, puddingPrevious = puddingCurrent, puddingCurrent = 0")
+                            cur.execute("SELECT name, puddingExpiring FROM users WHERE puddingExpiring > 0")
+                            for userRow in cur.fetchall():
+                                self.message("#%s" % userRow[0], "You have %d pudding expiring on the 8th of this month. !pudding to see your balance and to spend it." % userRow[1], True)
+                        elif now.day == 8:
+                            # actually expire pudding from 2 months ago
+                            cur.execute("UPDATE users SET puddingExpiring = 0")
             logger.debug("Checking live status of channels...")
             checkAndRenewAppAccessToken()
 
@@ -1918,7 +2028,8 @@ class NepBot(NepBotClass):
 
         activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup",
                           "alerts", "redeem", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway",
-                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners"]
+                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners", "freebie", "godimage",
+                          "freepacks", "freepack", "pudding"]
 
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
@@ -2049,12 +2160,69 @@ class NepBot(NepBotClass):
                                          **msgArgs), isWhisper)
                 return
             if command == "points":
-                # print("Checking points for " + sender)
-                cur = db.cursor()
-                cur.execute("SELECT points FROM users WHERE id = %s", [tags['user-id']])
-                self.message(channel, str(tags['display-name']) + ", you have " + str(cur.fetchone()[0]) + " points!",
-                             isWhisper=isWhisper)
-                cur.close()
+                with db.cursor() as cur:
+                    cur.execute("SELECT points FROM users WHERE id = %s", [tags['user-id']])
+                    points = cur.fetchone()[0]
+                    pudding = sum(getPuddingBalance(tags['user-id']))
+                    self.message(channel, "%s, you have %d points and %d pudding!" % (tags['display-name'], points, pudding), isWhisper)
+                    return
+            if command == "pudding":
+                subcmd = "" if len(args) < 1 else args[0].lower()
+                if subcmd == "booster":
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !pudding booster <name>", isWhisper)
+                        return
+                    # check that the pack is actually buyable
+                    with db.cursor() as cur:
+                        cur.execute("SELECT name, cost FROM boosters WHERE name = %s AND buyable = 1", [args[1]])
+                        booster = cur.fetchone()
+                        if booster is None:
+                            self.message(channel, "Invalid booster specified.", isWhisper)
+                            return
+                        # can they actually open it?
+                        cur.execute("SELECT COUNT(*) FROM boosters_opened WHERE userid = %s AND status = 'open'",
+                                [tags['user-id']])
+                        boosteropen = cur.fetchone()[0] or 0
+
+                        if boosteropen > 0:
+                            self.message(channel,
+                                        "%s, you have an open booster already! !booster show to check it." %
+                                        tags['display-name'], isWhisper)
+                            return
+                        cost = math.ceil(int(booster[1])/int(config["puddingExchangeRate"]))
+                        if not hasPudding(tags['user-id'], cost):
+                            self.message(channel, "%s, you can't afford a %s booster. They cost %d pudding." % (tags['display-name'], booster[0], cost), isWhisper)
+                            return
+                        takePudding(tags['user-id'], cost)
+                        try:
+                            openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, booster[0], False)
+                            if checkHandUpgrade(tags['user-id']):
+                                messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
+                            self.message(channel, "%s, you open a %s booster for %d pudding: %s/booster?user=%s" % (tags['display-name'], booster[0], cost, config["siteHost"], sender), isWhisper)
+                        except InvalidBoosterException:
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "Booster type %s is broken, please fix it." % booster[0]
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                            self.message(channel,
+                                        "There was an error processing your booster, please try again later.",
+                                        isWhisper)
+                            return
+                elif subcmd == "list":
+                    with db.cursor() as cur:
+                        cur.execute("SELECT name, cost FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
+                        boosters = cur.fetchall()
+                        boosterInfo = ", ".join("%s / %d pudding" % (row[0], math.ceil(int(row[1])/int(config["puddingExchangeRate"]))) for row in boosters)
+                        self.message(channel, "Current buyable packs: %s. !pudding booster <name> to buy a booster with pudding." % boosterInfo, isWhisper)
+                else:
+                    # base: show pudding balance broken down
+                    pudding = getPuddingBalance(tags['user-id'])
+                    if sum(pudding) == 0:
+                        self.message(channel, "%s, you don't currently have any pudding. You can earn some by participating in bets or completing sets." % tags['display-name'], isWhisper)
+                    else:
+                        msgArgs = (tags['display-name'], sum(pudding), pudding[0], pudding[1], pudding[2])
+                        self.message(channel, "%s, you have %d total pudding: %d earned this month, %d earned last month, %d expiring soon. !pudding list to see what boosters you can buy, !pudding booster <name> to buy a booster with pudding." % msgArgs, isWhisper)
                 return
             if command == "freewaifu" or command == "freebie":
                 # print("Checking free waifu egliability for " + str(sender))
@@ -2101,21 +2269,28 @@ class NepBot(NepBotClass):
                     rewardInfo = cur.fetchone()
                     
                     if rewardInfo is None:
-                        self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
+                        discordbody = {
+                            "username": "WTCG Admin", 
+                            "content" : "The free reward database is misconfigured, please fix it."
+                        }
+                        threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                        self.message(channel, "Could not retrieve your free reward, try again later.", isWhisper)
                         return
                         
                     # only one of the latter three rewards is allowed to be filled in, and there needs to be at least one reward.
                     cardRewardCount = sum([(1 if rewardInfo[n] is not None else 0) for n in range(1, 4)])
                     ovrRewardCount = sum([(1 if rewardInfo[n] is not None else 0) for n in range(4)])
                     if cardRewardCount > 1 or ovrRewardCount == 0:
-                        self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
+                        discordbody = {
+                            "username": "WTCG Admin", 
+                            "content" : "The free reward database is misconfigured, please fix it."
+                        }
+                        threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                        self.message(channel, "Could not retrieve your free reward, try again later.", isWhisper)
                         return
                         
                     # can they take the reward at the current time?
-                    if rewardInfo[3] is not None and hasPack:
-                        self.message(channel, "%s, your next reward is a booster and you have one open!" % tags['display-name'], isWhisper)
-                        return
-                    elif (rewardInfo[1] is not None or rewardInfo[2] is not None) and hasPack and not spaceInHand:
+                    if (rewardInfo[1] is not None or rewardInfo[2] is not None) and hasPack and not spaceInHand:
                         self.message(channel, "%s, your hand is full and you have a booster open!" % tags['display-name'], isWhisper)
                         return
                         
@@ -2161,14 +2336,24 @@ class NepBot(NepBotClass):
                        
                             
                     if rewardInfo[3] is not None:
-                        try:
-                            packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, rewardInfo[3], False)
-                            if checkHandUpgrade(tags['user-id']):
-                                messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
-                            self.message(channel, "%s, you got your daily free reward: {points}a booster - %s/booster?user=%s" % (tags['display-name'], pointsPrefix, config['siteHost'], sender), isWhisper)
-                        except InvalidBoosterException:
-                            self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
-                            return
+                        if hasPack:
+                            # send the pack to freepacks
+                            giveFreeBooster(tags['user-id'], rewardInfo[3])
+                            self.message(channel, "%s, you got your daily free reward: %sa %s booster (sent to !freepacks)" % (tags['display-name'], pointsPrefix, rewardInfo[3]), isWhisper)
+                        else:
+                            try:
+                                packid = openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, rewardInfo[3], False)
+                                if checkHandUpgrade(tags['user-id']):
+                                    messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
+                                self.message(channel, "%s, you got your daily free reward: %sa %s booster - %s/booster?user=%s" % (tags['display-name'], pointsPrefix, rewardInfo[3], config['siteHost'], sender), isWhisper)
+                            except InvalidBoosterException:
+                                discordbody = {
+                                    "username": "WTCG Admin", 
+                                    "content" : "The free reward database is misconfigured, please fix it."
+                                }
+                                threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                                self.message(channel, "Could not retrieve your free reward, try again later.", isWhisper)
+                                return
 
                     cur.execute("UPDATE users SET lastFree = %s, rewardSeqSeed = %s, rewardSeqIndex = %s WHERE id = %s", [current_milli_time(), seed, index + 1, tags['user-id']])
                     return
@@ -2186,6 +2371,8 @@ class NepBot(NepBotClass):
                 disenchants = []
                 dontHave = []
                 hand = getHand(tags['user-id'])
+                disenchantingSpecial = False
+                godRarity = int(config["numNormalRarities"]) - 1
 
                 for arg in args:
                     # handle disenchanting
@@ -2241,6 +2428,9 @@ class NepBot(NepBotClass):
                     if row['id'] not in checkPromos:
                         checkPromos.append(row['id'])
                     takeCard(tags['user-id'], row['id'], row['rarity'])
+                    
+                    if row['base_rarity'] >= int(config["numNormalRarities"]):
+                        disenchantingSpecial = True
 
                     baseValue = int(config["rarity" + str(row['rarity']) + "Value"])
                     profit = attemptBountyFill(self, row['id'])
@@ -2254,8 +2444,20 @@ class NepBot(NepBotClass):
                         threading.Thread(target=sendDisenchantAlert,
                                          args=(channel, waifuData, tags["display-name"])).start()
 
+                    if row['rarity'] == godRarity:
+                        # check image change
+                        with db.cursor() as cur:
+                            cur.execute("UPDATE godimage_requests SET state='cancelled' WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [tags['user-id'], row['id']])
+                            if cur.rowcount > 0:
+                                # request was cancelled
+                                waifuData = getWaifuById(row['id'])
+                                self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you disenchanted it." % (row['id'], waifuData['name']), True)
+
                 addPoints(tags['user-id'], pointsGain)
                 attemptPromotions(*checkPromos)
+                
+                if disenchantingSpecial:
+                    checkFavouriteValidity(tags['user-id'])
 
                 if len(disenchants) == 1:
                     buytext = " (bounty filled)" if ordersFilled > 0 else ""
@@ -2325,7 +2527,7 @@ class NepBot(NepBotClass):
             if command == "booster":
                 if len(args) < 1:
                     self.message(channel,
-                                 "Usage: !booster buy <%s> OR !booster select <take/disenchant> (for each waifu) OR !booster show" % visiblepacks,
+                                 "Usage: !booster list OR !booster buy <%s> OR !booster select <take/disenchant> (for each waifu) OR !booster show" % visiblepacks,
                                  isWhisper=isWhisper)
                     return
 
@@ -2465,6 +2667,15 @@ class NepBot(NepBotClass):
                                 [current_milli_time(), boosterinfo[0]])
                     cur.close()
                     return
+
+                if cmd == "list":
+                    with db.cursor() as cur:
+                        cur.execute("SELECT name, cost FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
+                        boosters = cur.fetchall()
+                        boosterInfo = ", ".join("%s / %d points" % (row[0], row[1]) for row in boosters)
+                        self.message(channel, "Current buyable packs: %s. !booster buy <name> to buy a booster with points." % boosterInfo, isWhisper)
+                    return
+                
                 if cmd == "buy":
                     if boosterinfo is not None:
                         self.message(channel,
@@ -2479,7 +2690,7 @@ class NepBot(NepBotClass):
 
                     packname = args[1].lower()
                     try:
-                        openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, packname, True)
+                        openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, packname, True)
                         if checkHandUpgrade(tags['user-id']):
                             messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
 
@@ -2507,7 +2718,7 @@ class NepBot(NepBotClass):
                         [currTime, currTime - 86400000])
                     if len(args) < 2:
                         self.message(channel,
-                                     "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want> [points]",
+                                     "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want>",
                                      isWhisper=isWhisper)
                         return
                     subarg = args[0].lower()
@@ -2529,7 +2740,7 @@ class NepBot(NepBotClass):
 
                         if trade is None:
                             self.message(channel,
-                                         otherparty + " did not send you a trade. Send one with !trade " + otherparty + " <have> <want> [points]",
+                                         otherparty + " did not send you a trade. Send one with !trade " + otherparty + " <have> <want>",
                                          isWhisper=isWhisper)
                             return
 
@@ -2619,15 +2830,37 @@ class NepBot(NepBotClass):
                                     "you" if nonpayer == ourid else otherparty), isWhisper=isWhisper)
                                 return
 
-                            # take cards
-                            takeCard(ourid, want, want_rarity)
-                            takeCard(otherid, have, have_rarity)
+                            # move the cards
+                            # should preserve God image changes through the trade
+                            godRarity = int(config["numNormalRarities"]) - 1
+                            if want_rarity == godRarity:
+                                cur.execute("UPDATE has_waifu SET userid = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [otherid, ourid, want, want_rarity])
+                                cur.execute("UPDATE godimage_requests SET state = 'cancelled' WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [ourid, want])
+                                if cur.rowcount > 0:
+                                    # a request was actually cancelled
+                                    wantdata = getWaifuById(want)
+                                    self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you traded it away." % (want, wantdata['name']), True)
 
-                            # give cards
-                            giveCard(ourid, have, have_rarity)
-                            giveCard(otherid, want, want_rarity)
+                            else:
+                                takeCard(ourid, want, want_rarity)
+                                giveCard(otherid, want, want_rarity)
+                                
+                            if have_rarity == godRarity:
+                                cur.execute("UPDATE has_waifu SET userid = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [ourid, otherid, have, have_rarity])
+                                cur.execute("UPDATE godimage_requests SET state = 'cancelled' WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [otherid, have])
+                                if cur.rowcount > 0:
+                                    # a request was actually cancelled
+                                    havedata = getWaifuById(have)
+                                    self.message("#%s" % otherparty, "Your image change request for [%d] %s was cancelled since you traded it away." % (have, havedata['name']), True)
+                            else:
+                                takeCard(otherid, have, have_rarity)
+                                giveCard(ourid, have, have_rarity)
 
                             attemptPromotions(want, have)
+                            if want_rarity >= int(config["numNormalRarities"]):
+                                checkFavouriteValidity(ourid)
+                            if have_rarity >= int(config["numNormalRarities"]):
+                                checkFavouriteValidity(otherid)
 
                             # points
                             addPoints(payup, -(tradepoints + cost))
@@ -2640,9 +2873,9 @@ class NepBot(NepBotClass):
                             self.message(channel, "Trade executed!", isWhisper=isWhisper)
                             return
 
-                    if len(args) not in [3, 4]:
+                    if len(args) < 3:
                         self.message(channel,
-                                     "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want> [points]",
+                                     "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want>",
                                      isWhisper=isWhisper)
                         return
 
@@ -2695,49 +2928,28 @@ class NepBot(NepBotClass):
                     except ValueError:
                         self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
                         return
-
-                    points = 0
-                    if len(args) == 4:
-                        try:
-                            points = int(args[3])
-                        except ValueError:
-                            self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
-                            return
+                            
+                    # actual specials can't be traded
+                    firstSpecialRarity = int(config["numNormalRarities"])
+                    if have["rarity"] == firstSpecialRarity or want["rarity"] == firstSpecialRarity:
+                        self.message(channel, "Sorry, cards of that rarity cannot be traded.", isWhisper)
+                        return
 
                     payup = ourid
-                    firstSpecialRarity = int(config["numNormalRarities"])
                     canTradeDirectly = (want["rarity"] == have["rarity"]) or (
                             want["rarity"] >= firstSpecialRarity and have["rarity"] >= firstSpecialRarity)
+                    points = 0
                     if not canTradeDirectly:
                         if have["rarity"] >= firstSpecialRarity or want["rarity"] >= firstSpecialRarity:
                             self.message(channel,
-                                         "Sorry, special-rarity cards can only be traded for other special-rarity cards.",
-                                         isWhisper=isWhisper)
-                            return
-                        if len(args) != 4:
-                            self.message(channel,
-                                         "To trade waifus of different rarities, please append a point value the owner of the lower tier card has to pay to the command to make the trade fair. (see !help)",
+                                         "Sorry, irregular rarity cards can only be traded for other irregular rarity cards.",
                                          isWhisper=isWhisper)
                             return
                         highercost = int(config["rarity" + str(max(have["rarity"], want["rarity"])) + "Value"])
                         lowercost = int(config["rarity" + str(min(have["rarity"], want["rarity"])) + "Value"])
-                        costdiff = highercost - lowercost
-                        mini = int(costdiff / 2)
-                        maxi = int(costdiff)
-                        if points < mini:
-                            self.message(channel, "Minimum points to trade this difference in rarity is " + str(mini),
-                                         isWhisper=isWhisper)
-                            return
-                        if points > maxi:
-                            self.message(channel, "Maximum points to trade this difference in rarity is " + str(maxi),
-                                         isWhisper=isWhisper)
-                            return
+                        points = highercost - lowercost
                         if want["rarity"] < have["rarity"]:
                             payup = otherid
-
-                    elif points > 0:
-                        self.message(channel, "You cannot attach points on same-rarity trades.", isWhisper)
-                        return
 
                     # cancel any old trades with this pairing
                     cur.execute(
@@ -2807,47 +3019,50 @@ class NepBot(NepBotClass):
                             waifu["owned"] = " (not dropped yet)"
 
                         # bounty info
-                        with db.cursor() as cur:
-                            cur.execute(
-                                "SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM bounties WHERE waifuid = %s AND status='open'",
-                                [waifu['id']])
-                            allordersinfo = cur.fetchone()
-
-                            if allordersinfo[0] > 0:
-                                cur.execute(
-                                    "SELECT amount FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'",
-                                    [tags['user-id'], waifu['id']])
-                                myorderinfo = cur.fetchone()
-                                minfo = {"count": allordersinfo[0], "highest": allordersinfo[1]}
-                                if myorderinfo is not None:
-                                    minfo["mine"] = myorderinfo[0]
-                                    if myorderinfo[0] == allordersinfo[1]:
-                                        waifu[
-                                            "bountyinfo"] = " {count} current bounties, your bid is highest at {highest} points.".format(
-                                            **minfo)
-                                    else:
-                                        waifu[
-                                            "bountyinfo"] = "{count} current bounties, your bid of {mine} points is lower than the highest at {highest} points.".format(
-                                            **minfo)
-                                else:
-                                    waifu[
-                                        "bountyinfo"] = "{count} current bounties, the highest bid is {highest} points.".format(
-                                        **minfo)
-                            else:
-                                waifu["bountyinfo"] = "No current bounties on this waifu."
-
-                        # last pull
-                        if waifu["pulls"] == 0 or waifu["last_pull"] is None or waifu["base_rarity"] >= int(
-                                config["numNormalRarities"]):
+                        if waifu["base_rarity"] >= int(config["numNormalRarities"]):
+                            waifu["bountyinfo"] = ""
                             waifu["lp"] = ""
                         else:
-                            lpdiff = (current_milli_time() - waifu["last_pull"]) // 86400000
-                            if lpdiff == 0:
-                                waifu["lp"] = " Last pulled less than a day ago."
-                            elif lpdiff == 1:
-                                waifu["lp"] = " Last pulled 1 day ago."
+                            with db.cursor() as cur:
+                                cur.execute(
+                                    "SELECT COUNT(*), COALESCE(MAX(amount), 0) FROM bounties WHERE waifuid = %s AND status='open'",
+                                    [waifu['id']])
+                                allordersinfo = cur.fetchone()
+
+                                if allordersinfo[0] > 0:
+                                    cur.execute(
+                                        "SELECT amount FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'",
+                                        [tags['user-id'], waifu['id']])
+                                    myorderinfo = cur.fetchone()
+                                    minfo = {"count": allordersinfo[0], "highest": allordersinfo[1]}
+                                    if myorderinfo is not None:
+                                        minfo["mine"] = myorderinfo[0]
+                                        if myorderinfo[0] == allordersinfo[1]:
+                                            waifu[
+                                                "bountyinfo"] = " {count} current bounties, your bid is highest at {highest} points.".format(
+                                                **minfo)
+                                        else:
+                                            waifu[
+                                                "bountyinfo"] = "{count} current bounties, your bid of {mine} points is lower than the highest at {highest} points.".format(
+                                                **minfo)
+                                    else:
+                                        waifu[
+                                            "bountyinfo"] = "{count} current bounties, the highest bid is {highest} points.".format(
+                                            **minfo)
+                                else:
+                                    waifu["bountyinfo"] = "No current bounties on this waifu."
+
+                            # last pull
+                            if waifu["pulls"] == 0 or waifu["last_pull"] is None:
+                                waifu["lp"] = ""
                             else:
-                                waifu["lp"] = " Last pulled %d days ago." % lpdiff
+                                lpdiff = (current_milli_time() - waifu["last_pull"]) // 86400000
+                                if lpdiff == 0:
+                                    waifu["lp"] = " Last pulled less than a day ago."
+                                elif lpdiff == 1:
+                                    waifu["lp"] = " Last pulled 1 day ago."
+                                else:
+                                    waifu["lp"] = " Last pulled %d days ago." % lpdiff
 
                         self.message(channel,
                                      '[{id}][{rarity}] {name} from {series} - {image}{owned}. {bountyinfo}{lp}'.format(
@@ -2924,11 +3139,11 @@ class NepBot(NepBotClass):
                 if subcmd == "setup":
                     cur = db.cursor()
                     cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
-                    row = cur.fetchone();
+                    row = cur.fetchone()
                     if row is None:
                         self.message(channel,
                                      "The bot is not in your channel, so alerts can't be set up for you. Ask an admin to let it join!",
-                                     iswhisper=isWhisper)
+                                     isWhisper=isWhisper)
                         return
                     if row[0] is None:
                         self.message("#jtv",
@@ -2955,7 +3170,7 @@ class NepBot(NepBotClass):
                             rarity = int(config["numNormalRarities"]) - 1
                     cur = db.cursor()
                     cur.execute("SELECT alertkey FROM channels WHERE name=%s", [sender])
-                    row = cur.fetchone();
+                    row = cur.fetchone()
                     cur.close()
                     if row is None or row[0] is None:
                         self.message(channel,
@@ -3136,12 +3351,6 @@ class NepBot(NepBotClass):
                     cur.close()
                     return
 
-                if len(redeemablerows) > 1:
-                    self.message(channel, "Go tell an admin that token %s is broken (duplicate token name)." % args[0],
-                                 isWhisper)
-                    cur.close()
-                    return
-
                 redeemdata = redeemablerows[0]
 
                 # already claimed by this user?
@@ -3172,15 +3381,20 @@ class NepBot(NepBotClass):
                         return
 
                     try:
-                        packid = openBooster(tags['user-id'], tags['display-name'], channel, isWhisper, redeemdata[3],
+                        packid = openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, redeemdata[3],
                                              False)
                         if checkHandUpgrade(tags['user-id']):
                             messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
                         received.append("a free booster: %s/booster?user=%s" % (config["siteHost"], sender))
                     except InvalidBoosterException:
+                        discordbody = {
+                            "username": "WTCG Admin", 
+                            "content" : "Booster type %s is broken, please fix it." % redeemdata[3]
+                        }
+                        threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
                         self.message(channel,
-                                     "Go tell an admin that token %s is broken (invalid booster attached)." % args[0],
-                                     isWhisper)
+                                    "There was an error processing your redeem, please try again later.",
+                                    isWhisper)
                         cur.close()
                         return
 
@@ -3247,7 +3461,6 @@ class NepBot(NepBotClass):
                             self.message(channel, message, isWhisper)
 
                     return
-
             if command == "war":
                 if len(args) != 1:
                     self.message(channel, "Usage: !war <id>", isWhisper)
@@ -3308,7 +3521,6 @@ class NepBot(NepBotClass):
                         self.message(channel, msg, isWhisper)
 
                     return
-
             if command == "vote":
                 if len(args) < 3:
                     self.message(channel, "Usage: !vote <warid> <choice> <points>", isWhisper)
@@ -3411,7 +3623,6 @@ class NepBot(NepBotClass):
                     self.message(channel, "%s -> Successfully added %d points to %s in the %s bidwar." % (
                         tags['display-name'], points, theirchoice, title), isWhisper)
                     return
-
             if command == "incentives" and (isMarathonChannel or isWhisper):
                 with db.cursor() as cur:
                     cur.execute("SELECT id, title, amount, required FROM incentives WHERE status = 'open'")
@@ -3442,7 +3653,6 @@ class NepBot(NepBotClass):
                             self.message(channel, message, isWhisper)
 
                     return
-
             if command == "donate" and isMarathonChannel:
                 if len(args) != 2:
                     self.message(channel,
@@ -3503,7 +3713,6 @@ class NepBot(NepBotClass):
                                      isWhisper)
 
                     return
-
             if command == "upgrade":
                 user = tags['user-id']
 
@@ -3619,15 +3828,68 @@ class NepBot(NepBotClass):
                     config["promoschanged"] = "yes"
                     cur.execute("REPLACE INTO config(name, value) VALUES('promoschanged', 'yes')")
                 return
+            if command == "freepacks" or command == "freepack" or (command == "bet" and len(args) > 0 and args[0].lower() == "packs"):
+                if len(args) > 0 and args[0].lower() in ["open", "claim", "redeem"]:
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !freepacks open <booster name>", isWhisper)
+                        return
+                    with db.cursor() as cur:
+                        cur.execute("SELECT remaining, boostername FROM freepacks WHERE userid = %s AND boostername = %s", [tags['user-id'], args[1]])
+                        result = cur.fetchone()
 
+                        if result is None or result[0] == 0:
+                            self.message(channel, "You don't have any free packs of that type left to claim!", isWhisper)
+                            return
+
+                        # can they actually open it?
+                        cur.execute("SELECT COUNT(*) FROM boosters_opened WHERE userid = %s AND status = 'open'",
+                                [tags['user-id']])
+                        boosteropen = cur.fetchone()[0] or 0
+
+                        if boosteropen > 0:
+                            self.message(channel,
+                                        "%s, you can't open a free pack with an open booster! !booster show to check it." %
+                                        tags['display-name'], isWhisper)
+                            return
+
+                        # all good
+                        try:
+                            packid = openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, args[1], False)
+                            if checkHandUpgrade(tags['user-id']):
+                                messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
+                            cur.execute("UPDATE freepacks SET remaining = remaining - 1 WHERE userid = %s AND boostername = %s", [tags['user-id'], args[1]])
+                            self.message(channel, "%s, you open a free %s booster: %s/booster?user=%s" % (tags['display-name'], result[1], config["siteHost"], sender), isWhisper)
+                        except InvalidBoosterException:
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "Booster type %s is broken, please fix it." % args[1]
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                            self.message(channel,
+                                        "There was an error opening your free pack, please try again later.",
+                                        isWhisper)
+                            return
+                        return
+                else:
+                    with db.cursor() as cur:
+                        cur.execute("SELECT boostername, remaining FROM freepacks WHERE userid = %s AND remaining > 0", [tags['user-id']])
+                        freepacks = cur.fetchall()
+
+                        if len(freepacks) == 0:
+                            self.message(channel, "%s, you don't have any free pack entitlements right now." % tags['display-name'], isWhisper)
+                        else:
+                            freeStr = ", ".join("%s x%d" % (fp[0], fp[1]) for fp in freepacks)
+                            self.message(channel, "%s, your current free packs: %s. !freepacks open <name> to open one." % (tags['display-name'], freeStr), isWhisper)
+                        return
             if command == "bet":
                 if len(args) < 1:
                     self.message(channel,
-                                 "Usage: !bet <time> OR !bet status OR !bet packs OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
+                                 "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
                                  isWhisper)
                     return
                 canAdminBets = sender in superadmins or (sender in admins and isMarathonChannel)
-                canManageBets = canAdminBets or str(tags["badges"]).find("broadcaster") > -1
+                isBroadcaster = str(tags["badges"]).find("broadcaster") > -1
+                canManageBets = canAdminBets or isBroadcaster
 
                 bet = parseBetTime(args[0])
                 if bet:
@@ -3649,8 +3911,6 @@ class NepBot(NepBotClass):
                     return
                 else:
                     subcmd = str(args[0]).lower()
-                    betPrizeNames = {config["betPrizeTier%dToken" % tier]: config["betPrizeTier%dName" % tier] for tier
-                                     in range(1, 8)}
 
                     if canManageBets and subcmd == "open":
                         if openBet(channel):
@@ -3724,12 +3984,12 @@ class NepBot(NepBotClass):
                                         self.message(channel,
                                                      "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer. Your bet currently is %s" % (
                                                          numBets, formatTimeDelta(placedBet)))
-
-                                    else:
+                                    elif not isBroadcaster:
                                         self.message(channel,
                                                      "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer. You have not bet yet." % numBets)
-
-
+                                    else:
+                                        self.message(channel,
+                                                     "Bets are currently open for a new contest. %d bets have been placed so far. !bet start to close bets and start the run timer." % numBets)
                                 else:
                                     if hasBet:
                                         self.message(channel,
@@ -3737,7 +3997,7 @@ class NepBot(NepBotClass):
                                                          numBets, formatTimeDelta(placedBet)))
                                     else:
                                         self.message(channel,
-                                                     "Bets are currently open for a new contest. %d bets have been placed so far." % numBets)
+                                                     "Bets are currently open for a new contest. %d bets have been placed so far. You have not bet yet." % numBets)
 
 
 
@@ -3749,9 +4009,13 @@ class NepBot(NepBotClass):
                                         self.message(channel,
                                                      "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results. Your bet is %s" % (
                                                          formattedTime, numBets, formatTimeDelta(placedBet)))
-                                    else:
+                                    elif not isBroadcaster:
                                         self.message(channel,
                                                      "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results. You did not bet." % (
+                                                         formattedTime, numBets))
+                                    else:
+                                        self.message(channel,
+                                                     "Run in progress - elapsed time %s. %d bets were placed. !bet end to end the run timer and determine results." % (
                                                          formattedTime, numBets))
                                 else:
                                     if hasBet:
@@ -3764,19 +4028,20 @@ class NepBot(NepBotClass):
                                                          formattedTime, numBets))
                             else:
                                 formattedTime = formatTimeDelta(betRow[3] - betRow[2])
+                                paidOut = " and has been paid out" if betRow[1] == 'paid' else ""
                                 if canManageBets:
                                     self.message(channel,
-                                                 "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed. Use !bet results to see full results or !bet open to open a new one." % (
-                                                     formattedTime, numBets))
+                                                 "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed%s. Use !bet results to see full results or !bet open to open a new one." % (
+                                                     formattedTime, numBets, paidOut))
                                 else:
                                     self.message(channel,
-                                                 "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed." % (
-                                                     formattedTime, numBets))
+                                                 "No time prediction contest in progress. The most recent contest ended in %s with %d bets placed%s." % (
+                                                     formattedTime, numBets, paidOut))
                         cur.close()
                         return
                     elif canManageBets and subcmd == "results":
                         cur = db.cursor()
-                        cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                        cur.execute("SELECT id, status FROM bets WHERE channel = %s AND `status` != 'open' ORDER BY id DESC LIMIT 1",
                                     [channel])
                         betRow = cur.fetchone()
                         if betRow is None:
@@ -3847,7 +4112,7 @@ class NepBot(NepBotClass):
                             return
 
                         with db.cursor() as cur:
-                            cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
+                            cur.execute("SELECT id, status FROM bets WHERE channel = %s AND `status` != 'open' ORDER BY id DESC LIMIT 1",
                                         [channel])
                             betRow = cur.fetchone()
 
@@ -3951,49 +4216,53 @@ class NepBot(NepBotClass):
                                 return
 
                             # calculate first run of prizes
-                            prizes = defaultdict(list)
+                            minPrize = int(config["betMinPrize"])
+                            maxPrize = int(config["betMaxPrize"]) * min(1 + numEntries/10, 2)
+                            bbReward = int(config["baseBroadcasterReward"])
+                            canWinBigPrizes = resultData["result"] >= 1800000
+                            whispers = []
+                            prizeStrings = []
                             place = 0
                             for winner in resultData["winners"]:
                                 place += 1
 
-                                if abs(winner["timedelta"]) < 10 and resultData["result"] >= 1800000:
-                                    prizeTier = 7
-                                elif abs(winner["timedelta"]) < 1000 and resultData["result"] >= 1800000:
-                                    prizeTier = 6
+                                if abs(winner["timedelta"]) < 1000 and canWinBigPrizes:
+                                    booster = config["sameSecondBooster"]
+                                    if abs(winner["timedelta"]) < 10:
+                                        booster = config["almostExactBooster"]
+                                    giveFreeBooster(winner["id"], booster)
+                                    msg = "You won a %s booster from the bet in %s's channel. Open it in any chat with !freepacks open %s" % (booster, channel[1:], booster)
+                                    prizeStrings.append("%s - %s pack" % (winner["name"], booster))
+                                    cur.execute("UPDATE placed_bets SET prizePack = %s WHERE betid = %s AND userid = %s",
+                                            [booster, betRow[0], winner["id"]])
                                 else:
-                                    prizeTier = 1
-
+                                    pudding = minPrize + (maxPrize - minPrize) * (numEntries - place) / (numEntries - 1) / (1.4 if place > numEntries / 2 else 1)
                                     if place == 1:
-                                        prizeTier += 1
-                                    if place <= 3 and numEntries >= 10:
-                                        prizeTier += 1
-                                    if place <= numEntries // 2:
-                                        prizeTier += 1
-                                    if abs(winner["timedelta"]) < 60000 and resultData["result"] >= 3600000:
-                                        prizeTier += 1
-                                    if isMarathonChannel and prizeTier < 5:
-                                        prizeTier += 1
-
-                                prizeToken = config["betPrizeTier%dToken" % prizeTier]
-                                prizePack = config["betPrizeTier%dBooster" % prizeTier]
-                                prizeName = config["betPrizeTier%dName" % prizeTier]
-
-                                prizes[prizeToken].append(winner["name"])
-                                cur.execute(
-                                    "INSERT INTO tokens (token, boostername, claimable, bet_prize, type, only_redeemable_by) VALUES(%s, %s, 1, 1, 'single', %s)",
-                                    [prizeToken, prizePack, winner["id"]])
-                                cur.execute("UPDATE placed_bets SET prizeToken = %s WHERE betid = %s AND userid = %s",
-                                            [prizeToken, betRow[0], winner["id"]])
+                                        pudding *= 1.3
+                                    if isMarathonChannel:
+                                        pudding *= 1.5
+                                    if canWinBigPrizes and abs(winner["timedelta"]) < resultData["result"] / 120:
+                                        pudding *= 1.5
+                                    if winner["bet"] < resultData["result"] / 2 or winner["bet"] > resultData["result"] * 2:
+                                        pudding *= 0.5
+                                    pudding = round(pudding)
+                                    addPudding(winner["id"], pudding)
+                                    msg = "You won %d pudding from the bet in %s's channel. Check and spend it with !pudding" % (pudding, channel[1:])
+                                    prizeStrings.append("%s - %d pudding" % (winner["name"], pudding))
+                                    cur.execute("UPDATE placed_bets SET prizePudding = %s WHERE betid = %s AND userid = %s",
+                                            [pudding, betRow[0], winner["id"]])
+                                whispers.append(('#' + winner["name"], msg))
 
                             # broadcaster prize
-                            # run length in hours * 500, rounded to nearest 50
+                            # run length in hours * 20, rounded to nearest whole pudding
                             # scales up a bit as the hours go on
                             runHours = resultData["result"] / 3600000.0
-                            bcPrize = min(runHours, 5) * 500 + min(max(runHours - 5, 0), 5) * 750 + max(runHours - 10,
-                                                                                                        0) * 1000
-                            bcPrize = max(int(round(bcPrize / 50.0) * 50), 50)
-
-                            cur.execute("UPDATE users SET points = points + %s WHERE name = %s", [bcPrize, channel[1:]])
+                            bcPrize = round(max(min(runHours, 5) * bbReward + min(max(runHours - 5, 0), 5) * bbReward * 1.5 + max(runHours - 10, 0) * bbReward * 2, maxPrize / 2))
+                            prizeStrings.append("%s (broadcaster) - %d pudding" % (channel[1:], bcPrize))
+                            whispers.append((channel, "You were rewarded %d pudding for running your recent bet. Check and spend it with !pudding" % bcPrize))
+                            # skip using addPudding to save a database lookup
+                            cur.execute("UPDATE users SET puddingCurrent = puddingCurrent + %s WHERE name = %s", [bcPrize, channel[1:]])
+                            
                             # start cooldown for next bet payout at max(endTime, lastPayout + 22h)
                             payoutTime = max(betRow[2], lastPayout + 79200000)
                             cur.execute(
@@ -4001,50 +4270,22 @@ class NepBot(NepBotClass):
                                 [bcPrize, payoutTime, betRow[0]])
 
                             messages = ["Paid out the following prizes: "]
-                            for prizeToken in prizes:
-                                msg = betPrizeNames[prizeToken] + " - " + ", ".join(prizes[prizeToken]) + "; "
+                            first = True
+                            for prize in prizeStrings:
+                                msg = prize if first else "; " + prize
                                 if len(messages[-1] + msg) > 400:
-                                    messages.append(msg)
+                                    messages.append(prize)
                                 else:
                                     messages[-1] += msg
-
-                            msgBC = "{points} points - {name} (broadcaster)".format(name=channel[1:], points=bcPrize)
-                            if len(messages[-1] + msgBC) > 400:
-                                messages.append(msgBC)
-                            else:
-                                messages[-1] += msgBC
+                                first = False
 
                             for message in messages:
                                 self.message(channel, message, isWhisper)
 
                             # alert each person individually as well
                             # sent after the messages to the channel itself deliberately
-                            for prizeToken in prizes:
-                                for winnerName in prizes[prizeToken]:
-                                    whisperArgs = (betPrizeNames[prizeToken], channel[1:], prizeToken)
-                                    self.message('#' + winnerName,
-                                                 "You won a %s from the bet in %s's channel. Redeem it in any chat with !redeem %s" % whisperArgs,
-                                                 True)
-
-                        cur.close()
-                        return
-                    elif subcmd == "packs":
-                        # check any packs they might have left to claim
-                        cur = db.cursor()
-                        cur.execute(
-                            "SELECT token, COUNT(*) FROM tokens WHERE claimable = 1 AND bet_prize = 1 AND only_redeemable_by = %s GROUP BY token",
-                            [tags['user-id']])
-                        prizes = cur.fetchall()
-
-                        if len(prizes) > 0:
-                            prizeStr = ", ".join("%s%s (!redeem %s)" % (
-                                betPrizeNames[row[0]], " x%d" % row[1] if row[1] > 1 else "", row[0]) for row in prizes)
-                            self.message(channel, "%s, you have the following unclaimed bet prizes: %s" % (
-                                tags['display-name'], prizeStr), isWhisper)
-                        else:
-                            self.message(channel,
-                                         "%s, you have no unclaimed bet prizes right now. Participate in more bets to earn free packs!" %
-                                         tags['display-name'], isWhisper)
+                            for whisper in whispers:
+                                self.message(whisper[0], whisper[1], True)
 
                         cur.close()
                         return
@@ -4114,18 +4355,18 @@ class NepBot(NepBotClass):
 
                     # normal sets
                     cur.execute(
-                        "SELECT DISTINCT sets.id, sets.name, sets.reward FROM sets WHERE sets.claimed_by IS NULL AND sets.id NOT IN (SELECT DISTINCT setID FROM set_cards LEFT OUTER JOIN (SELECT * FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.id = %s) AS a ON waifuid = cardID JOIN sets ON set_cards.setID = sets.id JOIN waifus ON cardID = waifus.id WHERE a.name IS NULL)",
+                        "SELECT DISTINCT sets.id, sets.name, sets.rewardPudding FROM sets WHERE sets.claimed_by IS NULL AND sets.id NOT IN (SELECT DISTINCT setID FROM set_cards LEFT OUTER JOIN (SELECT * FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.id = %s) AS a ON waifuid = cardID JOIN sets ON set_cards.setID = sets.id JOIN waifus ON cardID = waifus.id WHERE a.name IS NULL)",
                         [tags["user-id"]])
                     rows = cur.fetchall()
                     for row in rows:
                         claimed += 1
                         cur.execute("UPDATE sets SET claimed_by = %s, claimed_at = %s WHERE sets.id = %s",
                                     [tags["user-id"], current_milli_time(), row[0]])
-                        addPoints(tags["user-id"], int(row[2]))
+                        addPudding(tags["user-id"], int(row[2]))
                         badgeid = addBadge(row[1], config["setBadgeDescription"], config["setBadgeDefaultImage"])
                         giveBadge(tags['user-id'], badgeid)
                         self.message(channel,
-                                     "Successfully claimed the Set {set} and rewarded {user} with {reward} points!".format(
+                                     "Successfully claimed the Set {set} and rewarded {user} with {reward} pudding!".format(
                                          set=row[1], user=tags["display-name"], reward=row[2]), isWhisper)
                         cur.execute(
                             "SELECT waifus.name FROM set_cards INNER JOIN waifus ON set_cards.cardID = waifus.id WHERE setID = %s",
@@ -4152,6 +4393,41 @@ class NepBot(NepBotClass):
                 else:
                     self.message(channel, "Debug mode is off. Debug command disabled.")
                 return
+            if command == "givefreepack" and sender in superadmins:
+                if len(args) < 2:
+                    self.message(channel, "Usage: !givefreepack <username> <booster name> [<amount> (default 1)]", isWhisper)
+                    return
+                
+                if len(args) >= 3:
+                    try:
+                        amount = int(args[2])
+                    except ValueError:
+                        self.message(channel, "Invalid amount specified.", isWhisper)
+                        return
+                else:
+                    amount = 1
+
+                with db.cursor() as cur:
+                    cur.execute("SELECT id, name FROM users WHERE name = %s", [args[0]])
+                    userData = cur.fetchone()
+                    if userData is None:
+                        self.message(channel, "Invalid username specified.", isWhisper)
+                        return
+
+                    cur.execute("SELECT COUNT(*) FROM boosters WHERE name = %s", [args[1]])
+                    if cur.fetchone()[0] == 0:
+                        self.message(channel, "Invalid booster name specified.", isWhisper)
+                        return
+
+                    giveFreeBooster(userData[0], args[1], amount)
+                    if amount > 1:
+                        self.message('#%s' % userData[1], "You were given %d free %s packs by an admin. Check them using !freepacks" % (amount, args[1]), True)
+                    else:
+                        self.message('#%s' % userData[1], "You were given a free %s pack by an admin. Open it using !freepacks open %s" % (args[1], args[1]), True)
+
+                    self.message(channel, "Successfully gave %d %s packs to %s." % (amount, args[1], userData[1]), isWhisper)
+                    return
+                    
             if command == "nepcord":
                 self.message(channel,
                              "To join the discussion in the official Waifu TCG Discord Channel, go to %s/discord" %
@@ -4808,6 +5084,11 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !bounty cancel <ID>", isWhisper=isWhisper)
                         return
             if command == "raritychange" and sender in superadmins:
+                hasConfirmed = False
+                if len(args) > 0 and args[-1].lower() == "yes":
+                    hasConfirmed = True
+                    args = args[:-1]
+                
                 if len(args) < 2:
                     self.message(channel, "Usage: !raritychange <ID> <rarity>", isWhisper)
                     return
@@ -4820,7 +5101,7 @@ class NepBot(NepBotClass):
                     self.message(channel, "Usage: !raritychange <ID> <rarity>", isWhisper)
                     return
 
-                if waifu['base_rarity'] >= int(config['numNormalRarities']):
+                if waifu['base_rarity'] == int(config['numNormalRarities']):
                     self.message(channel, "You shouldn't be changing a special waifu into another rarity.", isWhisper)
                     return
 
@@ -4828,6 +5109,14 @@ class NepBot(NepBotClass):
                     self.message(channel, "[%d] %s is already %s base rarity!" % (
                         waifu['id'], waifu['name'], config['rarity%dName' % rarity]), isWhisper)
                     return
+                    
+                if not hasConfirmed and rarity > waifu['base_rarity'] and waifu['base_rarity'] < int(config["numNormalRarities"]) - 1:
+                    # check for promoted copies existing
+                    with db.cursor() as cur:
+                        cur.execute("SELECT COUNT(*) FROM has_waifu WHERE waifuid = %s AND rarity BETWEEN %s AND %s", [waifu['id'], waifu['base_rarity'] + 1, int(config["numNormalRarities"]) - 1])
+                        if cur.fetchone()[0] > 0:
+                            self.message(channel, "WARNING: You are trying to increase the rarity of a card which people have already promoted. This may cause undesirable results. Append ' yes' to your command if you want to do this anyway.", isWhisper)
+                            return
 
                 # limit check
                 oldRarityLimit = int(config['rarity%dMax' % waifu['base_rarity']])
@@ -4849,9 +5138,19 @@ class NepBot(NepBotClass):
 
                 # okay, do it
                 with db.cursor() as cur:
-                    cur.execute("UPDATE waifus SET base_rarity = %s WHERE id = %s", [rarity, waifu['id']])
-                    cur.execute("UPDATE has_waifu SET rarity = %s WHERE waifuid = %s AND rarity < %s",
-                                [rarity, waifu['id'], rarity])
+                    if rarity < int(config['numNormalRarities']):
+                        cur.execute("UPDATE waifus SET normal_weighting = LEAST(GREATEST(normal_weighting, (SELECT MIN(w1.normal_weighting) FROM (SELECT * FROM waifus) w1 WHERE w1.base_rarity = %s)), (SELECT MAX(w2.normal_weighting) FROM (SELECT * FROM waifus) w2 WHERE w2.base_rarity = %s)), base_rarity = %s WHERE id = %s", [rarity, rarity, rarity, waifu['id']])
+                    else:
+                        cur.execute("UPDATE waifus SET base_rarity = %s WHERE id = %s", [rarity, waifu['id']])
+                    
+                    cur.execute("SELECT userid, amount FROM has_waifu WHERE waifuid = %s AND rarity < %s", [waifu['id'], rarity])
+                    lowerCopies = cur.fetchall()
+                    if len(lowerCopies) > 0:
+                        cur.execute("DELETE FROM has_waifu WHERE waifuid = %s AND rarity < %s", [waifu['id'], rarity])
+                        for copy in lowerCopies:
+                            giveCard(copy[0], waifu['id'], rarity, copy[1])
+                        
+                        attemptPromotions(waifu['id'])
 
                     # cancel all bounties
                     cur.execute(
@@ -4866,6 +5165,9 @@ class NepBot(NepBotClass):
                     cur.execute(
                         "UPDATE bounties SET status='cancelled', updated=%s WHERE waifuid = %s AND status='open'",
                         [current_milli_time(), waifu['id']])
+                        
+                    if rarity >= int(config["numNormalRarities"]):
+                        cur.execute("UPDATE users SET favourite = 1 WHERE favourite = %s AND (SELECT COUNT(*) FROM has_waifu WHERE has_waifu.userid = users.id AND has_waifu.waifuid = %s) = 0", [waifu['id']] * 2)
 
                 # done
                 self.message(channel, "Successfully changed [%d] %s's base rarity to %s." % (
@@ -4881,7 +5183,7 @@ class NepBot(NepBotClass):
                     try:
                         newFav = int(args[1])
                     except ValueError:
-                        self.message(channel, args[1] + " is not a number. Please try again.");
+                        self.message(channel, args[1] + " is not a number. Please try again.")
                         return
                     newFavW = getWaifuById(newFav)
                     if newFavW is None:
@@ -4904,6 +5206,9 @@ class NepBot(NepBotClass):
                         self.message(channel, tags[
                             "display-name"] + ", sorry, but that Waifu doesn't exist. Try a different one!",
                                      isWhisper)
+                        return
+                    elif newFavW["can_favourite"] == 0:
+                        self.message(channel, "%s, sorry, but that Waifu can't be set as your favourite. Try a different one!" % tags['display-name'], isWhisper)
                         return
                     elif hasOrIsLowRarity:
                         self.message(channel, "Updated your favourite Waifu to be " + newFavW["name"] + "! naroDesu",
@@ -4947,6 +5252,218 @@ class NepBot(NepBotClass):
                     self.message(channel, "... and this was enough to upgrade your hand to a new slot! naroYay",
                                  isWhisper)
                 return
+            if command == "godimage":
+                canManageImages = sender in superadmins
+                godRarity = int(config["numNormalRarities"]) - 1
+                if len(args) < 1:
+                    if canManageImages:
+                        self.message(channel, "Usage: !godimage change / changeglobal / queue / check / acceptsingle / acceptglobal / reject", isWhisper)
+                    else:
+                        self.message(channel, "Usage: !godimage change / changeglobal / list / cancel", isWhisper)
+                    return
+                subcmd = args[0].lower()
+                if subcmd in ["change", "changeglobal", "request", "requestglobal"]:
+                    do_global = subcmd in ["changeglobal", "requestglobal"]
+                    if len(args) < 3:
+                        self.message(channel, "Usage: !godimage change[global] <id> <link>", isWhisper)
+                        return
+                    try:
+                        waifuid = int(args[1])
+                    except ValueError:
+                        self.message(channel, "Usage: !godimage change[global] <id> <link>", isWhisper)
+                        return
+
+                    waifu = getWaifuById(waifuid)
+
+                    with db.cursor() as cur:
+                        cur.execute("SELECT COUNT(*) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s", [tags['user-id'], waifuid, godRarity])
+                        if cur.fetchone()[0] == 0:
+                            self.message(channel, "You don't own that waifu at god rarity!", isWhisper)
+                            return
+
+                        if waifu["base_rarity"] == godRarity:
+                            self.message(channel, "Base god rarity waifus cannot have their picture changed!", isWhisper)
+                            return
+
+                        if canManageImages:
+                            # automatically do the change
+                            try:
+                                hostedURL = processImageURL(args[2])
+                            except Exception as ex:
+                                self.message(channel, "Could not process image. %s" % str(ex), isWhisper)
+                                return
+                            
+                            if do_global:
+                                cur.execute("UPDATE waifus SET image = %s WHERE id = %s", [hostedURL, waifuid])
+                            else:
+                                cur.execute("UPDATE has_waifu SET custom_image = %s WHERE waifuid = %s AND userid = %s AND rarity = %s", [hostedURL, waifuid, tags['user-id'], godRarity])
+
+                            # log the change for posterity
+                            insertArgs = [tags['user-id'], waifuid, args[2], do_global, tags['user-id'], current_milli_time()]
+                            cur.execute("INSERT INTO godimage_requests (requesterid, waifuid, image, is_global, state, moderatorid, created) VALUES(%s, %s, %s, %s, 'auto_accepted', %s, %s)", insertArgs)
+
+                            self.message(channel, "Image change processed successfully.", isWhisper)
+                            return
+                        else:
+                            try:
+                                validateImageURL(args[2])
+                            except ValueError as ex:
+                                self.message(channel, "Invalid link specified. %s" % str(ex), isWhisper)
+                                return
+                            except Exception:
+                                self.message(channel, "There was an unknown problem with the link you specified. Please try again later.", isWhisper)
+                                return
+                            # cancel any old pending requests for this waifu
+                            cur.execute("UPDATE godimage_requests SET state = 'cancelled', updated = %s WHERE waifuid = %s AND state = 'pending'", [current_milli_time(), waifuid])
+
+                            # record a new request
+                            insertArgs = [tags['user-id'], waifuid, args[2], do_global, current_milli_time()]
+                            cur.execute("INSERT INTO godimage_requests (requesterid, waifuid, image, is_global, state, created) VALUES(%s, %s, %s, %s, 'pending', %s)", insertArgs)
+
+                            # notify the discordhook of the new request
+                            discordArgs = {"user": tags['display-name'], "id": waifuid, "name": waifu["name"], "image": args[2], "type": "a global" if do_global else "an individual"}
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "{user} requested {type} image change for [{id}] {name} to <{image}>!\nUse `!godimage check {id}` in any chat to check it.".format(**discordArgs)
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+
+                            self.message(channel, "Your request has been placed. You will be notified when bot staff accept or decline it.", isWhisper)
+                            return
+                elif subcmd == "list":
+                    with db.cursor() as cur:
+                        cur.execute("SELECT waifus.id, waifus.name FROM godimage_requests gr JOIN waifus ON gr.waifuid = waifus.id WHERE gr.requesterid = %s AND gr.state = 'pending'", [tags['user-id']])
+                        reqs = cur.fetchall()
+
+                        if len(reqs) == 0:
+                            self.message(channel, "You don't have any pending god image change requests.", isWhisper)
+                        else:
+                            reqList = ", ".join(["[%d] %s" % (req[0], req[1]) for req in reqs])
+                            self.message(channel, "%s, you have pending image change requests for: %s." % (tags['display-name'], reqList), isWhisper)
+                        
+                        return
+                elif subcmd == "cancel":
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !godimage cancel <id>", isWhisper)
+                        return
+                    try:
+                        waifuid = int(args[1])
+                    except ValueError:
+                        self.message(channel, "Usage: !godimage cancel <id>", isWhisper)
+                        return
+                    waifu = getWaifuById(waifuid)
+                    if waifu is None:
+                        self.message(channel, "Usage: !godimage cancel <id>", isWhisper)
+                        return
+                    with db.cursor() as cur:
+                        cur.execute("UPDATE godimage_requests SET state = 'cancelled', updated = %s WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [current_milli_time(), tags['user-id'], waifuid])
+                        if cur.rowcount > 0:
+                            # send discord notif
+                            discordArgs = {"user": tags['display-name'], "id": waifuid, "name": waifu["name"]}
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "{user} cancelled their image change request for [{id}] {name}.".format(**discordArgs)
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                            self.message(channel, "You cancelled your image change request for [%d] %s." % (waifuid, waifu["name"]), isWhisper)
+                        elif waifu["can_lookup"]:
+                            self.message(channel, "You didn't have a pending image change request for that waifu.", isWhisper)
+                        else:
+                            self.message(channel, "Usage: !godimage cancel <id>", isWhisper)
+                        return
+                elif subcmd == "queue" and canManageImages:
+                    with db.cursor() as cur:
+                        cur.execute("SELECT waifuid FROM godimage_requests WHERE state = 'pending' ORDER BY created ASC")
+                        queue = cur.fetchall()
+                        if len(queue) == 0:
+                            self.message(channel, "The request queue is currently empty.", isWhisper)
+                        else:
+                            queueStr = ", ".join(str(item[0]) for item in queue)
+                            self.message(channel, "Current requested IDs for image changes: %s. !godimage check <id> to see each request." % queueStr, isWhisper)
+                        return
+                elif canManageImages and subcmd in ["check", "acceptsingle", "acceptglobal", "reject"]:
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !godimage %s <id>" % subcmd, isWhisper)
+                        return
+                    try:
+                        waifuid = int(args[1])
+                    except ValueError:
+                        self.message(channel, "Usage: !godimage %s <id>" % subcmd, isWhisper)
+                        return
+                    with db.cursor() as cur:
+                        cur.execute("SELECT gr.id, gr.image, gr.is_global, users.id, users.name, waifus.id, waifus.name FROM godimage_requests gr" 
+                        + " JOIN users ON gr.requesterid = users.id"
+                        + " JOIN waifus ON gr.waifuid = waifus.id"
+                        + " WHERE gr.waifuid = %s AND gr.state = 'pending'", [waifuid])
+                        request = cur.fetchone()
+                        if request is None:
+                            self.message(channel, "There is no pending request for that waifu.", isWhisper)
+                            return
+
+                        if subcmd == "check":
+                            msgArgs = {"user": request[4], "id": request[5], "name": request[6], "image": request[1]}
+                            if request[2]:
+                                self.message(channel, ("{user} requested [{id}] {name}'s global image to be changed to {image} ." + 
+                                " You can accept this request with !godimage acceptglobal {id}," +
+                                " change it for only their copy with !godimage acceptsingle {id}," +
+                                " or deny it entirely with !godimage reject {id} <reason>.").format(**msgArgs), isWhisper)
+                            else:
+                                self.message(channel, ("{user} requested their copy of [{id}] {name}'s image to be changed to {image} ." + 
+                                " You can accept this request with !godimage acceptsingle {id}" +
+                                " or deny it with !godimage reject {id} <reason>.").format(**msgArgs), isWhisper)
+                        elif subcmd == "reject":
+                            if len(args) < 3:
+                                self.message(channel, "You must provide a reason to reject the request. If it is porn/illegal/etc, just ban the user.", isWhisper)
+                                return
+                            rejectionReason = " ".join(args[2:])
+                            queryArgs = [tags['user-id'], current_milli_time(), rejectionReason, request[0]]
+                            cur.execute("UPDATE godimage_requests SET state = 'rejected', moderatorid = %s, updated = %s, rejection_reason = %s WHERE id = %s", queryArgs)
+
+                            # notify them
+                            self.message("#%s" % request[4], "Your image change request for [%d] %s was rejected with the following reason: %s" % (request[5], request[6], rejectionReason), True)
+
+                            self.message(channel, "Request rejected and user notified.", isWhisper)
+                        elif subcmd == "acceptglobal":
+                            if not request[2]:
+                                self.message(channel, "A non-global request cannot be accepted for a global image change. Use !godimage acceptsingle %d instead." % request[5], isWhisper)
+                                return
+                            
+                            # update it
+                            try:
+                                hostedURL = processImageURL(request[1])
+                            except Exception as ex:
+                                self.message(channel, "Could not process image. %s. Check the URL yourself and if it is invalid reject their request." % str(ex), isWhisper)
+                                return
+                            cur.execute("UPDATE waifus SET image = %s WHERE id = %s", [hostedURL, request[5]])
+                            cur.execute("UPDATE has_waifu SET custom_image = NULL WHERE waifuid = %s", [request[5]])
+
+                            queryArgs = [tags['user-id'], current_milli_time(), request[0]]
+                            cur.execute("UPDATE godimage_requests SET state = 'accepted_global', moderatorid = %s, updated = %s WHERE id = %s", queryArgs)
+
+                            # notify them
+                            self.message("#%s" % request[4], "Your global image change request for [%d] %s was accepted, the image has been changed." % (request[5], request[6]), True)
+                            self.message(channel, "Request accepted. The new image for [%d] %s is %s" % (request[5], request[6], hostedURL), isWhisper)
+                        else:
+                            # update it
+                            try:
+                                hostedURL = processImageURL(request[1])
+                            except Exception as ex:
+                                self.message(channel, "Could not process image. %s. Check the URL yourself and if it is invalid reject their request." % str(ex), isWhisper)
+                                return
+                            cur.execute("UPDATE has_waifu SET custom_image = %s WHERE userid = %s AND waifuid = %s", [hostedURL, request[3], request[5]])
+
+                            queryArgs = [tags['user-id'], current_milli_time(), request[0]]
+                            cur.execute("UPDATE godimage_requests SET state = 'accepted_single', moderatorid = %s, updated = %s WHERE id = %s", queryArgs)
+
+                            # notify them
+                            if request[2]:
+                                self.message("#%s" % request[4], "Your image change request for [%d] %s was accepted, but only for your own copy." % (request[5], request[6]), True)
+                            else:
+                                self.message("#%s" % request[4], "Your image change request for your copy of [%d] %s was accepted." % (request[5], request[6]), True)
+
+                            self.message(channel, "Request accepted. The new image for %s's copy of [%d] %s is %s" % (request[4], request[5], request[6], hostedURL), isWhisper)
+                        return
+
 
 
 curg = db.cursor()
