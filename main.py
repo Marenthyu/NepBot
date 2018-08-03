@@ -2269,14 +2269,24 @@ class NepBot(NepBotClass):
                     rewardInfo = cur.fetchone()
                     
                     if rewardInfo is None:
-                        self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
+                        discordbody = {
+                            "username": "WTCG Admin", 
+                            "content" : "The free reward database is misconfigured, please fix it."
+                        }
+                        threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                        self.message(channel, "Could not retrieve your free reward, try again later.", isWhisper)
                         return
                         
                     # only one of the latter three rewards is allowed to be filled in, and there needs to be at least one reward.
                     cardRewardCount = sum([(1 if rewardInfo[n] is not None else 0) for n in range(1, 4)])
                     ovrRewardCount = sum([(1 if rewardInfo[n] is not None else 0) for n in range(4)])
                     if cardRewardCount > 1 or ovrRewardCount == 0:
-                        self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
+                        discordbody = {
+                            "username": "WTCG Admin", 
+                            "content" : "The free reward database is misconfigured, please fix it."
+                        }
+                        threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                        self.message(channel, "Could not retrieve your free reward, try again later.", isWhisper)
                         return
                         
                     # can they take the reward at the current time?
@@ -2337,7 +2347,12 @@ class NepBot(NepBotClass):
                                     messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
                                 self.message(channel, "%s, you got your daily free reward: %sa %s booster - %s/booster?user=%s" % (tags['display-name'], pointsPrefix, rewardInfo[3], config['siteHost'], sender), isWhisper)
                             except InvalidBoosterException:
-                                self.message(channel, "Oops! The free reward database appears to be misconfigured. Please report this to an admin.", isWhisper)
+                                discordbody = {
+                                    "username": "WTCG Admin", 
+                                    "content" : "The free reward database is misconfigured, please fix it."
+                                }
+                                threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                                self.message(channel, "Could not retrieve your free reward, try again later.", isWhisper)
                                 return
 
                     cur.execute("UPDATE users SET lastFree = %s, rewardSeqSeed = %s, rewardSeqIndex = %s WHERE id = %s", [current_milli_time(), seed, index + 1, tags['user-id']])
