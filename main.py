@@ -3521,7 +3521,7 @@ class NepBot(NepBotClass):
                         self.message(channel, msg, isWhisper)
 
                     return
-            if command in ["vote", "donate"] and isMarathonChannel and not isWhisper:
+            if command in ["vote", "donate"] and isMarathonChannel:
                 if len(args) < 2:
                     if command == "vote":
                         self.message(channel, "Usage: !vote <warid> <choice> <amount>", isWhisper)
@@ -3719,109 +3719,6 @@ class NepBot(NepBotClass):
                                         isWhisper)
 
                         return
-
-            if command == "vote":
-                if len(args) < 3:
-                    self.message(channel, "Usage: !vote <warid> <choice> <points>", isWhisper)
-                    return
-
-                if not isMarathonChannel:
-                    self.message(channel, "You can only vote in wars in the HDNMarathon channel.", isWhisper)
-                    return
-
-                with db.cursor() as cur:
-                    cur.execute(
-                        "SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s",
-                        [args[0]])
-                    war = cur.fetchone()
-
-                    if war is None:
-                        self.message(channel, "%s -> Invalid bidwar specified." % tags['display-name'], isWhisper)
-                        return
-
-                    warid = war[0]
-                    title = war[1]
-                    status = war[2]
-                    openEntry = war[3] != 0
-                    openEntryMinimum = war[4]
-                    openEntryMaxLength = war[5]
-
-                    if status == 'closed':
-                        self.message(channel, "%s -> That bidwar is currently closed." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    # check their points entry
-                    try:
-                        points = int(args[-1])
-                    except ValueError:
-                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    if points <= 0:
-                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    if not hasPoints(tags['user-id'], points):
-                        self.message(channel, "%s -> You don't have that many points!" % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    cur.execute(
-                        "SELECT choice, amount FROM bidWarChoices WHERE warID = %s ORDER BY amount DESC, choice ASC",
-                        [warid])
-                    choices = cur.fetchall()
-                    choiceslookup = [choice[0].lower() for choice in choices]
-                    theirchoice = " ".join(args[1:-1]).strip()
-                    theirchoiceL = theirchoice.lower()
-
-                    if theirchoiceL not in choiceslookup:
-                        # deal with custom choice entry
-                        if not openEntry:
-                            self.message(channel, "%s -> That isn't a valid choice for the %s bidwar." % (
-                                tags['display-name'], title), isWhisper)
-                            return
-
-                        for word in bannedWords:
-                            if word in theirchoiceL:
-                                self.message(channel, ".timeout %s 300" % sender, isWhisper)
-                                self.message(channel,
-                                             "%s -> No vulgar choices allowed (warning)" % tags['display-name'],
-                                             isWhisper)
-                                return
-
-                        if points < openEntryMinimum:
-                            self.message(channel,
-                                         "%s -> You must contribute at least %d points to add a new choice to this bidwar!" % (
-                                             tags['display-name'], openEntryMinimum), isWhisper)
-                            return
-
-                        if len(theirchoice) > openEntryMaxLength:
-                            self.message(channel,
-                                         "%s -> The maximum length of a choice in the %s bidwar is %d characters." % (
-                                             tags['display-name'], title, openEntryMaxLength), isWhisper)
-                            return
-
-                        # all clear, add it
-                        addPoints(tags['user-id'], -points)
-                        actionTime = current_milli_time()
-                        qargs = [warid, theirchoice, points, actionTime, tags['user-id'], actionTime, tags['user-id']]
-                        cur.execute(
-                            "INSERT INTO bidWarChoices (warID, choice, amount, created, creator, lastVote, lastVoter) VALUES(%s, %s, %s, %s, %s, %s, %s)",
-                            qargs)
-                    else:
-                        # already existing choice, just vote for it
-                        addPoints(tags['user-id'], -points)
-                        qargs = [points, current_milli_time(), tags['user-id'], warid, theirchoiceL]
-                        cur.execute(
-                            "UPDATE bidWarChoices SET amount = amount + %s, lastVote = %s, lastVoter = %s WHERE warID = %s AND choice = %s",
-                            qargs)
-
-                    self.message(channel, "%s -> Successfully added %d points to %s in the %s bidwar." % (
-                        tags['display-name'], points, theirchoice, title), isWhisper)
-                    return
             if command == "incentives" and (isMarathonChannel or isWhisper):
                 with db.cursor() as cur:
                     cur.execute("SELECT id, title, amount, required FROM incentives WHERE status = 'open'")
@@ -3850,66 +3747,6 @@ class NepBot(NepBotClass):
                                 messages[-1] += inc
                         for message in messages:
                             self.message(channel, message, isWhisper)
-
-                    return
-            if command == "donate" and isMarathonChannel:
-                if len(args) != 2:
-                    self.message(channel,
-                                 "Usage: !donate <id> <points> (!incentives to see a list of incentives / IDs)",
-                                 isWhisper)
-                    return
-
-                with db.cursor() as cur:
-                    cur.execute("SELECT id, title, amount, required FROM incentives WHERE id = %s", [args[0]])
-                    incentive = cur.fetchone()
-
-                    if incentive is None:
-                        self.message(channel, "%s -> Invalid incentive ID." % tags['display-name'], isWhisper)
-                        return
-
-                    incid = incentive[0]
-                    title = incentive[1]
-                    currAmount = incentive[2]
-                    required = incentive[3]
-
-                    if currAmount >= required:
-                        self.message(channel,
-                                     "%s -> The %s incentive has already been met!" % (tags['display-name'], title),
-                                     isWhisper)
-                        return
-
-                    try:
-                        points = int(args[1])
-                    except ValueError:
-                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    if points <= 0:
-                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    points = min(points, required - currAmount)
-
-                    if not hasPoints(tags['user-id'], points):
-                        self.message(channel, "%s -> You don't have that many points!" % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    addPoints(tags['user-id'], -points)
-                    cur.execute(
-                        "UPDATE incentives SET amount = amount + %s, lastContribution = %s, lastContributor = %s WHERE id = %s",
-                        [points, current_milli_time(), tags['user-id'], incid])
-
-                    if points + currAmount >= required:
-                        self.message(channel, "%s -> You successfully donated %d points and met the %s incentive!" % (
-                            tags['display-name'], points, title), isWhisper)
-                    else:
-                        self.message(channel,
-                                     "%s -> You successfully donated %d points towards the %s incentive. It needs %d more to be met." % (
-                                         tags['display-name'], points, title, required - currAmount - points),
-                                     isWhisper)
 
                     return
             if command == "upgrade":
