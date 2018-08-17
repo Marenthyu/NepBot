@@ -3521,6 +3521,205 @@ class NepBot(NepBotClass):
                         self.message(channel, msg, isWhisper)
 
                     return
+            if command in ["vote", "donate"] and isMarathonChannel and not isWhisper:
+                if len(args) < 2:
+                    if command == "vote":
+                        self.message(channel, "Usage: !vote <warid> <choice> <amount>", isWhisper)
+                    else:
+                        self.message(channel,
+                                 "Usage: !donate <id> <amount> (!incentives to see a list of incentives / IDs)",
+                                 isWhisper)
+                    return
+                
+                with db.cursor() as cur:
+                    # find out if this is a bidwar, an incentive or nothing
+                    cur.execute("SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s", [args[0]])
+                    war = cur.fetchone()
+
+                    if war is not None:
+                        if len(args) < 3:
+                            self.message(channel, "Usage: !vote <warid> <choice> <amount>", isWhisper)
+                            return
+
+                        warid = war[0]
+                        title = war[1]
+                        status = war[2]
+                        openEntry = war[3] != 0
+                        openEntryMinimum = war[4]
+                        openEntryMaxLength = war[5]
+
+                        if status == 'closed':
+                            self.message(channel, "%s -> That bidwar is currently closed." % tags['display-name'])
+                            return
+
+                        # pudding mode?
+                        puddingMode = False
+                        exchangeRate = int(config["puddingExchangeRateMarathon"])
+                        if len(args) > 3 and args[-1].lower() == "pudding":
+                            puddingMode = True
+                            args = args[:-1]
+                        currency = 'pudding' if puddingMode else 'points'
+
+                        # check their points entry
+                        try:
+                            points = int(args[-1])
+                            if points <= 0:
+                                raise ValueError()
+                        except ValueError:
+                            self.message(channel, "%s -> Invalid amount of points/pudding entered." % tags['display-name'])
+                            return
+
+                        if puddingMode:
+                            if not hasPudding(tags['user-id'], points):
+                                self.message(channel, "%s -> You don't have that much pudding!" % tags['display-name'])
+                                return
+
+                            contribution = points * exchangeRate
+                            contributionStr = "%d pudding (-> %d points)" % (points, contribution)
+                        else:
+                            if not hasPoints(tags['user-id'], points):
+                                self.message(channel, "%s -> You don't have that many points!" % tags['display-name'])
+                                return
+
+                            contribution = points
+                            contributionStr = "%d points" % points
+
+                        cur.execute(
+                            "SELECT choice, amount FROM bidWarChoices WHERE warID = %s ORDER BY amount DESC, choice ASC",
+                            [warid])
+                        choices = cur.fetchall()
+                        choiceslookup = [choice[0].lower() for choice in choices]
+                        theirchoice = " ".join(args[1:-1]).strip()
+                        theirchoiceL = theirchoice.lower()
+
+                        if theirchoiceL not in choiceslookup:
+                            # deal with custom choice entry
+                            if not openEntry:
+                                self.message(channel, "%s -> That isn't a valid choice for the %s bidwar." % (
+                                    tags['display-name'], title))
+                                return
+
+                            for word in bannedWords:
+                                if word in theirchoiceL:
+                                    #self.message(channel, ".timeout %s 300" % sender, isWhisper)
+                                    self.message(channel,
+                                                "%s -> No vulgar choices allowed (warning)" % tags['display-name'])
+                                    return
+
+                            if contribution < openEntryMinimum:
+                                self.message(channel,
+                                            "%s -> You must contribute at least %d points or %d pudding to add a new choice to this bidwar!" % (
+                                                tags['display-name'], openEntryMinimum, math.ceil(openEntryMinimum / exchangeRate)), isWhisper)
+                                return
+
+                            if len(theirchoice) > openEntryMaxLength:
+                                self.message(channel,
+                                            "%s -> The maximum length of a choice in the %s bidwar is %d characters." % (
+                                                tags['display-name'], title, openEntryMaxLength), isWhisper)
+                                return
+
+                            # all clear, add it
+                            if puddingMode:
+                                takePudding(tags['user-id'], points)
+                            else:
+                                addPoints(tags['user-id'], -points)
+                            actionTime = current_milli_time()
+                            qargs = [warid, theirchoice, contribution, actionTime, tags['user-id'], actionTime, tags['user-id']]
+                            cur.execute(
+                                "INSERT INTO bidWarChoices (warID, choice, amount, created, creator, lastVote, lastVoter) VALUES(%s, %s, %s, %s, %s, %s, %s)",
+                                qargs)
+
+                            logargs = [tags['user-id'], warid, theirchoice, points, contribution, currency, current_milli_time()]
+                        else:
+                            # already existing choice, just vote for it
+                            if puddingMode:
+                                takePudding(tags['user-id'], points)
+                            else:
+                                addPoints(tags['user-id'], -points)
+                            qargs = [contribution, current_milli_time(), tags['user-id'], warid, theirchoiceL]
+                            cur.execute(
+                                "UPDATE bidWarChoices SET amount = amount + %s, lastVote = %s, lastVoter = %s WHERE warID = %s AND choice = %s",
+                                qargs)
+                            logargs = [tags['user-id'], warid, theirchoiceL, points, contribution, currency, current_milli_time()]
+                        
+                        cur.execute("INSERT INTO `contributionLog` (`userid`, `to_id`, `to_choice`, `raw_amount`, `contribution`, `currency`, `timestamp`) " +
+                            "VALUES(%s, %s, %s, %s, %s, %s, %s)", logargs)
+
+                        self.message(channel, "%s -> Successfully added %s to %s in the %s bidwar." % (
+                            tags['display-name'], contributionStr, theirchoice, title))
+                        return
+                    else:
+                        cur.execute("SELECT id, title, amount, required FROM incentives WHERE id = %s", [args[0]])
+                        incentive = cur.fetchone()
+
+                        if incentive is None:
+                            self.message(channel, "%s -> Invalid incentive/war ID." % tags['display-name'])
+                            return
+
+                        incid = incentive[0]
+                        title = incentive[1]
+                        currAmount = incentive[2]
+                        required = incentive[3]
+
+                        if currAmount >= required:
+                            self.message(channel,
+                                        "%s -> The %s incentive has already been met!" % (tags['display-name'], title))
+                            return
+
+                        try:
+                            points = int(args[1])
+                            if points <= 0:
+                                raise ValueError()
+                        except ValueError:
+                            self.message(channel, "%s -> Invalid amount of points/pudding entered." % tags['display-name'])
+                            return
+
+                        puddingMode = len(args) > 2 and args[2].lower() == "pudding"
+
+                        if puddingMode:
+                            exchangeRate = int(config["puddingExchangeRateMarathon"])
+                            points = min(points, math.ceil((required - currAmount) / exchangeRate))
+
+                            if not hasPudding(tags['user-id'], points):
+                                self.message(channel, "%s -> You don't have that much pudding!" % tags['display-name'])
+                                return
+
+                            takePudding(tags['user-id'], points)
+
+                            contribution = min(points * exchangeRate, required - currAmount)
+                            contributionStr = "%d pudding (-> %d points)" % (points, contribution)
+                            currency = 'pudding'
+                        else:
+                            points = min(points, required - currAmount)
+
+                            if not hasPoints(tags['user-id'], points):
+                                self.message(channel, "%s -> You don't have that many points!" % tags['display-name'])
+                                return
+
+                            addPoints(tags['user-id'], -points)
+                            contribution = points
+                            contributionStr = "%d points" % points
+                            currency = 'points'
+                        
+                        cur.execute(
+                            "UPDATE incentives SET amount = amount + %s, lastContribution = %s, lastContributor = %s WHERE id = %s",
+                            [contribution, current_milli_time(), tags['user-id'], incid])
+
+                        logargs = [tags['user-id'], incid, None, points, contribution, currency, current_milli_time()]
+                        cur.execute("INSERT INTO `contributionLog` (`userid`, `to_id`, `to_choice`, `raw_amount`, `contribution`, `currency`, `timestamp`) " +
+                            "VALUES(%s, %s, %s, %s, %s, %s, %s)", logargs)
+
+                        if points + currAmount >= required:
+                            self.message(channel, "%s -> You successfully donated %s and met the %s incentive!" % (
+                                tags['display-name'], contributionStr, title), isWhisper)
+                        else:
+                            self.message(channel,
+                                        "%s -> You successfully donated %s towards the %s incentive. It needs %d more points to be met." % (
+                                            tags['display-name'], contributionStr, title, required - currAmount - contribution),
+                                        isWhisper)
+
+                        return
+
             if command == "vote":
                 if len(args) < 3:
                     self.message(channel, "Usage: !vote <warid> <choice> <points>", isWhisper)
@@ -4130,6 +4329,10 @@ class NepBot(NepBotClass):
                                              isWhisper)
                         return
                     elif subcmd == "forceenter" and canAdminBets:
+                        if isMarathonChannel:
+                            self.message(channel, "No forceenters allowed in the marathon channel.", isWhisper)
+                            return
+                       
                         # enter another user into a bet
                         if len(args) < 3:
                             self.message(channel, "Usage: !bet forceenter <username> <time>", isWhisper)
