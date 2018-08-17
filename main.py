@@ -116,6 +116,7 @@ db = pymysql.connect(host=dbhost, user=dbuser, passwd=dbpw, db=dbname, autocommi
 admins = []
 superadmins = []
 activitymap = {}
+marathonActivityMap = {}
 blacklist = []
 config = {}
 packAmountRewards = {}
@@ -223,6 +224,9 @@ def checkAndRenewAppAccessToken():
         except ValueError as error:
             logger.error("Access Token renew/get request was not successful")
             raise error
+
+def booleanConfig(name):
+    return name in config and config[name].strip().lower() not in ["off", "no", "false"]
 
 
 def placeBet(channel, userid, betms):
@@ -1757,6 +1761,8 @@ class NepBot(NepBotClass):
                     logger.debug("%s is live!", idtoname[str(element["user_id"])])
                     viewerCount[chanName] = element["viewer_count"]
                 channelids = channelids[100:]
+            
+            marathonLive = config['marathonChannel'][1:] in viewerCount
 
             logger.debug("Catching all viewers...")
             for c in self.addchannels:
@@ -1823,6 +1829,10 @@ class NepBot(NepBotClass):
                             pointGain = int(config["passivePoints"])
                             if viewerInfo[0] in activitymap and viewerInfo[0] in validactivity:
                                 pointGain += max(10 - int(activitymap[viewerInfo[0]]), 0)
+                            if viewerInfo[0] in marathonActivityMap and marathonActivityMap[viewerInfo[0]] < 10 and marathonLive:
+                                altPointGain = int(config["passivePoints"]) + 10 - marathonActivityMap[viewerInfo[0]]
+                                altPointGain = round(altPointGain * float(config["marathonPointsMultiplier"]))
+                                pointGain = max(pointGain, altPointGain)
                             pointGain = int(pointGain * float(config["pointsMultiplier"]))
                             if viewerInfo[2] is None:
                                 maxPointGain = max(maxPointsInactive - viewerInfo[1], 0)
@@ -1914,7 +1924,9 @@ class NepBot(NepBotClass):
                     newUsers = newUsers[100:]
 
                 for user in activitymap:
-                    activitymap[user] = activitymap[user] + 1
+                    activitymap[user] += 1
+                for user in marathonActivityMap:
+                    marathonActivityMap[user] += 1
             except Exception:
                 logger.warning("We had an error during passive point gain. skipping this cycle.")
                 logger.warning("Error: %s", str(sys.exc_info()))
@@ -1946,7 +1958,7 @@ class NepBot(NepBotClass):
                     logger.warning("Error updating from Horaro. Skipping this cycle.")
                     logger.warning("Error: %s", str(sys.exc_info()))
 
-            if config["marathonHelpAutopost"] == 'on':
+            if booleanConfig("marathonHelpAutopost"):
                 nextPost = int(config["marathonHelpAutopostLast"]) + int(config["marathonHelpAutopostPeriod"]) * 1000
                 if nextPost <= current_milli_time():
                     self.message(config["marathonChannel"], config["marathonHelpCommandText"], False)
@@ -2034,6 +2046,9 @@ class NepBot(NepBotClass):
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
             activitymap[channelowner] = 0
+            isMarathonChannel = channel == config['marathonChannel'] and not isWhisper
+            if isMarathonChannel:
+                marathonActivityMap[sender] = 0
             with busyLock:
                 with db.cursor() as cur:
                     # War?
@@ -4474,6 +4489,8 @@ class NepBot(NepBotClass):
                              config["siteHost"], isWhisper=isWhisper)
                 return
             if command == "giveaway":
+                if booleanConfig("marathonOnlyGiveaway") and not isMarathonChannel:
+                    return
                 cur = db.cursor()
                 if len(args) == 0 or args[0].lower() == 'enter':
                     # check for a giveaway to enter
