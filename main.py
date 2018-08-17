@@ -38,8 +38,20 @@ logger.addHandler(ch)
 logging.getLogger('tornado.application').addHandler(fh)
 logging.getLogger('tornado.application').addHandler(ch)
 
-gamesdict = {'Dark Rose Valkyrie': 'Black Rose Valkyrie', 'Megadimension Neptunia VIIR': 'Megadimension Neptunia VII',
-             'Intro': 'Hyperdimension Neptunia'}
+gamesdict = {
+    'Opening Set Up': 'Hyperdimension Neptunia',
+    'Hyperdimension Neptunia Victory Vs Rebirth 3': 'Hyperdimension Neptunia Victory',
+    'SetUp 1 Block - Interview': 'Hyperdimension Neptunia',
+    'Bid War Game': 'Hyperdimension Neptunia',
+    'Set Up Block 2': 'Hyperdimension Neptunia',
+    'Interview Q/A 1': 'Hyperdimension Neptunia',
+    'Interview Q/A 2': 'Hyperdimension Neptunia',
+    'Set Up Block 3': 'Hyperdimension Neptunia',
+    'Set Up Block 4': 'Hyperdimension Neptunia',
+    'Set Up Block 5 - Interview': 'Hyperdimension Neptunia',
+    'Hyperdimension Neptunia Re;birth 1 Plus': 'Hyperdimension Neptunia Re;Birth1',
+    'Credits': 'Hyperdimension Neptunia'
+}
 
 ffzws = 'wss://andknuckles.frankerfacez.com'
 pool = pydle.ClientPool()
@@ -495,9 +507,8 @@ def giveBadge(userid, badge):
 
 
 def getHoraro():
-    "https://horaro.org/-/api/v1/schedules/3911mu51ljb1wf7a5e/ticker"
     r = requests.get(
-        "https://horaro.org/-/api/v1/schedules/{horaroid}/ticker?hiddenkey=NepSmug".format(horaroid=config["horaroID"]))
+        "https://horaro.org/-/api/v1/schedules/{horaroid}/ticker".format(horaroid=config["horaroID"]))
     try:
         j = r.json()
         # ("got horaro ticker: " + str(j))
@@ -506,6 +517,11 @@ def getHoraro():
         logger.error("Horaro Error:")
         logger.error(str(r.status_code))
         logger.error(r.text)
+
+def getRawRunner(runner):
+    if '[' not in runner:
+        return runner
+    return runner[runner.index('[') + 1 : runner.index(']')]
 
 
 def updateBoth(game, title):
@@ -1912,6 +1928,10 @@ class NepBot(NepBotClass):
                         pointGain = int(config["passivePoints"])
                         if viewer in activitymap and viewer in validactivity:
                             pointGain += max(10 - int(activitymap[viewer]), 0)
+                        if viewer in marathonActivityMap and marathonActivityMap[viewer] < 10 and marathonLive:
+                            altPointGain = int(config["passivePoints"]) + 10 - marathonActivityMap[viewer]
+                            altPointGain = round(altPointGain * float(config["marathonPointsMultiplier"]))
+                            pointGain = max(pointGain, altPointGain)
                         pointGain = int(pointGain * float(config["pointsMultiplier"]))
                         updateData.append((pointGain, viewer))
 
@@ -1946,12 +1966,12 @@ class NepBot(NepBotClass):
                     current = current["data"]
                     game = current[0]
                     category = current[2]
-                    runners = [runner for runner in current[3:] if runner is not None]
+                    runners = [getRawRunner(runner) for runner in current[4:7] if runner is not None]
                     args = {"game": game}
                     args["category"] = " (%s)" % category if category is not None else ""
                     args["comingup"] = "COMING UP: " if wasNone else ""
                     args["runners"] = (" by " + ", ".join(runners)) if len(runners) > 0 else ""
-                    title = "{comingup}HDNMarathon mk2 - {game}{category}{runners} - !mk2 in chat".format(**args)
+                    title = "{comingup}HDNMarathon V - {game}{category}{runners} - !marathon in chat".format(**args)
 
                     updateBoth(gamesdict[game] if game in gamesdict else game, title=title)
                 except Exception:
