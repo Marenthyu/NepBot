@@ -2066,7 +2066,7 @@ class NepBot(NepBotClass):
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
             activitymap[channelowner] = 0
-            isMarathonChannel = channel == config['marathonChannel'] and not isWhisper
+            isMarathonChannel = source == config['marathonChannel'] and not isWhisper
             if isMarathonChannel:
                 marathonActivityMap[sender] = 0
             with busyLock:
