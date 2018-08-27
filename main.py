@@ -4012,7 +4012,7 @@ class NepBot(NepBotClass):
                                          "Contest has ended in {time}! The top 3 closest were: {first}, {second}, {third}".format(
                                              time=formattedTime, first=winnerNames[0], second=winnerNames[1],
                                              third=winnerNames[2]))
-                            if not canManageBets and len(winners) >= 2:
+                            if not canAdminBets and len(winners) >= 2:
                                 # notify the discordhook of the new bet completion
                                 chanStr = channel[1:].lower()
                                 discordArgs = {"channel": chanStr, "time": formattedTime, "link": "https://twitch.tv/" + chanStr}
