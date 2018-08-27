@@ -5553,7 +5553,7 @@ class NepBot(NepBotClass):
                 tokenName = config["eventTokenName"]
                 tokenPromoCost = int(config["eventTokenPromoCost"])
                 if len(args) == 0 or args[0].lower() != "buy":
-                    self.message(channel, "Available promos to buy with %ss: %s. %d tokens each. Purchase one with !tokenpromo buy <id>" % (tokenName, config["tokenPromoList"], tokenPromoCost), isWhisper)
+                    self.message(channel, "Available promos to buy with %ss: %s - %d tokens each. Purchase one with !tokenpromo buy <id>" % (tokenName, config["tokenPromoList"], tokenPromoCost), isWhisper)
                     return
                 if len(args) < 2:
                     self.message(channel, "Usage: !tokenpromo buy <id>", isWhisper)
