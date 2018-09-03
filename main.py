@@ -5550,72 +5550,56 @@ class NepBot(NepBotClass):
                             self.message(channel, "Request accepted. The new image for %s's copy of [%d] %s is %s" % (request[4], request[5], request[6], hostedURL), isWhisper)
                         return
             if command == "tokenpromo" or command == "tokenpromos":
-                tokenName = config["eventTokenName"]
-                tokenPromoCost = int(config["eventTokenPromoCost"])
-                if len(args) == 0 or args[0].lower() != "buy":
-                    self.message(channel, "Available promos to buy with %ss: %s - %d tokens each. Purchase one with !tokenpromo buy <id>" % (tokenName, config["tokenPromoList"], tokenPromoCost), isWhisper)
-                    return
-                if len(args) < 2:
-                    self.message(channel, "Usage: !tokenpromo buy <id>", isWhisper)
-                    return
-                try:
-                    waifu = getWaifuById(args[1])
-                    assert waifu is not None
-                    assert waifu['can_lookup'] == 1
-                    # check for buyability
-                    if not waifu['can_purchase']:
-                        self.message(channel, "That waifu can't be bought with %ss." % config["eventTokenName"], isWhisper)
-                        return
-                    # check the user's tokens
-                    with db.cursor() as cur:
-                        cur.execute("SELECT eventTokens FROM users WHERE id = %s", [tags['user-id']])
-                        tokens = cur.fetchone()[0] or 0
-
-                        if tokens < tokenPromoCost:
-                            self.message(channel, "You don't have enough %ss to buy a promo card! They cost %d each." % (tokenName, tokenPromoCost), isWhisper)
-                            return
-
-                        cur.execute("UPDATE users SET eventTokens = eventTokens - %s WHERE id = %s", [tokenPromoCost, tags['user-id']])
-                        giveCard(tags['user-id'], waifu['id'], waifu['base_rarity'])
-
-                        self.message(channel, "You traded %d %ss for [%d] %s." % (tokenPromoCost, tokenName, waifu['id'], waifu['name']), isWhisper)
-
-                except Exception as exc:
-                    self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
+                self.message(channel, "Token Promo purchases are closed for this year, thanks for playing!", isWhisper)
                 return
             if command == "tokengacha":
+                self.message(channel, "The Token Gacha is closed for this year, thanks for playing!", isWhisper)
+                return
+            if command == "autogacha" and sender in superadmins:
                 tokenName = config["eventTokenName"]
-                if len(args) == 0 or args[0].lower() != "roll":
-                    self.message(channel, "!tokengacha roll to try your luck on the %s Gacha. 1 %s per go." % (tokenName, tokenName), isWhisper)
-                    return
-                # check the user's tokens
                 with db.cursor() as cur:
-                    cur.execute("SELECT eventTokens FROM users WHERE id = %s", [tags['user-id']])
-                    tokens = cur.fetchone()[0] or 0
+                    cur.execute("SELECT id, name, eventTokens FROM users WHERE eventTokens > 0 ORDER BY eventTokens DESC")
+                    holders = cur.fetchall()
 
-                    if tokens < 1:
-                        self.message(channel, "You don't have any %ss to roll the Gacha with." % (tokenName), isWhisper)
-                        return
-                    cur.execute("UPDATE users SET eventTokens = eventTokens - 1 WHERE id = %s", [tags['user-id']])
-                    roll = tokenGachaRoll()
-                    prizes = []
+                    for holder in holders:
+                        fullPrizes = []
+                        userid = int(holder[0])
+                        for i in range(int(holder[2])):
+                            roll = tokenGachaRoll()
+                            prizes = []
 
-                    if "pack" in roll["prize"]:
-                        giveFreeBooster(tags['user-id'], roll["prize"]["pack"], roll["prize"]["amount"])
-                        prizes.append("%dx %s pack (!freepacks open %s)" % (roll["prize"]["amount"], roll["prize"]["pack"], roll["prize"]["pack"]))
+                            if "pack" in roll["prize"]:
+                                giveFreeBooster(userid, roll["prize"]["pack"], roll["prize"]["amount"])
+                                prizes.append("%dx %s pack (!freepacks open %s)" % (roll["prize"]["amount"], roll["prize"]["pack"], roll["prize"]["pack"]))
 
-                    if "points" in roll["prize"]:
-                        addPoints(tags['user-id'], roll["prize"]["points"])
-                        prizes.append("%d points" % roll["prize"]["points"])
-                    
-                    if "pudding" in roll["prize"]:
-                        addPudding(tags['user-id'], roll["prize"]["pudding"])
-                        prizes.append("%d pudding" % roll["prize"]["pudding"])
+                            if "points" in roll["prize"]:
+                                addPoints(userid, roll["prize"]["points"])
+                                prizes.append("%d points" % roll["prize"]["points"])
+                            
+                            if "pudding" in roll["prize"]:
+                                addPudding(userid, roll["prize"]["pudding"])
+                                prizes.append("%d pudding" % roll["prize"]["pudding"])
 
-                    prizeStr = " and ".join(prizes)
+                            fullPrizes.append("[%d◆] %s" % (roll["tier"], " and ".join(prizes)))
 
-                    self.message(channel, "%s, you roll the %s Gacha and you get: [%d◆] %s" % (tags['display-name'], tokenName, roll["tier"], prizeStr), isWhisper)
+                        messages = ["Your %d leftover %s(s) were fed into the Token Gacha and you got: " % (holder[2], tokenName)]
+                        first = True
+                        for prizeStr in fullPrizes:
+                            if len(messages[-1]) + len(prizeStr) > 398:
+                                messages.append(prizeStr)
+                            elif first:
+                                messages[-1] += prizeStr
+                            else:
+                                messages[-1] += ", " + prizeStr
+                            first = False
+
+                        for message in messages:
+                            self.message('#' + holder[1], message, True)
+
+                    cur.execute("UPDATE users SET eventTokens = 0")
+                    self.message(channel, "Done.", isWhisper)
                     return
+                        
                 
 
 
