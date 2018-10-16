@@ -430,7 +430,8 @@ def attemptBountyFill(bot, waifuid):
                             "A higher bounty for [%d] %s than yours was filled, so you can now cancel yours and get full points back provided you don't change it." % (
                                 waifuid, order[4]), True)
             # give the disenchanter appropriate profit
-            return max((order[3] - rarity_cap) // 4, 0) + max(min(order[3] - min_bounty, rarity_cap - min_bounty) // 2, 0) + (min_bounty - base_value)
+            # everything up to the min bounty, 1/2 of any amount between the min and max bounties, 1/4 of anything above the max bounty.
+            return (min_bounty - base_value) + max(min(order[3] - min_bounty, rarity_cap - min_bounty) // 2, 0) + max((order[3] - rarity_cap) // 4, 0)
         else:
             # no bounty
             return 0
