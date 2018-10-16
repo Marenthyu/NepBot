@@ -15,7 +15,7 @@ import math
 import functools
 from string import ascii_letters
 from collections import defaultdict, OrderedDict
-from private_functions import validateImageURL, processImageURL
+from private_functions import validateImageURL, processImageURL, tokenGachaRoll
 
 import sys
 import re
@@ -38,8 +38,20 @@ logger.addHandler(ch)
 logging.getLogger('tornado.application').addHandler(fh)
 logging.getLogger('tornado.application').addHandler(ch)
 
-gamesdict = {'Dark Rose Valkyrie': 'Black Rose Valkyrie', 'Megadimension Neptunia VIIR': 'Megadimension Neptunia VII',
-             'Intro': 'Hyperdimension Neptunia'}
+gamesdict = {
+    'Opening Set Up': 'Hyperdimension Neptunia',
+    'Hyperdimension Neptunia Victory Vs Rebirth 3': 'Hyperdimension Neptunia Victory',
+    'SetUp 1 Block - Interview': 'Hyperdimension Neptunia',
+    'Bid War Game': 'Hyperdimension Neptunia',
+    'Set Up Block 2': 'Hyperdimension Neptunia',
+    'Interview Q/A 1': 'Hyperdimension Neptunia',
+    'Interview Q/A 2': 'Hyperdimension Neptunia',
+    'Set Up Block 3': 'Hyperdimension Neptunia',
+    'Set Up Block 4': 'Hyperdimension Neptunia',
+    'Set Up Block 5 - Interview': 'Hyperdimension Neptunia',
+    'Hyperdimension Neptunia Re;birth 1 Plus': 'Hyperdimension Neptunia Re;Birth1',
+    'Credits': 'Hyperdimension Neptunia'
+}
 
 ffzws = 'wss://andknuckles.frankerfacez.com'
 pool = pydle.ClientPool()
@@ -116,6 +128,7 @@ db = pymysql.connect(host=dbhost, user=dbuser, passwd=dbpw, db=dbname, autocommi
 admins = []
 superadmins = []
 activitymap = {}
+marathonActivityMap = {}
 blacklist = []
 config = {}
 packAmountRewards = {}
@@ -223,6 +236,9 @@ def checkAndRenewAppAccessToken():
         except ValueError as error:
             logger.error("Access Token renew/get request was not successful")
             raise error
+
+def booleanConfig(name):
+    return name in config and config[name].strip().lower() not in ["off", "no", "false"]
 
 
 def placeBet(channel, userid, betms):
@@ -403,6 +419,8 @@ def attemptBountyFill(bot, waifuid):
             cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s",
                         [current_milli_time(), order[0]])
             # alert people with lower bounties but above the cap?
+            base_value = int(config["rarity" + str(order[5]) + "Value"])
+            min_bounty = int(config["rarity" + str(order[5]) + "MinBounty"])
             rarity_cap = int(config["rarity" + str(order[5]) + "MaxBounty"])
             cur.execute(
                 "SELECT users.name FROM bounties JOIN users ON bounties.userid = users.id WHERE bounties.waifuid = %s AND bounties.status = 'open' AND bounties.amount > %s",
@@ -412,11 +430,8 @@ def attemptBountyFill(bot, waifuid):
                             "A higher bounty for [%d] %s than yours was filled, so you can now cancel yours and get full points back provided you don't change it." % (
                                 waifuid, order[4]), True)
             # give the disenchanter appropriate profit
-            base_value = int(config["rarity" + str(order[5]) + "Value"])
-            if order[3] > rarity_cap:
-                return (order[3] - rarity_cap) // 4 + (rarity_cap - base_value) // 2
-            else:
-                return max(math.floor((order[3] - base_value) * 0.5), 2)
+            # everything up to the min bounty, 1/2 of any amount between the min and max bounties, 1/4 of anything above the max bounty.
+            return (min_bounty - base_value) + max(min(order[3] - min_bounty, rarity_cap - min_bounty) // 2, 0) + max((order[3] - rarity_cap) // 4, 0)
         else:
             # no bounty
             return 0
@@ -491,9 +506,8 @@ def giveBadge(userid, badge):
 
 
 def getHoraro():
-    "https://horaro.org/-/api/v1/schedules/3911mu51ljb1wf7a5e/ticker"
     r = requests.get(
-        "https://horaro.org/-/api/v1/schedules/{horaroid}/ticker?hiddenkey=NepSmug".format(horaroid=config["horaroID"]))
+        "https://horaro.org/-/api/v1/schedules/{horaroid}/ticker".format(horaroid=config["horaroID"]))
     try:
         j = r.json()
         # ("got horaro ticker: " + str(j))
@@ -502,6 +516,11 @@ def getHoraro():
         logger.error("Horaro Error:")
         logger.error(str(r.status_code))
         logger.error(r.text)
+
+def getRawRunner(runner):
+    if '[' not in runner:
+        return runner
+    return runner[runner.index('[') + 1 : runner.index(']')]
 
 
 def updateBoth(game, title):
@@ -850,11 +869,11 @@ def getWaifuById(id):
     except ValueError:
         return None
     cur = db.cursor()
-    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite FROM waifus WHERE id=%s",
+    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite, can_purchase FROM waifus WHERE id=%s",
                 [id])
     row = cur.fetchone()
     ret = {"id": row[0], "name": row[1], "image": row[2], "base_rarity": row[3], "series": row[4], "can_lookup": row[5],
-           "pulls": row[6], "last_pull": row[7], "can_favourite": row[8]}
+           "pulls": row[6], "last_pull": row[7], "can_favourite": row[8], "can_purchase": row[9]}
     cur.close()
     # print("Fetched Waifu from id: " + str(ret))
     return ret
@@ -1757,6 +1776,8 @@ class NepBot(NepBotClass):
                     logger.debug("%s is live!", idtoname[str(element["user_id"])])
                     viewerCount[chanName] = element["viewer_count"]
                 channelids = channelids[100:]
+            
+            marathonLive = config['marathonChannel'][1:] in viewerCount
 
             logger.debug("Catching all viewers...")
             for c in self.addchannels:
@@ -1823,6 +1844,10 @@ class NepBot(NepBotClass):
                             pointGain = int(config["passivePoints"])
                             if viewerInfo[0] in activitymap and viewerInfo[0] in validactivity:
                                 pointGain += max(10 - int(activitymap[viewerInfo[0]]), 0)
+                            if viewerInfo[0] in marathonActivityMap and marathonActivityMap[viewerInfo[0]] < 10 and marathonLive:
+                                altPointGain = int(config["passivePoints"]) + 10 - marathonActivityMap[viewerInfo[0]]
+                                altPointGain = round(altPointGain * float(config["marathonPointsMultiplier"]))
+                                pointGain = max(pointGain, altPointGain)
                             pointGain = int(pointGain * float(config["pointsMultiplier"]))
                             if viewerInfo[2] is None:
                                 maxPointGain = max(maxPointsInactive - viewerInfo[1], 0)
@@ -1902,6 +1927,10 @@ class NepBot(NepBotClass):
                         pointGain = int(config["passivePoints"])
                         if viewer in activitymap and viewer in validactivity:
                             pointGain += max(10 - int(activitymap[viewer]), 0)
+                        if viewer in marathonActivityMap and marathonActivityMap[viewer] < 10 and marathonLive:
+                            altPointGain = int(config["passivePoints"]) + 10 - marathonActivityMap[viewer]
+                            altPointGain = round(altPointGain * float(config["marathonPointsMultiplier"]))
+                            pointGain = max(pointGain, altPointGain)
                         pointGain = int(pointGain * float(config["pointsMultiplier"]))
                         updateData.append((pointGain, viewer))
 
@@ -1914,7 +1943,9 @@ class NepBot(NepBotClass):
                     newUsers = newUsers[100:]
 
                 for user in activitymap:
-                    activitymap[user] = activitymap[user] + 1
+                    activitymap[user] += 1
+                for user in marathonActivityMap:
+                    marathonActivityMap[user] += 1
             except Exception:
                 logger.warning("We had an error during passive point gain. skipping this cycle.")
                 logger.warning("Error: %s", str(sys.exc_info()))
@@ -1934,19 +1965,19 @@ class NepBot(NepBotClass):
                     current = current["data"]
                     game = current[0]
                     category = current[2]
-                    runners = [runner for runner in current[3:] if runner is not None]
+                    runners = [getRawRunner(runner) for runner in current[4:7] if runner is not None]
                     args = {"game": game}
                     args["category"] = " (%s)" % category if category is not None else ""
                     args["comingup"] = "COMING UP: " if wasNone else ""
                     args["runners"] = (" by " + ", ".join(runners)) if len(runners) > 0 else ""
-                    title = "{comingup}HDNMarathon mk2 - {game}{category}{runners} - !mk2 in chat".format(**args)
+                    title = "{comingup}HDNMarathon V - {game}{category}{runners} - !marathon in chat".format(**args)
 
                     updateBoth(gamesdict[game] if game in gamesdict else game, title=title)
                 except Exception:
                     logger.warning("Error updating from Horaro. Skipping this cycle.")
                     logger.warning("Error: %s", str(sys.exc_info()))
 
-            if config["marathonHelpAutopost"] == 'on':
+            if booleanConfig("marathonHelpAutopost"):
                 nextPost = int(config["marathonHelpAutopostLast"]) + int(config["marathonHelpAutopostPeriod"]) * 1000
                 if nextPost <= current_milli_time():
                     self.message(config["marathonChannel"], config["marathonHelpCommandText"], False)
@@ -2034,6 +2065,9 @@ class NepBot(NepBotClass):
         if sender not in blacklist and "bot" not in sender:
             activitymap[sender] = 0
             activitymap[channelowner] = 0
+            isMarathonChannel = source == config['marathonChannel'] and not isWhisper
+            if isMarathonChannel:
+                marathonActivityMap[sender] = 0
             with busyLock:
                 with db.cursor() as cur:
                     # War?
@@ -3521,108 +3555,204 @@ class NepBot(NepBotClass):
                         self.message(channel, msg, isWhisper)
 
                     return
-            if command == "vote":
-                if len(args) < 3:
-                    self.message(channel, "Usage: !vote <warid> <choice> <points>", isWhisper)
+            if command in ["vote", "donate"] and isMarathonChannel:
+                if len(args) < 2:
+                    if command == "vote":
+                        self.message(channel, "Usage: !vote <warid> <choice> <amount>", isWhisper)
+                    else:
+                        self.message(channel,
+                                 "Usage: !donate <id> <amount> (!incentives to see a list of incentives / IDs)",
+                                 isWhisper)
                     return
-
-                if not isMarathonChannel:
-                    self.message(channel, "You can only vote in wars in the HDNMarathon channel.", isWhisper)
-                    return
-
+                
                 with db.cursor() as cur:
-                    cur.execute(
-                        "SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s",
-                        [args[0]])
+                    # find out if this is a bidwar, an incentive or nothing
+                    cur.execute("SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s", [args[0]])
                     war = cur.fetchone()
 
-                    if war is None:
-                        self.message(channel, "%s -> Invalid bidwar specified." % tags['display-name'], isWhisper)
-                        return
-
-                    warid = war[0]
-                    title = war[1]
-                    status = war[2]
-                    openEntry = war[3] != 0
-                    openEntryMinimum = war[4]
-                    openEntryMaxLength = war[5]
-
-                    if status == 'closed':
-                        self.message(channel, "%s -> That bidwar is currently closed." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    # check their points entry
-                    try:
-                        points = int(args[-1])
-                    except ValueError:
-                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    if points <= 0:
-                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    if not hasPoints(tags['user-id'], points):
-                        self.message(channel, "%s -> You don't have that many points!" % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    cur.execute(
-                        "SELECT choice, amount FROM bidWarChoices WHERE warID = %s ORDER BY amount DESC, choice ASC",
-                        [warid])
-                    choices = cur.fetchall()
-                    choiceslookup = [choice[0].lower() for choice in choices]
-                    theirchoice = " ".join(args[1:-1]).strip()
-                    theirchoiceL = theirchoice.lower()
-
-                    if theirchoiceL not in choiceslookup:
-                        # deal with custom choice entry
-                        if not openEntry:
-                            self.message(channel, "%s -> That isn't a valid choice for the %s bidwar." % (
-                                tags['display-name'], title), isWhisper)
+                    if war is not None:
+                        if len(args) < 3:
+                            self.message(channel, "Usage: !vote <warid> <choice> <amount>", isWhisper)
                             return
 
-                        for word in bannedWords:
-                            if word in theirchoiceL:
-                                self.message(channel, ".timeout %s 300" % sender, isWhisper)
-                                self.message(channel,
-                                             "%s -> No vulgar choices allowed (warning)" % tags['display-name'],
-                                             isWhisper)
+                        warid = war[0]
+                        title = war[1]
+                        status = war[2]
+                        openEntry = war[3] != 0
+                        openEntryMinimum = war[4]
+                        openEntryMaxLength = war[5]
+
+                        if status == 'closed':
+                            self.message(channel, "%s -> That bidwar is currently closed." % tags['display-name'])
+                            return
+
+                        # pudding mode?
+                        puddingMode = False
+                        exchangeRate = int(config["puddingExchangeRateMarathon"])
+                        if len(args) > 3 and args[-1].lower() == "pudding":
+                            puddingMode = True
+                            args = args[:-1]
+                        currency = 'pudding' if puddingMode else 'points'
+
+                        # check their points entry
+                        try:
+                            points = int(args[-1])
+                            if points <= 0:
+                                raise ValueError()
+                        except ValueError:
+                            self.message(channel, "%s -> Invalid amount of points/pudding entered." % tags['display-name'])
+                            return
+
+                        if puddingMode:
+                            if not hasPudding(tags['user-id'], points):
+                                self.message(channel, "%s -> You don't have that much pudding!" % tags['display-name'])
                                 return
 
-                        if points < openEntryMinimum:
-                            self.message(channel,
-                                         "%s -> You must contribute at least %d points to add a new choice to this bidwar!" % (
-                                             tags['display-name'], openEntryMinimum), isWhisper)
-                            return
+                            contribution = points * exchangeRate
+                            contributionStr = "%d pudding (-> %d points)" % (points, contribution)
+                        else:
+                            if not hasPoints(tags['user-id'], points):
+                                self.message(channel, "%s -> You don't have that many points!" % tags['display-name'])
+                                return
 
-                        if len(theirchoice) > openEntryMaxLength:
-                            self.message(channel,
-                                         "%s -> The maximum length of a choice in the %s bidwar is %d characters." % (
-                                             tags['display-name'], title, openEntryMaxLength), isWhisper)
-                            return
+                            contribution = points
+                            contributionStr = "%d points" % points
 
-                        # all clear, add it
-                        addPoints(tags['user-id'], -points)
-                        actionTime = current_milli_time()
-                        qargs = [warid, theirchoice, points, actionTime, tags['user-id'], actionTime, tags['user-id']]
                         cur.execute(
-                            "INSERT INTO bidWarChoices (warID, choice, amount, created, creator, lastVote, lastVoter) VALUES(%s, %s, %s, %s, %s, %s, %s)",
-                            qargs)
+                            "SELECT choice, amount FROM bidWarChoices WHERE warID = %s ORDER BY amount DESC, choice ASC",
+                            [warid])
+                        choices = cur.fetchall()
+                        choiceslookup = [choice[0].lower() for choice in choices]
+                        theirchoice = " ".join(args[1:-1]).strip()
+                        theirchoiceL = theirchoice.lower()
+
+                        if theirchoiceL not in choiceslookup:
+                            # deal with custom choice entry
+                            if not openEntry:
+                                self.message(channel, "%s -> That isn't a valid choice for the %s bidwar." % (
+                                    tags['display-name'], title))
+                                return
+
+                            for word in bannedWords:
+                                if word in theirchoiceL:
+                                    #self.message(channel, ".timeout %s 300" % sender, isWhisper)
+                                    self.message(channel,
+                                                "%s -> No vulgar choices allowed (warning)" % tags['display-name'])
+                                    return
+
+                            if contribution < openEntryMinimum:
+                                self.message(channel,
+                                            "%s -> You must contribute at least %d points or %d pudding to add a new choice to this bidwar!" % (
+                                                tags['display-name'], openEntryMinimum, math.ceil(openEntryMinimum / exchangeRate)), isWhisper)
+                                return
+
+                            if len(theirchoice) > openEntryMaxLength:
+                                self.message(channel,
+                                            "%s -> The maximum length of a choice in the %s bidwar is %d characters." % (
+                                                tags['display-name'], title, openEntryMaxLength), isWhisper)
+                                return
+
+                            # all clear, add it
+                            if puddingMode:
+                                takePudding(tags['user-id'], points)
+                            else:
+                                addPoints(tags['user-id'], -points)
+                            actionTime = current_milli_time()
+                            qargs = [warid, theirchoice, contribution, actionTime, tags['user-id'], actionTime, tags['user-id']]
+                            cur.execute(
+                                "INSERT INTO bidWarChoices (warID, choice, amount, created, creator, lastVote, lastVoter) VALUES(%s, %s, %s, %s, %s, %s, %s)",
+                                qargs)
+
+                            logargs = [tags['user-id'], warid, theirchoice, points, contribution, currency, current_milli_time()]
+                        else:
+                            # already existing choice, just vote for it
+                            if puddingMode:
+                                takePudding(tags['user-id'], points)
+                            else:
+                                addPoints(tags['user-id'], -points)
+                            qargs = [contribution, current_milli_time(), tags['user-id'], warid, theirchoiceL]
+                            cur.execute(
+                                "UPDATE bidWarChoices SET amount = amount + %s, lastVote = %s, lastVoter = %s WHERE warID = %s AND choice = %s",
+                                qargs)
+                            logargs = [tags['user-id'], warid, theirchoiceL, points, contribution, currency, current_milli_time()]
+                        
+                        cur.execute("INSERT INTO `contributionLog` (`userid`, `to_id`, `to_choice`, `raw_amount`, `contribution`, `currency`, `timestamp`) " +
+                            "VALUES(%s, %s, %s, %s, %s, %s, %s)", logargs)
+
+                        self.message(channel, "%s -> Successfully added %s to %s in the %s bidwar." % (
+                            tags['display-name'], contributionStr, theirchoice, title))
+                        return
                     else:
-                        # already existing choice, just vote for it
-                        addPoints(tags['user-id'], -points)
-                        qargs = [points, current_milli_time(), tags['user-id'], warid, theirchoiceL]
-                        cur.execute(
-                            "UPDATE bidWarChoices SET amount = amount + %s, lastVote = %s, lastVoter = %s WHERE warID = %s AND choice = %s",
-                            qargs)
+                        cur.execute("SELECT id, title, amount, required FROM incentives WHERE id = %s", [args[0]])
+                        incentive = cur.fetchone()
 
-                    self.message(channel, "%s -> Successfully added %d points to %s in the %s bidwar." % (
-                        tags['display-name'], points, theirchoice, title), isWhisper)
-                    return
+                        if incentive is None:
+                            self.message(channel, "%s -> Invalid incentive/war ID." % tags['display-name'])
+                            return
+
+                        incid = incentive[0]
+                        title = incentive[1]
+                        currAmount = incentive[2]
+                        required = incentive[3]
+
+                        if currAmount >= required:
+                            self.message(channel,
+                                        "%s -> The %s incentive has already been met!" % (tags['display-name'], title))
+                            return
+
+                        try:
+                            points = int(args[1])
+                            if points <= 0:
+                                raise ValueError()
+                        except ValueError:
+                            self.message(channel, "%s -> Invalid amount of points/pudding entered." % tags['display-name'])
+                            return
+
+                        puddingMode = len(args) > 2 and args[2].lower() == "pudding"
+
+                        if puddingMode:
+                            exchangeRate = int(config["puddingExchangeRateMarathon"])
+                            points = min(points, math.ceil((required - currAmount) / exchangeRate))
+
+                            if not hasPudding(tags['user-id'], points):
+                                self.message(channel, "%s -> You don't have that much pudding!" % tags['display-name'])
+                                return
+
+                            takePudding(tags['user-id'], points)
+
+                            contribution = min(points * exchangeRate, required - currAmount)
+                            contributionStr = "%d pudding (-> %d points)" % (points, contribution)
+                            currency = 'pudding'
+                        else:
+                            points = min(points, required - currAmount)
+
+                            if not hasPoints(tags['user-id'], points):
+                                self.message(channel, "%s -> You don't have that many points!" % tags['display-name'])
+                                return
+
+                            addPoints(tags['user-id'], -points)
+                            contribution = points
+                            contributionStr = "%d points" % points
+                            currency = 'points'
+                        
+                        cur.execute(
+                            "UPDATE incentives SET amount = amount + %s, lastContribution = %s, lastContributor = %s WHERE id = %s",
+                            [contribution, current_milli_time(), tags['user-id'], incid])
+
+                        logargs = [tags['user-id'], incid, None, points, contribution, currency, current_milli_time()]
+                        cur.execute("INSERT INTO `contributionLog` (`userid`, `to_id`, `to_choice`, `raw_amount`, `contribution`, `currency`, `timestamp`) " +
+                            "VALUES(%s, %s, %s, %s, %s, %s, %s)", logargs)
+
+                        if points + currAmount >= required:
+                            self.message(channel, "%s -> You successfully donated %s and met the %s incentive!" % (
+                                tags['display-name'], contributionStr, title), isWhisper)
+                        else:
+                            self.message(channel,
+                                        "%s -> You successfully donated %s towards the %s incentive. It needs %d more points to be met." % (
+                                            tags['display-name'], contributionStr, title, required - currAmount - contribution),
+                                        isWhisper)
+
+                        return
             if command == "incentives" and (isMarathonChannel or isWhisper):
                 with db.cursor() as cur:
                     cur.execute("SELECT id, title, amount, required FROM incentives WHERE status = 'open'")
@@ -3651,66 +3781,6 @@ class NepBot(NepBotClass):
                                 messages[-1] += inc
                         for message in messages:
                             self.message(channel, message, isWhisper)
-
-                    return
-            if command == "donate" and isMarathonChannel:
-                if len(args) != 2:
-                    self.message(channel,
-                                 "Usage: !donate <id> <points> (!incentives to see a list of incentives / IDs)",
-                                 isWhisper)
-                    return
-
-                with db.cursor() as cur:
-                    cur.execute("SELECT id, title, amount, required FROM incentives WHERE id = %s", [args[0]])
-                    incentive = cur.fetchone()
-
-                    if incentive is None:
-                        self.message(channel, "%s -> Invalid incentive ID." % tags['display-name'], isWhisper)
-                        return
-
-                    incid = incentive[0]
-                    title = incentive[1]
-                    currAmount = incentive[2]
-                    required = incentive[3]
-
-                    if currAmount >= required:
-                        self.message(channel,
-                                     "%s -> The %s incentive has already been met!" % (tags['display-name'], title),
-                                     isWhisper)
-                        return
-
-                    try:
-                        points = int(args[1])
-                    except ValueError:
-                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    if points <= 0:
-                        self.message(channel, "%s -> Invalid amount of points entered." % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    points = min(points, required - currAmount)
-
-                    if not hasPoints(tags['user-id'], points):
-                        self.message(channel, "%s -> You don't have that many points!" % tags['display-name'],
-                                     isWhisper)
-                        return
-
-                    addPoints(tags['user-id'], -points)
-                    cur.execute(
-                        "UPDATE incentives SET amount = amount + %s, lastContribution = %s, lastContributor = %s WHERE id = %s",
-                        [points, current_milli_time(), tags['user-id'], incid])
-
-                    if points + currAmount >= required:
-                        self.message(channel, "%s -> You successfully donated %d points and met the %s incentive!" % (
-                            tags['display-name'], points, title), isWhisper)
-                    else:
-                        self.message(channel,
-                                     "%s -> You successfully donated %d points towards the %s incentive. It needs %d more to be met." % (
-                                         tags['display-name'], points, title, required - currAmount - points),
-                                     isWhisper)
 
                     return
             if command == "upgrade":
@@ -3941,6 +4011,15 @@ class NepBot(NepBotClass):
                                          "Contest has ended in {time}! The top 3 closest were: {first}, {second}, {third}".format(
                                              time=formattedTime, first=winnerNames[0], second=winnerNames[1],
                                              third=winnerNames[2]))
+                            if not canAdminBets and len(winners) >= 2:
+                                # notify the discordhook of the new bet completion
+                                chanStr = channel[1:].lower()
+                                discordArgs = {"channel": chanStr, "time": formattedTime, "link": "https://twitch.tv/" + chanStr}
+                                discordbody = {
+                                    "username": "WTCG Admin", 
+                                    "content" : "A bet has just finished in {channel} with a time of {time}. Check results and consider payout at <{link}>.".format(**discordArgs)
+                                }
+                                threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
                         return
                     elif canManageBets and subcmd == "cancel":
                         if cancelBet(channel):
@@ -4130,6 +4209,10 @@ class NepBot(NepBotClass):
                                              isWhisper)
                         return
                     elif subcmd == "forceenter" and canAdminBets:
+                        if isMarathonChannel:
+                            self.message(channel, "No forceenters allowed in the marathon channel.", isWhisper)
+                            return
+                       
                         # enter another user into a bet
                         if len(args) < 3:
                             self.message(channel, "Usage: !bet forceenter <username> <time>", isWhisper)
@@ -4434,6 +4517,8 @@ class NepBot(NepBotClass):
                              config["siteHost"], isWhisper=isWhisper)
                 return
             if command == "giveaway":
+                if booleanConfig("marathonOnlyGiveaway") and not isMarathonChannel:
+                    return
                 cur = db.cursor()
                 if len(args) == 0 or args[0].lower() == 'enter':
                     # check for a giveaway to enter
@@ -4927,7 +5012,7 @@ class NepBot(NepBotClass):
                             [tags['user-id'], waifu['id']])
                         highest_other_bid = cur.fetchone()[0]
                         de_value = int(config["rarity%dValue" % waifu['base_rarity']])
-                        min_amount = de_value + 5
+                        min_amount = int(config["rarity%dMinBounty" % waifu['base_rarity']])
                         rarity_cap = int(config["rarity%dMaxBounty" % waifu['base_rarity']])
                         max_amount = max(rarity_cap, highest_other_bid * 6 // 5)
                         if amount < min_amount or amount > max_amount:
@@ -5463,7 +5548,58 @@ class NepBot(NepBotClass):
 
                             self.message(channel, "Request accepted. The new image for %s's copy of [%d] %s is %s" % (request[4], request[5], request[6], hostedURL), isWhisper)
                         return
+            if command == "tokenpromo" or command == "tokenpromos":
+                self.message(channel, "Token Promo purchases are closed for this year, thanks for playing!", isWhisper)
+                return
+            if command == "tokengacha":
+                self.message(channel, "The Token Gacha is closed for this year, thanks for playing!", isWhisper)
+                return
+            if command == "autogacha" and sender in superadmins:
+                tokenName = config["eventTokenName"]
+                with db.cursor() as cur:
+                    cur.execute("SELECT id, name, eventTokens FROM users WHERE eventTokens > 0 ORDER BY eventTokens DESC")
+                    holders = cur.fetchall()
 
+                    for holder in holders:
+                        fullPrizes = []
+                        userid = int(holder[0])
+                        for i in range(int(holder[2])):
+                            roll = tokenGachaRoll()
+                            prizes = []
+
+                            if "pack" in roll["prize"]:
+                                giveFreeBooster(userid, roll["prize"]["pack"], roll["prize"]["amount"])
+                                prizes.append("%dx %s pack (!freepacks open %s)" % (roll["prize"]["amount"], roll["prize"]["pack"], roll["prize"]["pack"]))
+
+                            if "points" in roll["prize"]:
+                                addPoints(userid, roll["prize"]["points"])
+                                prizes.append("%d points" % roll["prize"]["points"])
+                            
+                            if "pudding" in roll["prize"]:
+                                addPudding(userid, roll["prize"]["pudding"])
+                                prizes.append("%d pudding" % roll["prize"]["pudding"])
+
+                            fullPrizes.append("[%d◆] %s" % (roll["tier"], " and ".join(prizes)))
+
+                        messages = ["Your %d leftover %s(s) were fed into the Token Gacha and you got: " % (holder[2], tokenName)]
+                        first = True
+                        for prizeStr in fullPrizes:
+                            if len(messages[-1]) + len(prizeStr) > 398:
+                                messages.append(prizeStr)
+                            elif first:
+                                messages[-1] += prizeStr
+                            else:
+                                messages[-1] += ", " + prizeStr
+                            first = False
+
+                        for message in messages:
+                            self.message('#' + holder[1], message, True)
+
+                    cur.execute("UPDATE users SET eventTokens = 0")
+                    self.message(channel, "Done.", isWhisper)
+                    return
+                        
+                
 
 
 curg = db.cursor()
