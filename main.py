@@ -419,6 +419,8 @@ def attemptBountyFill(bot, waifuid):
             cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s",
                         [current_milli_time(), order[0]])
             # alert people with lower bounties but above the cap?
+            base_value = int(config["rarity" + str(order[5]) + "Value"])
+            min_bounty = int(config["rarity" + str(order[5]) + "MinBounty"])
             rarity_cap = int(config["rarity" + str(order[5]) + "MaxBounty"])
             cur.execute(
                 "SELECT users.name FROM bounties JOIN users ON bounties.userid = users.id WHERE bounties.waifuid = %s AND bounties.status = 'open' AND bounties.amount > %s",
@@ -428,11 +430,7 @@ def attemptBountyFill(bot, waifuid):
                             "A higher bounty for [%d] %s than yours was filled, so you can now cancel yours and get full points back provided you don't change it." % (
                                 waifuid, order[4]), True)
             # give the disenchanter appropriate profit
-            base_value = int(config["rarity" + str(order[5]) + "Value"])
-            if order[3] > rarity_cap:
-                return (order[3] - rarity_cap) // 4 + (rarity_cap - base_value) // 2
-            else:
-                return max(math.floor((order[3] - base_value) * 0.5), 2)
+            return max((order[3] - rarity_cap) // 4, 0) + max(min(order[3] - min_bounty, rarity_cap - min_bounty) // 2, 0) + (min_bounty - base_value)
         else:
             # no bounty
             return 0
@@ -5013,7 +5011,7 @@ class NepBot(NepBotClass):
                             [tags['user-id'], waifu['id']])
                         highest_other_bid = cur.fetchone()[0]
                         de_value = int(config["rarity%dValue" % waifu['base_rarity']])
-                        min_amount = de_value + 5
+                        min_amount = int(config["rarity%dMinBounty" % waifu['base_rarity']])
                         rarity_cap = int(config["rarity%dMaxBounty" % waifu['base_rarity']])
                         max_amount = max(rarity_cap, highest_other_bid * 6 // 5)
                         if amount < min_amount or amount > max_amount:
