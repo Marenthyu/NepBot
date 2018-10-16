@@ -2145,7 +2145,7 @@ class NepBot(NepBotClass):
                 cards = getHand(tags['user-id'])
                 if len(cards) == 0:
                     self.message(channel,
-                                 "%s, you don't have any waifus! Get your first with !freewaifu" % tags[
+                                 "%s, you don't have any waifus! Get your first with !freebie" % tags[
                                      'display-name'], isWhisper=isWhisper)
                     return
 
