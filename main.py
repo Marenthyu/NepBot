@@ -5329,7 +5329,7 @@ class NepBot(NepBotClass):
                                  tags['display-name'], isWhisper)
                     return
 
-                totalspending = sum([row[2] for row in packstats])
+                totalspending = getSpendings(tags['user-id'])
                 packstr = ", ".join("%dx %s" % (row[1], row[0]) for row in packstats)
                 self.message(channel, "%s, you have spent %d total points on the following packs: %s." % (
                     tags['display-name'], totalspending, packstr), isWhisper)
