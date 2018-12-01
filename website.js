@@ -179,6 +179,7 @@ let badgetemplate = '' +
 let smartsetstpl = fs.readFileSync('smartsets.htm', 'utf8');
 let bootstrapwaifucss = fs.readFileSync('waifus-bootstrap.css', 'utf8');
 let profiletpl = fs.readFileSync('profiletemplate.html', 'utf8');
+let holidaytpl = fs.readFileSync('holidaytemplate.htm', 'utf8');
 
 let entityMap = {
     '&': '&amp;',
@@ -889,6 +890,35 @@ function profile(req, res, query) {
 
 }
 
+function holiday(req, res, query) {
+    let user = "null";
+    if ('user' in query) {
+        user = query.user;
+    }
+    
+    con.query("SELECT COUNT(*) AS cnt FROM boosters_opened WHERE boostername = ?", "holiday", function (err, result) {
+        if (err) throw err;
+        let goals = [2500, 5000, 10000];
+        let holidayCount = result[0].cnt;
+        let highestGoal = goals[goals.length-1];
+        let currentAmountCapped = Math.min(highestGoal, holidayCount);
+        let currentWidth = 100*Math.min(highestGoal, holidayCount)/highestGoal;
+        let response = holidaytpl.replace(/{NAME}/g, escapeHtml(user));
+        response = response.replace(/{CURRENT_WIDTH}/g, currentWidth).replace(/{CURRENT_AMOUNT_CAPPED}/g, currentAmountCapped).replace(/{HIGHEST_GOAL_AMOUNT}/g, highestGoal).replace(/{CURRENT_AMOUNT}/g, holidayCount);
+        // individual goals
+        let goalsOutput = "";
+        for(let i=0;i<goals.length;i++) {
+            goalsOutput += "<h3>Goal "+(i+1)+"</h3>";
+            goalsOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'><div class='progress-bar progress-bar-striped"+(holidayCount >= goals[i] ? " bg-success" : "")+"' style='width: "+(100*Math.min(goals[i], holidayCount)/goals[i])+"%;' aria-valuenow='"+Math.min(goals[i], holidayCount)+"' aria-valuemin='0' aria-valuemax='"+goals[i]+"'>"+Math.min(goals[i], holidayCount)+"/"+goals[i]+(holidayCount >= goals[i] ? " (MET!)" : "")+"</div></div>";
+        }
+        response = response.replace(/{GOALS}/g, goalsOutput);
+        res.write(response);
+        res.end();
+        
+        
+    });
+}
+
 function readConfig(callback) {
     config = {};
     con.query("SELECT * FROM config", function(err, result) {
@@ -908,18 +938,18 @@ function bootServer(callback) {
                     bootstraphand(req, res, q.query);
                     break;
                 }
-                case "sets": {
-                    smartsets(req, res, q.query);
-                    break;
-                }
-                case "smartsets": {
-                    smartsets(req, res, q.query);
-                    break;
-                }
-                case "smartsetsdata": {
-                    smartsetsdata(req, res, q.query);
-                    break;
-                }
+                // case "sets": {
+                    // smartsets(req, res, q.query);
+                    // break;
+                // }
+                // case "smartsets": {
+                    // smartsets(req, res, q.query);
+                    // break;
+                // }
+                // case "smartsetsdata": {
+                    // smartsetsdata(req, res, q.query);
+                    // break;
+                // }
 
                 case "claimedsets": {
                     claimedsets(req, res, q.query);
@@ -929,6 +959,13 @@ function bootServer(callback) {
                     bootstrapbooster(req, res, q.query);
                     break;
                 }
+                case "holiday": {
+                    holiday(req, res, q.query);
+                    break;
+                }
+                case "sets":
+                case "smartsets":
+                case "smartsetsdata":
                 case "fancybooster": {
                     res.writeHead(410, 'Gone');
                     res.end();
