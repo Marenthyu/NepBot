@@ -4340,14 +4340,14 @@ class NepBot(NepBotClass):
                             # run length in hours * 20, rounded to nearest whole pudding
                             # scales up a bit as the hours go on
                             runHours = resultData["result"] / 3600000.0
-                            bcPrize = round(max(min(runHours, 5) * bbReward + min(max(runHours - 5, 0), 5) * bbReward * 1.5 + max(runHours - 10, 0) * bbReward * 2, maxPrize / 2))
+                            bcPrize = round(min(max(runHours, 1) * bbReward, int(config["maxBroadcasterReward"])))
                             prizeStrings.append("%s (broadcaster) - %d pudding" % (channel[1:], bcPrize))
                             whispers.append((channel, "You were rewarded %d pudding for running your recent bet. Check and spend it with !pudding" % bcPrize))
                             # skip using addPudding to save a database lookup
                             cur.execute("UPDATE users SET puddingCurrent = puddingCurrent + %s WHERE name = %s", [bcPrize, channel[1:]])
                             
                             # start cooldown for next bet payout at max(endTime, lastPayout + 22h)
-                            payoutTime = max(betRow[2], lastPayout + 79200000)
+                            payoutTime = min(max(betRow[2], lastPayout + 79200000), current_milli_time())
                             cur.execute(
                                 "UPDATE bets SET status = 'paid', paidBroadcaster = %s, paidAt = %s WHERE id = %s",
                                 [bcPrize, payoutTime, betRow[0]])
