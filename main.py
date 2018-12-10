@@ -4337,12 +4337,18 @@ class NepBot(NepBotClass):
                                 whispers.append(('#' + winner["name"], msg))
 
                             # broadcaster prize
-                            # run length in hours * 20, rounded to nearest whole pudding
-                            # scales up a bit as the hours go on
+                            # run length in hours * 30, rounded to nearest whole pudding
                             runHours = resultData["result"] / 3600000.0
                             bcPrize = round(min(max(runHours, 1) * bbReward, int(config["maxBroadcasterReward"])))
-                            prizeStrings.append("%s (broadcaster) - %d pudding" % (channel[1:], bcPrize))
-                            whispers.append((channel, "You were rewarded %d pudding for running your recent bet. Check and spend it with !pudding" % bcPrize))
+                            capped = False
+                            if not isMarathonChannel:
+                                cur.execute("SELECT COALESCE(SUM(paidBroadcaster), 0) FROM bets WHERE status='paid' AND SUBSTRING(FROM_UNIXTIME(startTime/1000),1,7)=SUBSTRING(NOW(),1,7) AND channel = %s", [channel])
+                                puddingMonth = cur.fetchone()[0] or 0
+                                if puddingMonth + bcPrize > int(config["maxMonthlyBCReward"]):
+                                    bcPrize = int(config["maxMonthlyBCReward"]) - puddingMonth
+                                    capped = True
+                            prizeStrings.append("%s (broadcaster) - %d pudding%s" % (channel[1:], bcPrize, " (monthly cap reached)" if capped else ""))
+                            whispers.append((channel, "You were rewarded %d pudding%s for running your recent bet. Check and spend it with !pudding" % (bcPrize, " (monthly cap reached)" if capped else "")))
                             # skip using addPudding to save a database lookup
                             cur.execute("UPDATE users SET puddingCurrent = puddingCurrent + %s WHERE name = %s", [bcPrize, channel[1:]])
                             
