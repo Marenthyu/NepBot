@@ -896,9 +896,9 @@ function holiday(req, res, query) {
         user = query.user;
     }
     
-    con.query("SELECT COUNT(*) AS cnt FROM boosters_opened WHERE boostername = ?", "holiday", function (err, result) {
+    con.query("SELECT (SELECT COUNT(*) FROM boosters_opened WHERE boostername = ?)+(SELECT COUNT(*) FROM boosters_opened WHERE boostername = ?)*5 AS cnt", ["holiday", "jumbholiday"], function (err, result) {
         if (err) throw err;
-        let goals = [2500, 5000, 7500, 10000];
+        let goals = [2500, 5000, 7500, 10000, 15000, 20000];
         let holidayCount = result[0].cnt;
         let highestGoal = goals[goals.length-1];
         let currentAmountCapped = Math.min(highestGoal, holidayCount);
