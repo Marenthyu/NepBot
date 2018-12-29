@@ -3724,8 +3724,6 @@ class NepBot(NepBotClass):
                             self.message(channel, "%s -> Invalid amount of points/pudding entered." % tags['display-name'])
                             return
 
-                        puddingMode = len(args) > 2 and args[2].lower() == "pudding"
-
                         if puddingMode:
                             exchangeRate = int(config["puddingExchangeRateMarathon"])
                             points = min(points, math.ceil((required - currAmount) / exchangeRate))
