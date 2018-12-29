@@ -220,7 +220,7 @@ def checkAndRenewAppAccessToken():
     if "identified" not in resp or not resp["identified"]:
         # app access token has expired, get a new one
         logger.debug("Requesting new token")
-        url = 'https://api.twitch.tv/kraken/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (
+        url = 'https://id.twitch.tv/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (
             config["clientID"], twitchclientsecret)
         r = requests.post(url)
         try:
@@ -3556,6 +3556,26 @@ class NepBot(NepBotClass):
 
                     return
             if command in ["vote", "donate"] and isMarathonChannel:
+                # pudding mode?
+                puddingMode = False
+                if len(args) > 0 and args[-1].lower() == "pudding":
+                    puddingMode = True
+                    args = args[:-1]
+                    
+                if len(args) == 1:
+                    # special case: is there only 1 incentive and no bidwars?
+                    with db.cursor() as cur:
+                        cur.execute("SELECT COUNT(*) FROM bidWars WHERE `status` = 'open'")
+                        warCount = cur.fetchone()[0] or 0
+                        
+                        cur.execute("SELECT COUNT(*) FROM incentives WHERE `status` = 'open'")
+                        incCount = cur.fetchone()[0] or 0
+                        
+                        if warCount == 0 and incCount == 1:
+                            # donate to that incentive
+                            cur.execute("SELECT id FROM incentives WHERE `status` = 'open' LIMIT 1")
+                            args = [cur.fetchone()[0]] + args
+                
                 if len(args) < 2:
                     if command == "vote":
                         self.message(channel, "Usage: !vote <warid> <choice> <amount>", isWhisper)
@@ -3587,11 +3607,7 @@ class NepBot(NepBotClass):
                             return
 
                         # pudding mode?
-                        puddingMode = False
                         exchangeRate = int(config["puddingExchangeRateMarathon"])
-                        if len(args) > 3 and args[-1].lower() == "pudding":
-                            puddingMode = True
-                            args = args[:-1]
                         currency = 'pudding' if puddingMode else 'points'
 
                         # check their points entry
