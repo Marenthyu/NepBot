@@ -220,7 +220,7 @@ def checkAndRenewAppAccessToken():
     if "identified" not in resp or not resp["identified"]:
         # app access token has expired, get a new one
         logger.debug("Requesting new token")
-        url = 'https://api.twitch.tv/kraken/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (
+        url = 'https://id.twitch.tv/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (
             config["clientID"], twitchclientsecret)
         r = requests.post(url)
         try:
@@ -3556,6 +3556,26 @@ class NepBot(NepBotClass):
 
                     return
             if command in ["vote", "donate"] and isMarathonChannel:
+                # pudding mode?
+                puddingMode = False
+                if len(args) > 0 and args[-1].lower() == "pudding":
+                    puddingMode = True
+                    args = args[:-1]
+                    
+                if len(args) == 1:
+                    # special case: is there only 1 incentive and no bidwars?
+                    with db.cursor() as cur:
+                        cur.execute("SELECT COUNT(*) FROM bidWars WHERE `status` = 'open'")
+                        warCount = cur.fetchone()[0] or 0
+                        
+                        cur.execute("SELECT COUNT(*) FROM incentives WHERE `status` = 'open'")
+                        incCount = cur.fetchone()[0] or 0
+                        
+                        if warCount == 0 and incCount == 1:
+                            # donate to that incentive
+                            cur.execute("SELECT id FROM incentives WHERE `status` = 'open' LIMIT 1")
+                            args = [cur.fetchone()[0]] + args
+                
                 if len(args) < 2:
                     if command == "vote":
                         self.message(channel, "Usage: !vote <warid> <choice> <amount>", isWhisper)
@@ -3587,11 +3607,7 @@ class NepBot(NepBotClass):
                             return
 
                         # pudding mode?
-                        puddingMode = False
                         exchangeRate = int(config["puddingExchangeRateMarathon"])
-                        if len(args) > 3 and args[-1].lower() == "pudding":
-                            puddingMode = True
-                            args = args[:-1]
                         currency = 'pudding' if puddingMode else 'points'
 
                         # check their points entry
@@ -3707,8 +3723,6 @@ class NepBot(NepBotClass):
                         except ValueError:
                             self.message(channel, "%s -> Invalid amount of points/pudding entered." % tags['display-name'])
                             return
-
-                        puddingMode = len(args) > 2 and args[2].lower() == "pudding"
 
                         if puddingMode:
                             exchangeRate = int(config["puddingExchangeRateMarathon"])
@@ -4337,17 +4351,23 @@ class NepBot(NepBotClass):
                                 whispers.append(('#' + winner["name"], msg))
 
                             # broadcaster prize
-                            # run length in hours * 20, rounded to nearest whole pudding
-                            # scales up a bit as the hours go on
+                            # run length in hours * 30, rounded to nearest whole pudding
                             runHours = resultData["result"] / 3600000.0
-                            bcPrize = round(max(min(runHours, 5) * bbReward + min(max(runHours - 5, 0), 5) * bbReward * 1.5 + max(runHours - 10, 0) * bbReward * 2, maxPrize / 2))
-                            prizeStrings.append("%s (broadcaster) - %d pudding" % (channel[1:], bcPrize))
-                            whispers.append((channel, "You were rewarded %d pudding for running your recent bet. Check and spend it with !pudding" % bcPrize))
+                            bcPrize = round(min(max(runHours, 1) * bbReward, int(config["maxBroadcasterReward"])))
+                            capped = False
+                            if not isMarathonChannel:
+                                cur.execute("SELECT COALESCE(SUM(paidBroadcaster), 0) FROM bets WHERE status='paid' AND SUBSTRING(FROM_UNIXTIME(startTime/1000),1,7)=SUBSTRING(NOW(),1,7) AND channel = %s", [channel])
+                                puddingMonth = cur.fetchone()[0] or 0
+                                if puddingMonth + bcPrize > int(config["maxMonthlyBCReward"]):
+                                    bcPrize = int(config["maxMonthlyBCReward"]) - puddingMonth
+                                    capped = True
+                            prizeStrings.append("%s (broadcaster) - %d pudding%s" % (channel[1:], bcPrize, " (monthly cap reached)" if capped else ""))
+                            whispers.append((channel, "You were rewarded %d pudding%s for running your recent bet. Check and spend it with !pudding" % (bcPrize, " (monthly cap reached)" if capped else "")))
                             # skip using addPudding to save a database lookup
                             cur.execute("UPDATE users SET puddingCurrent = puddingCurrent + %s WHERE name = %s", [bcPrize, channel[1:]])
                             
                             # start cooldown for next bet payout at max(endTime, lastPayout + 22h)
-                            payoutTime = max(betRow[2], lastPayout + 79200000)
+                            payoutTime = min(max(betRow[2], lastPayout + 79200000), current_milli_time())
                             cur.execute(
                                 "UPDATE bets SET status = 'paid', paidBroadcaster = %s, paidAt = %s WHERE id = %s",
                                 [bcPrize, payoutTime, betRow[0]])
