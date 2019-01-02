@@ -5555,7 +5555,7 @@ class NepBot(NepBotClass):
                             except Exception as ex:
                                 self.message(channel, "Could not process image. %s. Check the URL yourself and if it is invalid reject their request." % str(ex), isWhisper)
                                 return
-                            cur.execute("UPDATE has_waifu SET custom_image = %s WHERE userid = %s AND waifuid = %s", [hostedURL, request[3], request[5]])
+                            cur.execute("UPDATE has_waifu SET custom_image = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [hostedURL, request[3], request[5], godRarity])
 
                             queryArgs = [tags['user-id'], current_milli_time(), request[0]]
                             cur.execute("UPDATE godimage_requests SET state = 'accepted_single', moderatorid = %s, updated = %s WHERE id = %s", queryArgs)
