@@ -988,7 +988,7 @@ function bootServer(callback) {
                     break;
                 }
                 case "discord": {
-                    res.writeHead(302, {'Location': 'https://discord.gg/qCtqzyF'});
+                    res.writeHead(302, {'Location': 'https://discord.gg/4KVy32j'});
                     res.end();
                     break;
                 }
