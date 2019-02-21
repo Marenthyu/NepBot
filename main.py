@@ -295,19 +295,33 @@ def getBetResults(betid):
                      placements]
     cur.close()
     return {"result": timeresult, "winners": actualwinners}
+    
+class NotEnoughBetsException(Exception):
+    pass
 
 
-def startBet(channel):
-    cur = db.cursor()
-    cur.execute("SELECT id FROM bets WHERE channel = %s AND status = 'open' LIMIT 1", [channel])
-    row = cur.fetchone()
-    if row is not None:
-        cur.execute("UPDATE bets SET startTime = %s, status = 'started' WHERE id = %s", [current_milli_time(), row[0]])
-        cur.close()
-        return True
-    else:
-        cur.close()
-        return False
+class NoBetException(Exception):
+    pass
+    
+
+class NotOpenLongEnoughException(Exception):
+    pass
+
+
+def startBet(channel, confirmed=False):
+    with db.cursor() as cur:
+        cur.execute("SELECT id, openedTime FROM bets WHERE channel = %s AND status = 'open' LIMIT 1", [channel])
+        row = cur.fetchone()
+        if row is not None:
+            if not confirmed:
+                cur.execute("SELECT COUNT(*) FROM placed_bets WHERE betid = %s", [row[0]])
+                if cur.fetchone()[0] < int(config["betMinimumEntriesForPayout"]):
+                    raise NotEnoughBetsException()
+            if row[1] is not None and int(row[1]) + int(config["betMinimumMinutesOpen"])*60000 > current_milli_time():
+                raise NotOpenLongEnoughException()
+            cur.execute("UPDATE bets SET startTime = %s, status = 'started' WHERE id = %s", [current_milli_time(), row[0]])
+        else:
+            raise NoBetException()
 
 
 def openBet(channel):
@@ -318,7 +332,7 @@ def openBet(channel):
         cur.close()
         return False
     else:
-        cur.execute("INSERT INTO bets(channel, status) VALUE (%s, 'open')", [channel])
+        cur.execute("INSERT INTO bets(channel, status, openedTime) VALUES (%s, 'open', %s)", [channel, current_milli_time()])
         cur.close()
         return True
 
@@ -3971,8 +3985,20 @@ class NepBot(NepBotClass):
                     return
                 if len(args) < 1:
                     self.message(channel,
-                                 "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
+                                 "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results OR !bet forcereset",
                                  isWhisper)
+                    return
+                # check restrictions
+                with db.cursor() as cur:
+                    cur.execute("SELECT betsBanned, forceresetsBanned FROM channels WHERE name = %s", [channel])
+                    restrictions = cur.fetchone()
+                    if restrictions is None:
+                        # this shouldn't ever happen, but just in case...
+                        self.message(channel, "This isn't a Waifu TCG channel. No can do.", isWhisper)
+                        return
+                
+                if restrictions[0] != 0:
+                    self.message(channel, "Bets are currently banned in this channel.")
                     return
                 canAdminBets = sender in superadmins or (sender in admins and isMarathonChannel)
                 isBroadcaster = str(tags["badges"]).find("broadcaster") > -1
@@ -4007,9 +4033,14 @@ class NepBot(NepBotClass):
                                          "There is already a prediction contest in progress in your channel! Use !bet status to check what to do next!")
                         return
                     elif canManageBets and subcmd == "start":
-                        if startBet(channel):
-                            self.message(channel, "Taking current time as start time! Good Luck! Bets are now closed.")
-                        else:
+                        confirmed = args[-1].lower() == "yes"
+                        try:
+                            startBet(channel, confirmed)
+                        except NotEnoughBetsException:
+                            self.message(channel, "WARNING: This bet does not currently have enough participants to be eligible for payout. To start anyway, use !bet start yes")
+                        except NotOpenLongEnoughException:
+                            self.message(channel, "You must wait at least %d minutes after opening a bet to start it." % int(config["betMinimumMinutesOpen"]))
+                        except NoBetException:
                             self.message(channel,
                                          "There wasn't an open prediction contest in your channel! Use !bet status to check current contest status.")
                         return
@@ -4028,7 +4059,7 @@ class NepBot(NepBotClass):
                                          "Contest has ended in {time}! The top 3 closest were: {first}, {second}, {third}".format(
                                              time=formattedTime, first=winnerNames[0], second=winnerNames[1],
                                              third=winnerNames[2]))
-                            if not canAdminBets and len(winners) >= 2:
+                            if not canAdminBets and len(winners) >= int(config["betMinimumEntriesForPayout"]):
                                 # notify the discordhook of the new bet completion
                                 chanStr = channel[1:].lower()
                                 discordArgs = {"channel": chanStr, "time": formattedTime, "link": "https://twitch.tv/" + chanStr}
@@ -4181,7 +4212,7 @@ class NepBot(NepBotClass):
                                 self.message(channel, message, isWhisper)
                         cur.close()
                         return
-                    elif subcmd == "forcereset" and canAdminBets:
+                    elif subcmd == "forcereset" and canManageBets:
                         # change a started bet to open, preserving all current bets made
                         with db.cursor() as cur:
                             cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
@@ -4191,6 +4222,22 @@ class NepBot(NepBotClass):
                             if betRow is None or betRow[1] != 'started':
                                 self.message(channel, "There is no bet in progress in this channel.", isWhisper)
                             else:
+                                if '#' + sender == channel:
+                                    # own channel, check limit and restriction
+                                    if restrictions[1] != 0:
+                                        self.message(channel, "This channel is banned from using self forcereset at the present time.")
+                                        return
+                                    invocation = current_milli_time()
+                                    period = invocation - int(config["betForceResetPeriod"])
+                                    cur.execute("SELECT COUNT(*), MIN(`timestamp`) FROM forceresets WHERE channel = %s AND `timestamp` > %s", [channel, period])
+                                    frData = cur.fetchone()
+                                    if frData[0] >= int(config["betForceResetLimit"]):
+                                        nextUse = int(frData[1]) + int(config["betForceResetPeriod"]) - invocation
+                                        a = datetime.timedelta(milliseconds=nextUse, microseconds=0)
+                                        datestring = "{0}".format(a).split(".")[0]
+                                        self.message(channel, "You are currently out of self forceresets. Your next one will be available in %s." % datestring)
+                                        return
+                                    cur.execute("INSERT INTO forceresets (channel, user, `timestamp`) VALUES(%s, %s, %s)", [channel, tags['user-id'], invocation])
                                 cur.execute("UPDATE bets SET status = 'open', startTime = NULL WHERE id = %s",
                                             [betRow[0]])
                                 self.message(channel, "Reset the bet in progress in this channel to open status.",
@@ -4310,8 +4357,8 @@ class NepBot(NepBotClass):
 
                             numEntries = len(resultData["winners"])
 
-                            if numEntries < 2:
-                                self.message(channel, "This contest had 0 or 1 entrants, no payout.", isWhisper)
+                            if numEntries < int(config["betMinimumEntriesForPayout"]):
+                                self.message(channel, "This contest had less than %d entrants, no payout." % int(config["betMinimumEntriesForPayout"]), isWhisper)
                                 cur.close()
                                 return
 
@@ -5627,7 +5674,7 @@ class NepBot(NepBotClass):
 
 curg = db.cursor()
 logger.info("Fetching channel list...")
-curg.execute("SELECT * FROM channels")
+curg.execute("SELECT name FROM channels")
 channels = []
 for row in curg.fetchall():
     channels.append("#" + row[0])
