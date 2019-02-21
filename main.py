@@ -3966,6 +3966,9 @@ class NepBot(NepBotClass):
                             self.message(channel, "%s, your current free packs: %s. !freepacks open <name> to open one." % (tags['display-name'], freeStr), isWhisper)
                         return
             if command == "bet":
+                if isWhisper:
+                    self.message(channel, "You can't use bet commands over whisper.", isWhisper)
+                    return
                 if len(args) < 1:
                     self.message(channel,
                                  "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
@@ -4336,7 +4339,7 @@ class NepBot(NepBotClass):
                                     pudding = minPrize + (maxPrize - minPrize) * (numEntries - place) / (numEntries - 1) / (1.4 if place > numEntries / 2 else 1)
                                     if place == 1:
                                         pudding *= 1.3
-                                    if isMarathonChannel:
+                                    if isMarathonChannel and booleanConfig("marathonBetBoost"):
                                         pudding *= 1.5
                                     if canWinBigPrizes and abs(winner["timedelta"]) < resultData["result"] / 120:
                                         pudding *= 1.5
