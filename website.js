@@ -960,7 +960,8 @@ function bootServer(callback) {
                     break;
                 }
                 case "holiday": {
-                    holiday(req, res, q.query);
+                    res.writeHead(410, 'Gone');
+                    res.end();
                     break;
                 }
                 case "sets":
