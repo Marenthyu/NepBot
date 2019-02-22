@@ -1,67 +1,82 @@
 <!DOCTYPE html>
 <html>
-<head>
-<meta charset="UTF-8">
-<title>Booster - Waifu TCG</title>
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css" integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
-<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js" integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="/waifus-bootstrap.css">
+    <head>
+        <meta charset="UTF-8">
+        <title>Booster - Waifu TCG</title>
+        <link crossorigin="anonymous" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css"
+              integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy"
+              rel="stylesheet">
+        <script crossorigin="anonymous"
+                integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+                src="https://code.jquery.com/jquery-3.2.1.slim.min.js"></script>
+        <script crossorigin="anonymous"
+                integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+                src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
+        <script crossorigin="anonymous"
+                integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4"
+                src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js"></script>
+        <link href="/waifus-bootstrap.css" rel="stylesheet">
     </head>
-<body>
-<nav class="navbar navbar-expand sticky-top navbar-dark bg-dark">
-    <a class="navbar-brand" href="/help">Waifu TCG &ndash; <b>{NAME}</b></a>
+    <body>
+        <nav class="navbar navbar-expand sticky-top navbar-dark bg-dark">
+            <a class="navbar-brand" href="/help">Waifu TCG &ndash; <b>{NAME}</b></a>
 
-    <div class="collapse navbar-collapse" id="navbarSupportedContent">
-        <ul class="navbar-nav mr-auto">
-          <li class="nav-item">
-            <a class="nav-link" href="/hand?user={NAME}">Hand</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/profile?user={NAME}">Profile</a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link" href="/booster?user={NAME}">Booster</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link disabled">Super Secret Admin-Panel</a>
-          </li>
-        </ul>
-        <form method="GET" class="form-inline">
-          <input value="{NAME}" class="form-control" type="search" name="user" placeholder="Search for User" aria-label="Search">
-          <button class="btn btn-outline-light mx-2" type="submit">Check User</button>
-        </form>
-    </div>
-</nav>
-<div class='container-fluid'>
-<div id='cards-grid'>
-{CARDS}
-</div>
-<div id="output"><input type="text" onClick="this.select();document.execCommand('copy');" readonly id="textField" value="Click a checkbox to update this to the command to use to keep/disenchant the corresponding waifu" style="width: 75%"/></div>
-<i>All images (c) to their original Artists. No Copyright claimed from the owner of this Website.</i>
-<script>
-function update() {
-	let elements = document.querySelectorAll('[type="checkbox"]');
-	textField = document.getElementById("textField");
-	
-    actionString = "";
-	for (index = 0, len = elements.length; index < len; ++index) {
-		if (elements[index].checked) {
-			actionString += "k";
-		} else {
-			actionString += "d";
-		}
-	}
-    if(actionString.indexOf("k") == -1) {
-        textField.value = "!booster trash";
-    }
-    else {
-        textField.value = "!booster select "+actionString;
-    }
-}
-setTimeout(update, 5000);
-</script>
-</div>
-</body>
+            <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <ul class="navbar-nav mr-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hand?user={NAME}">Hand</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/profile?user={NAME}">Profile</a>
+                    </li>
+                    <li class="nav-item active">
+                        <a class="nav-link" href="/booster?user={NAME}">Booster</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tracker?user={NAME}">Marathon Tracker</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link disabled">Super Secret Admin-Panel</a>
+                    </li>
+                </ul>
+                <form class="form-inline" method="GET">
+                    <input aria-label="Search" class="form-control" name="user" placeholder="Search for User" type="search"
+                           value="{NAME}">
+                    <button class="btn btn-outline-light mx-2" type="submit">Check User</button>
+                </form>
+            </div>
+        </nav>
+        <div class='container-fluid'>
+            <div id='cards-grid'>
+                {CARDS}
+            </div>
+            <div id="output"><input id="textField" onClick="this.select();document.execCommand('copy');" readonly
+                                    style="width: 75%"
+                                    type="text"
+                                    value="Click a checkbox to update this to the command to use to keep/disenchant the corresponding waifu"/></div>
+            <i>All images (c) to their original Artists. No Copyright claimed from the owner of this Website.</i>
+            <script>
+                function update() {
+                    let elements = document.querySelectorAll('[type="checkbox"]');
+                    textField = document.getElementById("textField");
+
+                    actionString = "";
+                    for (index = 0, len = elements.length; index < len; ++index) {
+                        if (elements[index].checked) {
+                            actionString += "k";
+                        } else {
+                            actionString += "d";
+                        }
+                    }
+                    if (actionString.indexOf("k") == -1) {
+                        textField.value = "!booster trash";
+                    } else {
+                        textField.value = "!booster select " + actionString;
+                    }
+                }
+
+                setTimeout(update, 5000);
+            </script>
+        </div>
+    </body>
 </html>
