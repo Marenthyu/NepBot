@@ -968,7 +968,7 @@ function tracker(req, res, query) {
                     "<div class='progress-bar progress-bar-striped" + (incentive['amount'] >= incentive['required'] ? " bg-success" : (incentive['status'] === 'closed' ? " bg-danger" : "")) +
                     "' style='width: " + (100 * (incentive['amount'] / incentive['required'])) + "%;" +
                     "' aria-valuenow='" + incentive['amount'] + "' aria-valuemin='0' aria-valuemax='" + incentive['required'] +
-                    "'>" + incentive['amount'] + "/" + incentive['required'] + (incentive['amount'] >= incentive['required'] ? " (MET!)" : (incentive['status'] === 'closed' ? " (FAILED!)" : "")) + "</div></div><br/>";
+                    "'><span>" + incentive['amount'] + "/" + incentive['required'] + (incentive['amount'] >= incentive['required'] ? " (MET!)" : (incentive['status'] === 'closed' ? " (FAILED!)" : "")) + "</span></div></div><br/>";
             }
 
             let warOutput = "";
@@ -987,7 +987,7 @@ function tracker(req, res, query) {
                         "<div class='progress-bar progress-bar-striped" +
                         "' style='width: " + (100 * (choice['amount'] / warTotal)) + "%;" +
                         "' aria-valuenow='" + choice['amount'] + "' aria-valuemin='0' aria-valuemax='" + warTotal.toString() +
-                        "'>" + choice['amount'] + "</div></div><br/>";
+                        "'><span>" + choice['amount'] + "</span></div></div><br/>";
                     }
                 } else {
                     warOutput += "No choices defined yet :(";
