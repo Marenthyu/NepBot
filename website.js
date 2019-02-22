@@ -997,7 +997,8 @@ function tracker(req, res, query) {
 
             res.writeHead(200, 'OK');
             res.end(trackertpl.replace(/{INCENTIVES}/g, incentivesOutput)
-                .replace(/{BIDWARS}/g, warOutput));
+                .replace(/{BIDWARS}/g, warOutput)
+                .replace(/{NAME}/g, user));
         });
     });
 
