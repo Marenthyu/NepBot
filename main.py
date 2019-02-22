@@ -1020,15 +1020,23 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
                 bannedCards = []
             raritymax = int(config["rarity" + str(rarity) + "Max"])
             weighting_column = "(event_weighting*normal_weighting)" if useEventWeightings else "normal_weighting"
+            result = None
             if raritymax > 0:
-                cur.execute(
-                    "SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
-                        weighting_column, banClause), [rarity] + bannedCards + [raritymax])
+                if rarity >= int(config["strongerWeightingMinRarity"]):
+                    cur.execute(
+                        "SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s AND {0} >= 1 ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
+                            weighting_column, banClause), [rarity] + bannedCards + [raritymax])
+                    result = cur.fetchone()
+                if result is None:
+                    cur.execute(
+                        "SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
+                            weighting_column, banClause), [rarity] + bannedCards + [raritymax])
+                    result = cur.fetchone()
             else:
                 cur.execute(
                     "SELECT id FROM waifus WHERE base_rarity = %s{1} ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
                         weighting_column, banClause), [rarity] + bannedCards)
-            result = cur.fetchone()
+                result = cur.fetchone()
             if result is None:
                 # no waifus left at this rarity
                 logger.info("No droppable waifus left at rarity %d" % rarity)
@@ -1046,7 +1054,7 @@ def recordPullMetrics(*cards):
         pullTime = current_milli_time()
         cur.execute(
             "UPDATE waifus SET normal_weighting = normal_weighting / %s, pulls = pulls + 1, last_pull = %s WHERE id IN({0}) AND normal_weighting <= 1".format(
-                inString), [float(config["weighting_increase_amount"]), pullTime] + list(cards))
+                inString), [float(config["weighting_increase_amount"])**4, pullTime] + list(cards))
         cur.execute(
             "UPDATE waifus SET normal_weighting = 1, pulls = pulls + 1, last_pull = %s WHERE id IN({0}) AND normal_weighting > 1".format(
                 inString), [pullTime] + list(cards))
@@ -1269,7 +1277,7 @@ class CantAffordBoosterException(Exception):
 def getPackStats(userid):
     with db.cursor() as cur:
         cur.execute(
-            "SELECT bo.boostername, COUNT(*), SUM(IF(bo.paid > 0, bo.paid, boosters.cost)) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON bo.boostername = boosters.name WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC",
+            "SELECT bo.boostername, COUNT(*) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON (bo.boostername IN(boosters.name, CONCAT('mega', boosters.name))) WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC",
             [userid] * 2)
         packstats = cur.fetchall()
         return packstats
@@ -1328,18 +1336,18 @@ def addSpending(userid, amount):
         cur.execute("UPDATE users SET spending=spending + %s WHERE id = %s", [amount, userid])
 
 
-def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True):
+def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True, mega=False):
     with db.cursor() as cur:
         rarityColumns = ", ".join(
             "rarity" + str(i) + "UpgradeChance" for i in range(int(config["numNormalRarities"]) - 1))
 
         if buying:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
                 [packname])
         else:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, " + rarityColumns + " FROM boosters WHERE name = %s",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, " + rarityColumns + " FROM boosters WHERE name = %s",
                 [packname])
 
         packinfo = cur.fetchone()
@@ -1356,116 +1364,129 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         useEventWeightings = packinfo[6] != 0
         numTokens = packinfo[7]
         tokenChance = packinfo[8]
-        normalChances = packinfo[9:]
+        canMega = packinfo[9]
+        normalChances = packinfo[10:]
         
         if numTokens >= numCards:
             raise InvalidBoosterException()
+            
+        iterations = 1
+        if mega:
+            if not canMega:
+                raise InvalidBoosterException()
+            iterations = 5
 
         if buying:
-            if not hasPoints(userid, cost):
-                raise CantAffordBoosterException(cost)
+            if not hasPoints(userid, cost*iterations):
+                raise CantAffordBoosterException(cost*iterations)
 
-            addPoints(userid, -cost)
-            
-        tokensDropped = 0
-        for n in range(numTokens):
-            if random.random() < tokenChance:
-                tokensDropped += 1
+            addPoints(userid, -cost*iterations)
 
         minScalingRarity = int(config["pullScalingMinRarity"])
         maxScalingRarity = int(config["pullScalingMaxRarity"])
         numScalingRarities = maxScalingRarity - minScalingRarity + 1
         scalingThresholds = [int(config["pullScalingRarity%dThreshold" % rarity]) for rarity in
                              range(minScalingRarity, maxScalingRarity + 1)]
-
+        
         cur.execute("SELECT pullScalingData FROM users WHERE id = %s", [userid])
         scalingRaw = cur.fetchone()[0]
         if scalingRaw is None:
             scalingData = [0] * numScalingRarities
         else:
             scalingData = [int(n) for n in scalingRaw.split(':')]
-
+        
+        totalTokensDropped = 0
         cards = []
         alertwaifus = []
         uniques = getUniqueCards(userid)
         totalDE = 0
-        for i in range(numCards - tokensDropped):
-            # scale chances of the card appropriately
-            currentChances = list(normalChances)
-            guaranteedRarity = 0
-            if listed and buyable:
-                for rarity in range(maxScalingRarity, minScalingRarity - 1, -1):
-                    scaleIdx = rarity - minScalingRarity
-                    if scalingData[scaleIdx] >= scalingThresholds[scaleIdx] * 2:
-                        # guarantee this rarity drops now
-                        if rarity == int(config["numNormalRarities"]) - 1:
-                            currentChances = [1] * len(currentChances)
-                        else:
-                            currentChances = ([1] * rarity) + [
-                                functools.reduce((lambda x, y: x * y), currentChances[:rarity + 1])] + list(
-                                currentChances[rarity + 1:])
-                        guaranteedRarity = rarity
-                        break
-                    elif scalingData[scaleIdx] > scalingThresholds[scaleIdx]:
-                        # make this rarity more likely to drop
-                        oldPromoChance = currentChances[rarity - 1]
-                        currentChances[rarity - 1] = min(currentChances[rarity - 1] * (
-                                (scalingData[scaleIdx] / scalingThresholds[scaleIdx] - 1) * 2 + 1), 1)
-                        if rarity != int(config["numNormalRarities"]) - 1:
-                            # make rarities above this one NOT more likely to drop
-                            currentChances[rarity] /= currentChances[rarity - 1] / oldPromoChance
+        logPackName = "mega" + packname if mega else packname
+        
+        for iter in range(iterations):
+            tokensDropped = 0
+            for n in range(numTokens):
+                if random.random() < tokenChance:
+                    tokensDropped += 1
+                    
+            totalTokensDropped += tokensDropped
+            iterDE = 0
+            for i in range(numCards - tokensDropped):
+                # scale chances of the card appropriately
+                currentChances = list(normalChances)
+                guaranteedRarity = 0
+                if listed and buyable:
+                    for rarity in range(maxScalingRarity, minScalingRarity - 1, -1):
+                        scaleIdx = rarity - minScalingRarity
+                        if scalingData[scaleIdx] >= scalingThresholds[scaleIdx] * 2:
+                            # guarantee this rarity drops now
+                            if rarity == int(config["numNormalRarities"]) - 1:
+                                currentChances = [1] * len(currentChances)
+                            else:
+                                currentChances = ([1] * rarity) + [
+                                    functools.reduce((lambda x, y: x * y), currentChances[:rarity + 1])] + list(
+                                    currentChances[rarity + 1:])
+                            guaranteedRarity = rarity
+                            break
+                        elif scalingData[scaleIdx] > scalingThresholds[scaleIdx]:
+                            # make this rarity more likely to drop
+                            oldPromoChance = currentChances[rarity - 1]
+                            currentChances[rarity - 1] = min(currentChances[rarity - 1] * (
+                                    (scalingData[scaleIdx] / scalingThresholds[scaleIdx] - 1) * 2 + 1), 1)
+                            if rarity != int(config["numNormalRarities"]) - 1:
+                                # make rarities above this one NOT more likely to drop
+                                currentChances[rarity] /= currentChances[rarity - 1] / oldPromoChance
 
-            # account for minrarity for some cards in the pack
-            if i < pgCount and pgRarity > guaranteedRarity:
-                if pgRarity == int(config["numNormalRarities"]) - 1:
-                    currentChances = [1] * len(currentChances)
-                else:
-                    currentChances = ([1] * pgRarity) + [
-                        functools.reduce((lambda x, y: x * y), currentChances[:pgRarity + 1])] + list(
-                        currentChances[pgRarity + 1:])
-
-            logger.debug("using odds for card %d: %s", i, str(currentChances))
-
-            # actually drop the card
-            card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings,
-                                bannedCards=uniques + cards))
-            cards.append(card)
-
-            # check its rarity and adjust scaling data
-            waifu = getWaifuById(card)
-            totalDE += int(config["rarity%dValue" % waifu['base_rarity']])
-
-            if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
-                alertwaifus.append(waifu)
-
-            if listed and buyable:
-                for r in range(numScalingRarities):
-                    if r + minScalingRarity != waifu['base_rarity']:
-                        scalingData[r] += cost / (numCards - tokensDropped)
+                # account for minrarity for some cards in the pack
+                if i < pgCount and pgRarity > guaranteedRarity:
+                    if pgRarity == int(config["numNormalRarities"]) - 1:
+                        currentChances = [1] * len(currentChances)
                     else:
-                        scalingData[r] = 0
+                        currentChances = ([1] * pgRarity) + [
+                            functools.reduce((lambda x, y: x * y), currentChances[:pgRarity + 1])] + list(
+                            currentChances[pgRarity + 1:])
 
-            logDrop(str(userid), str(card), waifu['base_rarity'], "boosters.%s" % packname, channel, isWhisper)
+                # actually drop the card
+                logger.debug("using odds for card %d: %s", i, str(currentChances))
+                card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings,
+                                    bannedCards=uniques + cards))
+                cards.append(card)
+
+                # check its rarity and adjust scaling data
+                waifu = getWaifuById(card)
+                iterDE += int(config["rarity%dValue" % waifu['base_rarity']])
+
+                if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
+                    alertwaifus.append(waifu)
+
+                if listed and buyable:
+                    for r in range(numScalingRarities):
+                        if r + minScalingRarity != waifu['base_rarity']:
+                            scalingData[r] += cost / (numCards - tokensDropped)
+                        else:
+                            scalingData[r] = 0
+
+                logDrop(str(userid), str(card), waifu['base_rarity'], "boosters.%s" % logPackName, channel, isWhisper)
+                
+            totalDE += iterDE
+            # did they win a free amount-based reward pack?
+            if packname in packAmountRewards and iterDE in packAmountRewards[packname]:
+                reward = packAmountRewards[packname][iterDE]
+                giveFreeBooster(userid, reward)
+                msgArgs = (reward, packname, iterDE, reward)
+                bot.message("#%s" % username, "You won a free %s pack due to getting a %s pack worth %d points. Open it with !freepacks open %s" % msgArgs, True)
 
         cards.sort()
         recordPullMetrics(*cards)
-        addSpending(userid, cost)
-
-        # did they win a free amount-based reward pack?
-        if packname in packAmountRewards and totalDE in packAmountRewards[packname]:
-            reward = packAmountRewards[packname][totalDE]
-            giveFreeBooster(userid, reward)
-            msgArgs = (reward, packname, totalDE, reward)
-            bot.message("#%s" % username, "You won a free %s pack due to getting a %s pack worth %d points. Open it with !freepacks open %s" % msgArgs, True)
+        addSpending(userid, cost*iterations)
 
         # pity pull data update
         cur.execute("UPDATE users SET pullScalingData = %s, eventTokens = eventTokens + %s WHERE id = %s",
-                    [":".join(str(round(n)) for n in scalingData), tokensDropped, userid])
+                    [":".join(str(round(n)) for n in scalingData), totalTokensDropped, userid])
 
         # insert opened booster
         cur.execute(
             "INSERT INTO boosters_opened (userid, boostername, paid, created, status, eventTokens) VALUES(%s, %s, %s, %s, 'open', %s)",
-            [userid, packname, cost if buying else 0, current_milli_time(), tokensDropped])
+            [userid, logPackName, cost if buying else 0, current_milli_time(), totalTokensDropped])
         boosterid = cur.lastrowid
         cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)",
                         [(boosterid, card) for card in cards])
@@ -1738,8 +1759,11 @@ class NepBot(NepBotClass):
                     if int(config["last_weighting_update"]) < current_milli_time() - int(
                             config["weighting_increase_cycle"]):
                         logger.debug("Increasing card weightings...")
+                        baseIncrease = float(config["weighting_increase_amount"])
                         cur.execute("UPDATE waifus SET normal_weighting = normal_weighting * %s WHERE base_rarity < %s",
-                                    [float(config["weighting_increase_amount"]), int(config["numNormalRarities"])])
+                                    [baseIncrease, int(config["strongerWeightingMinRarity"])])
+                        cur.execute("UPDATE waifus SET normal_weighting = normal_weighting * %s WHERE base_rarity BETWEEN %s AND %s",
+                                    [baseIncrease**2, int(config["strongerWeightingMinRarity"]), int(config["numNormalRarities"])-1])
                         config["last_weighting_update"] = str(current_milli_time())
                         cur.execute("UPDATE config SET value = %s WHERE name = 'last_weighting_update'",
                                     [config["last_weighting_update"]])
@@ -2221,10 +2245,15 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !pudding booster <name>", isWhisper)
                         return
                     # check that the pack is actually buyable
+                    truename = boostername = args[1].lower()
+                    mega = False
+                    if boostername.startswith("mega"):
+                        truename = boostername[4:]
+                        mega = True
                     with db.cursor() as cur:
-                        cur.execute("SELECT name, cost FROM boosters WHERE name = %s AND buyable = 1", [args[1]])
+                        cur.execute("SELECT name, cost, canMega FROM boosters WHERE name = %s AND buyable = 1", [truename])
                         booster = cur.fetchone()
-                        if booster is None:
+                        if booster is None or (mega and booster[2] == 0):
                             self.message(channel, "Invalid booster specified.", isWhisper)
                             return
                         # can they actually open it?
@@ -2237,16 +2266,16 @@ class NepBot(NepBotClass):
                                         "%s, you have an open booster already! !booster show to check it." %
                                         tags['display-name'], isWhisper)
                             return
-                        cost = math.ceil(int(booster[1])/int(config["puddingExchangeRate"]))
+                        cost = math.ceil(int(booster[1])/int(config["puddingExchangeRate"]))*(5 if mega else 1)
                         if not hasPudding(tags['user-id'], cost):
-                            self.message(channel, "%s, you can't afford a %s booster. They cost %d pudding." % (tags['display-name'], booster[0], cost), isWhisper)
+                            self.message(channel, "%s, you can't afford a %s booster. They cost %d pudding." % (tags['display-name'], boostername, cost), isWhisper)
                             return
                         takePudding(tags['user-id'], cost)
                         try:
-                            openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, booster[0], False)
+                            openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, truename, False, mega)
                             if checkHandUpgrade(tags['user-id']):
                                 messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
-                            self.message(channel, "%s, you open a %s booster for %d pudding: %s/booster?user=%s" % (tags['display-name'], booster[0], cost, config["siteHost"], sender), isWhisper)
+                            self.message(channel, "%s, you open a %s booster for %d pudding: %s/booster?user=%s" % (tags['display-name'], boostername, cost, config["siteHost"], sender), isWhisper)
                         except InvalidBoosterException:
                             discordbody = {
                                 "username": "WTCG Admin", 
@@ -2736,9 +2765,13 @@ class NepBot(NepBotClass):
                         cur.close()
                         return
 
-                    packname = args[1].lower()
+                    truepackname = packname = args[1].lower()
+                    mega = False
+                    if packname.startswith("mega"):
+                        truepackname = packname[4:]
+                        mega = True
                     try:
-                        openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, packname, True)
+                        openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, truepackname, True, mega)
                         if checkHandUpgrade(tags['user-id']):
                             messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
 
@@ -3990,7 +4023,7 @@ class NepBot(NepBotClass):
                     return
                 # check restrictions
                 with db.cursor() as cur:
-                    cur.execute("SELECT betsBanned, forceresetsBanned FROM channels WHERE name = %s", [channel])
+                    cur.execute("SELECT betsBanned, forceresetsBanned FROM channels WHERE name = %s", [channel[1:]])
                     restrictions = cur.fetchone()
                     if restrictions is None:
                         # this shouldn't ever happen, but just in case...
@@ -4036,6 +4069,7 @@ class NepBot(NepBotClass):
                         confirmed = args[-1].lower() == "yes"
                         try:
                             startBet(channel, confirmed)
+                            self.message(channel, "Taking current time as start time! Good Luck! Bets are now closed.")
                         except NotEnoughBetsException:
                             self.message(channel, "WARNING: This bet does not currently have enough participants to be eligible for payout. To start anyway, use !bet start yes")
                         except NotOpenLongEnoughException:
