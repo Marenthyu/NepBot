@@ -965,7 +965,7 @@ function tracker(req, res, query) {
                 incentivesOutput += "<h3>" + incentive['id'] + "</h3>";
                 incentivesOutput += "<p>" + incentive['title'] + "</p>";
                 incentivesOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'>" +
-                    "<div class='progress-bar progress-bar-striped" + (incentive['amount'] >= incentive['required'] ? " bg-success" : (incentive['status'] === 'closed' ? " bg-error" : "")) +
+                    "<div class='progress-bar progress-bar-striped" + (incentive['amount'] >= incentive['required'] ? " bg-success" : (incentive['status'] === 'closed' ? " bg-danger" : "")) +
                     "' style='width: " + (100 * (incentive['amount'] / incentive['required'])) + "%;" +
                     "' aria-valuenow='" + incentive['amount'] + "' aria-valuemin='0' aria-valuemax='" + incentive['required'] +
                     "'>" + incentive['amount'] + "/" + incentive['required'] + (incentive['amount'] >= incentive['required'] ? " (MET!)" : (incentive['status'] === 'closed' ? " (FAILED!)" : "")) + "</div></div><br/>";
