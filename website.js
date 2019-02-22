@@ -961,38 +961,48 @@ function tracker(req, res, query) {
             }
 
             let incentivesOutput = "";
-            for (let incentive of incentives) {
-                incentivesOutput += "<h3>" + incentive['id'] + "</h3>";
-                incentivesOutput += "<p>" + incentive['title'] + "</p>";
-                incentivesOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'>" +
-                    "<div class='progress-bar progress-bar-striped" + (incentive['amount'] >= incentive['required'] ? " bg-success" : (incentive['status'] === 'closed' ? " bg-danger" : "")) +
-                    "' style='width: " + (100 * (incentive['amount'] / incentive['required'])) + "%;" +
-                    "' aria-valuenow='" + incentive['amount'] + "' aria-valuemin='0' aria-valuemax='" + incentive['required'] +
-                    "'><span>" + incentive['amount'] + "/" + incentive['required'] + (incentive['amount'] >= incentive['required'] ? " (MET!)" : (incentive['status'] === 'closed' ? " (FAILED!)" : "")) + "</span></div></div><br/>";
+            if (incentives.length > 0) {
+                for (let incentive of incentives) {
+                    incentivesOutput += "<h3>" + incentive['id'] + "</h3>";
+                    incentivesOutput += "<p>" + incentive['title'] + "</p>";
+                    incentivesOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'>" +
+                        "<div class='progress-bar progress-bar-striped" + (incentive['amount'] >= incentive['required'] ? " bg-success" : (incentive['status'] === 'closed' ? " bg-danger" : "")) +
+                        "' style='width: " + (100 * (incentive['amount'] / incentive['required'])) + "%;" +
+                        "' aria-valuenow='" + incentive['amount'] + "' aria-valuemin='0' aria-valuemax='" + incentive['required'] +
+                        "'><span>" + incentive['amount'] + "/" + incentive['required'] + (incentive['amount'] >= incentive['required'] ? " (MET!)" : (incentive['status'] === 'closed' ? " (FAILED!)" : "")) + "</span></div></div><br/>";
+                }
+            } else {
+                incentivesOutput += "Sorry, there are currently no incentives. Check back later. (Or during a marathon!)";
             }
 
-            let warOutput = "";
-            for (let war of wars) {
-                let warTotal = 0;
-                for (let choice of war['choices']) {
-                    warTotal += choice['amount'];
-                }
-                warOutput += "<h3>" + war['id'] + "</h3>";
-                warOutput += "<p>" + war['title'] + ", " + war['status'] + "</p>";
-                warOutput += "<h4>Choices:</h4>";
-                if (war['choices'].length > 0) {
-                    for (let choice of war['choices']) {
-                        warOutput += choice['choice'];
-                        warOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'>" +
-                        "<div class='progress-bar progress-bar-striped" +
-                        "' style='width: " + (100 * (choice['amount'] / warTotal)) + "%;" +
-                        "' aria-valuenow='" + choice['amount'] + "' aria-valuemin='0' aria-valuemax='" + warTotal.toString() +
-                        "'><span>" + choice['amount'] + "</span></div></div><br/>";
-                    }
-                } else {
-                    warOutput += "No choices defined yet :(";
-                }
 
+            let warOutput = "";
+            if (wars.length > 0) {
+                for (let war of wars) {
+                    let warTotal = 0;
+                    for (let choice of war['choices']) {
+                        warTotal += choice['amount'];
+                    }
+                    warOutput += "<h3>" + war['id'] + "</h3>";
+                    warOutput += "<p>" + war['title'] + ", " + war['status'] + "</p>";
+                    warOutput += "<h4>Choices:</h4>";
+                    if (war['choices'].length > 0) {
+                        for (let choice of war['choices']) {
+                            warOutput += choice['choice'];
+                            warOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'>" +
+                                "<div class='progress-bar progress-bar-striped" +
+                                "' style='width: " + (100 * (choice['amount'] / warTotal)) + "%;" +
+                                "' aria-valuenow='" + choice['amount'] + "' aria-valuemin='0' aria-valuemax='" + warTotal.toString() +
+                                "'><span>" + choice['amount'] + "</span></div></div><br/>";
+                        }
+                    } else {
+                        warOutput += "No choices defined yet :(";
+                    }
+
+                }
+            }
+            else {
+                warOutput += "Sorry, no bid wars logged in the system currently.";
             }
 
             res.writeHead(200, 'OK');
