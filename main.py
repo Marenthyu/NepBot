@@ -1054,7 +1054,7 @@ def recordPullMetrics(*cards):
         pullTime = current_milli_time()
         cur.execute(
             "UPDATE waifus SET normal_weighting = normal_weighting / %s, pulls = pulls + 1, last_pull = %s WHERE id IN({0}) AND normal_weighting <= 1".format(
-                inString), [float(config["weighting_increase_amount"]), pullTime] + list(cards))
+                inString), [float(config["weighting_increase_amount"])**4, pullTime] + list(cards))
         cur.execute(
             "UPDATE waifus SET normal_weighting = 1, pulls = pulls + 1, last_pull = %s WHERE id IN({0}) AND normal_weighting > 1".format(
                 inString), [pullTime] + list(cards))
