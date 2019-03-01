@@ -21,6 +21,12 @@ import sys
 import re
 import logging
 
+import websocket
+try:
+    import thread
+except ImportError:
+    import _thread as thread
+
 formatter = logging.Formatter('[%(asctime)s][%(name)s][%(levelname)s] %(message)s')
 logger = logging.getLogger('nepbot')
 logger.setLevel(logging.DEBUG)
@@ -38,21 +44,6 @@ logger.addHandler(ch)
 logging.getLogger('tornado.application').addHandler(fh)
 logging.getLogger('tornado.application').addHandler(ch)
 
-gamesdict = {
-    'Opening Set Up': 'Hyperdimension Neptunia',
-    'Hyperdimension Neptunia Victory Vs Rebirth 3': 'Hyperdimension Neptunia Victory',
-    'SetUp 1 Block - Interview': 'Hyperdimension Neptunia',
-    'Bid War Game': 'Hyperdimension Neptunia',
-    'Set Up Block 2': 'Hyperdimension Neptunia',
-    'Interview Q/A 1': 'Hyperdimension Neptunia',
-    'Interview Q/A 2': 'Hyperdimension Neptunia',
-    'Set Up Block 3': 'Hyperdimension Neptunia',
-    'Set Up Block 4': 'Hyperdimension Neptunia',
-    'Set Up Block 5 - Interview': 'Hyperdimension Neptunia',
-    'Hyperdimension Neptunia Re;birth 1 Plus': 'Hyperdimension Neptunia Re;Birth1',
-    'Credits': 'Hyperdimension Neptunia'
-}
-
 ffzws = 'wss://andknuckles.frankerfacez.com'
 pool = pydle.ClientPool()
 current_milli_time = lambda: int(round(time.time() * 1000))
@@ -63,7 +54,6 @@ dbhost = None
 dbuser = None
 silence = False
 debugMode = False
-hdnoauth = None
 streamlabsclient = None
 twitchclientsecret = None
 bannedWords = []
@@ -84,8 +74,6 @@ try:
             dbhost = value
         if name == "dbuser":
             dbuser = value
-        if name == "hdnoauth":
-            hdnoauth = value
         if name == "streamlabsclient":
             streamlabsclient = value
         if name == "twitchclientsecret":
@@ -112,9 +100,6 @@ try:
         sys.exit(1)
     if dbuser is None:
         logger.error("Database user not set. Please add it to the config file, with 'dbuser=<user>'")
-        sys.exit(1)
-    if hdnoauth is None:
-        logger.error("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
         sys.exit(1)
     if twitchclientsecret is None:
         logger.error("Twitch Client Secret not set. Please add it to the conig file, with 'twitchclientsecret=<pw>'")
@@ -538,16 +523,18 @@ def getRawRunner(runner):
 
 
 def updateBoth(game, title):
+    if not booleanConfig("marathonBotFunctions"):
+        return
     myheaders = headers.copy()
-    myheaders["Authorization"] = "OAuth " + str(hdnoauth).replace("oauth:", "")
+    myheaders["Authorization"] = "OAuth " + config["marathonOAuth"].replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
     myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
     body = {"channel": {"status": str(title), "game": str(game)}}
-    # print("headers: " + str(myheaders))
-    # print("body: " + str(body))
-    r = requests.put("https://api.twitch.tv/kraken/channels/143262392", headers=myheaders, json=body)
+    logger.debug(str(body))
+    r = requests.put("https://api.twitch.tv/kraken/channels/"+config["marathonChannelID"], headers=myheaders, json=body)
     try:
         j = r.json()
+        logger.debug("Response from twitch: "+str(j))
         # print("tried to update channel title, response: " + str(j))
     except Exception:
         logger.error(str(r.status_code))
@@ -555,34 +542,32 @@ def updateBoth(game, title):
 
 
 def updateTitle(title):
+    if not booleanConfig("marathonBotFunctions"):
+        return
     myheaders = headers.copy()
-    myheaders["Authorization"] = "OAuth " + str(hdnoauth).replace("oauth:", "")
+    myheaders["Authorization"] = "OAuth " + config["marathonOAuth"].replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
     myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
     body = {"channel": {"status": str(title)}}
-    # print("headers: " + str(myheaders))
-    # print("body: " + str(body))
-    r = requests.put("https://api.twitch.tv/kraken/channels/143262392", headers=myheaders, json=body)
+    r = requests.put("https://api.twitch.tv/kraken/channels/"+config["marathonChannelID"], headers=myheaders, json=body)
     try:
         j = r.json()
-        # print("tried to update channel title, response: " + str(j))
     except Exception:
         logger.error(str(r.status_code))
         logger.error(r.text)
 
 
 def updateGame(game):
+    if not booleanConfig("marathonBotFunctions"):
+        return
     myheaders = headers.copy()
-    myheaders["Authorization"] = "OAuth " + str(hdnoauth).replace("oauth:", "")
+    myheaders["Authorization"] = "OAuth " + config["marathonOAuth"].replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
     myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
     body = {"channel": {"game": str(game)}}
-    # print("headers: " + str(myheaders))
-    # print("body: " + str(body))
-    r = requests.put("https://api.twitch.tv/kraken/channels/143262392", headers=myheaders, json=body)
+    r = requests.put("https://api.twitch.tv/kraken/channels/"+config["marathonChannelID"], headers=myheaders, json=body)
     try:
         j = r.json()
-        # print("tried to update channel title, response: " + str(j))
     except Exception:
         logger.error(str(r.status_code))
         logger.error(r.text)
@@ -1989,7 +1974,7 @@ class NepBot(NepBotClass):
                 logger.warning("Error: %s", str(sys.exc_info()))
                 logger.warning("Last run query: %s", cur._last_executed)
 
-            if self.autoupdate:
+            if self.autoupdate and booleanConfig("marathonBotFunctions"):
                 logger.debug("Updating Title and Game with horaro info")
                 schedule = getHoraro()
                 try:
@@ -2002,15 +1987,22 @@ class NepBot(NepBotClass):
                         wasNone = True
                     current = current["data"]
                     game = current[0]
-                    category = current[2]
-                    runners = [getRawRunner(runner) for runner in current[4:7] if runner is not None]
+                    category = current[1]
+                    runners = [getRawRunner(runner) for runner in current[2:6] if runner is not None]
                     args = {"game": game}
                     args["category"] = " (%s)" % category if category is not None else ""
                     args["comingup"] = "COMING UP: " if wasNone else ""
                     args["runners"] = (" by " + ", ".join(runners)) if len(runners) > 0 else ""
-                    title = "{comingup}HDNMarathon V - {game}{category}{runners} - !marathon in chat".format(**args)
+                    args["title"] = config["marathonTitle"]
+                    args["command"] = config["marathonHelpCommand"]
+                    title = "{comingup}{title} - {game}{category}{runners} - !{command} in chat".format(**args)
+                    twitchGame = game
+                    if len(current) >= 10 and current[-1] is not None:
+                        twitchGame = current[-1]
 
-                    updateBoth(gamesdict[game] if game in gamesdict else game, title=title)
+                    updateBoth(twitchGame, title=title)
+                    if len(runners) > 0:
+                        thread.start_new_thread(MarathonBot.instance.updateFollowButtons, (runners,))
                 except Exception:
                     logger.warning("Error updating from Horaro. Skipping this cycle.")
                     logger.warning("Error: %s", str(sys.exc_info()))
@@ -3334,20 +3326,24 @@ class NepBot(NepBotClass):
                              "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
                              isWhisper=isWhisper)
                 return
-            if command == "togglehoraro" and sender in admins:
+            if command == "togglehoraro" and sender in admins and booleanConfig("marathonBotFunctions"):
                 self.autoupdate = not self.autoupdate
                 if self.autoupdate:
                     self.message(channel, "Enabled Horaro Auto-update.", isWhisper=isWhisper)
                 else:
                     self.message(channel, "Disabled Horaro Auto-update.", isWhisper=isWhisper)
                 return
-            if sender in admins and command in ["status", "title"] and isMarathonChannel:
+            if sender in admins and command in ["status", "title"] and isMarathonChannel and booleanConfig("marathonBotFunctions"):
                 updateTitle(" ".join(args))
                 self.message(channel, "%s -> Title updated to %s." % (tags['display-name'], " ".join(args)))
                 return
-            if sender in admins and command == "game" and isMarathonChannel:
+            if sender in admins and command == "game" and isMarathonChannel and booleanConfig("marathonBotFunctions"):
                 updateGame(" ".join(args))
                 self.message(channel, "%s -> Game updated to %s." % (tags['display-name'], " ".join(args)))
+                return
+            if sender in admins and booleanConfig("marathonBotFunctions") and isMarathonChannel and command == "ffzfollowing":
+                MarathonBot.instance.updateFollowButtons(args)
+                self.message(channel, "%s -> Attempted to update follower buttons to %s." % (tags['display-name'], ", ".join(args)))
                 return
             if command == "emotewar":
                 if int(config["emoteWarStatus"]) == 0:
@@ -5702,6 +5698,89 @@ class NepBot(NepBotClass):
                     cur.execute("UPDATE users SET eventTokens = 0")
                     self.message(channel, "Done.", isWhisper)
                     return
+                    
+class MarathonBot(pydle.Client):
+    instance = None
+    pw=None
+
+    def __init__(self):
+        super().__init__(config["marathonChannel"][1:])
+        MarathonBot.instance = self
+        self.ffz = MarathonFFZWebsocket(config["marathonChannel"][1:])
+
+    def start(self, password):
+        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
+        self.pw = password
+        logger.info("Connecting MarathonBot...")
+
+    def on_disconnect(self, expected):
+        logger.warning("MarathonBot Disconnected, reconnecting....")
+        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=self.pw, reconnect=True)
+
+    def on_connect(self):
+        super().on_connect()
+        logger.info("MarathonBot Joining")
+
+    def on_message(self, source, target, message):
+        logger.debug("message on MarathonBot: %s, %s, %s", str(source), str(target), message)
+        
+    def updateFollowButtons(self, channels):
+        self.ffz.updateFollowButtons(channels)
+        
+    def message(self, *args):
+        logger.info("MarathonBot Sending "+str(args))
+        super().message(*args)
+        
+class MarathonFFZWebsocket:
+    def __init__(self, channelName):
+        self.channelName = channelName
+        self.messageNumber = 0
+        self.ws = websocket.WebSocketApp(ffzws, on_message = self.on_message, on_error = self.on_error, on_close = self.on_close)
+        self.ws.on_open = self.on_open
+        thread.start_new_thread(self.ws.run_forever, (), {"origin": ""})
+        
+    def sendMessage(self, message):
+        self.messageNumber += 1
+        self.ws.send("%d %s" % (self.messageNumber, message))
+        
+    def on_open(self):
+        self.sendMessage('hello ["waifutcg-ffzclient",false]')
+    
+    def on_message(self, message):
+        logger.debug("Websocket recv: "+message)
+        code, msg = message.split(" ", 1)
+        code = int(code)
+        if code == -1:
+            # probably authorize
+            if msg.startswith("do_authorize"):
+                # must send auth code
+                authCode = json.loads(msg[13:])
+                logger.debug("trying to authenticate with FFZ "+authCode)
+                MarathonBot.instance.message("#frankerfacezauthorizer", "AUTH "+authCode)
+        elif code == self.messageNumber and self.messageNumber < 5 and msg.split(" ")[0] == "ok":
+            # send the rest of the intro
+            if self.messageNumber == 1:
+                self.sendMessage('setuser %s' % json.dumps(self.channelName))
+            elif self.messageNumber == 2:
+                self.sendMessage('sub %s' % json.dumps('room.'+self.channelName))
+            elif self.messageNumber == 3:
+                self.sendMessage('sub %s' % json.dumps('channel.'+self.channelName))
+            else:
+                self.sendMessage('ready 0')
+        else:
+            # don't do anything immediately
+            pass
+            
+    def on_error(self, error):
+        logger.debug("WS Error: "+error)
+        self.ws.close()
+        
+    def on_close(self):
+        logger.debug("Websocket closed")
+        
+    def updateFollowButtons(self, channels):
+        self.sendMessage("update_follow_buttons %s" % json.dumps([self.channelName, channels]))
+        
                         
                 
 
@@ -5732,6 +5811,11 @@ except Exception:
 config["twitchid"] = str(twitchid)
 b = NepBot(config, channels)
 b.start(config["oauth"])
+
+# marathon bot?
+if booleanConfig("marathonBotFunctions"):
+    maraBot = MarathonBot()
+    maraBot.start(config["marathonOAuth"])
 
 logger.debug("past start")
 
