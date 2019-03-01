@@ -3341,7 +3341,7 @@ class NepBot(NepBotClass):
                 updateGame(" ".join(args))
                 self.message(channel, "%s -> Game updated to %s." % (tags['display-name'], " ".join(args)))
                 return
-            if sender in admins and booleanConfig("marathonBotFunctions") and isMarathonChannel and command == "ffzfollowing":
+            if sender in admins and booleanConfig("marathonBotFunctions") and command == "ffzfollowing":
                 MarathonBot.instance.updateFollowButtons(args)
                 self.message(channel, "%s -> Attempted to update follower buttons to %s." % (tags['display-name'], ", ".join(args)))
                 return
@@ -3800,7 +3800,7 @@ class NepBot(NepBotClass):
                         cur.execute("INSERT INTO `contributionLog` (`userid`, `to_id`, `to_choice`, `raw_amount`, `contribution`, `currency`, `timestamp`) " +
                             "VALUES(%s, %s, %s, %s, %s, %s, %s)", logargs)
 
-                        if points + currAmount >= required:
+                        if contribution + currAmount >= required:
                             self.message(channel, "%s -> You successfully donated %s and met the %s incentive!" % (
                                 tags['display-name'], contributionStr, title), isWhisper)
                         else:
@@ -5725,19 +5725,27 @@ class MarathonBot(pydle.Client):
         logger.debug("message on MarathonBot: %s, %s, %s", str(source), str(target), message)
         
     def updateFollowButtons(self, channels):
-        self.ffz.updateFollowButtons(channels)
+        if self.ffz is None:
+            self.ffz = MarathonFFZWebsocket(config["marathonChannel"][1:], channels)
+        else:
+            self.ffz.updateFollowButtons(channels)
         
     def message(self, *args):
         logger.info("MarathonBot Sending "+str(args))
         super().message(*args)
         
 class MarathonFFZWebsocket:
-    def __init__(self, channelName):
+    def __init__(self, channelName, newFollowButtons=None):
         self.channelName = channelName
         self.messageNumber = 0
+        self.queuedChanges = []
+        self.initDone = False
+        if newFollowButtons is not None:
+            self.queuedChanges.append(newFollowButtons)
         self.ws = websocket.WebSocketApp(ffzws, on_message = self.on_message, on_error = self.on_error, on_close = self.on_close)
         self.ws.on_open = self.on_open
         thread.start_new_thread(self.ws.run_forever, (), {"origin": ""})
+        
         
     def sendMessage(self, message):
         self.messageNumber += 1
@@ -5767,6 +5775,12 @@ class MarathonFFZWebsocket:
                 self.sendMessage('sub %s' % json.dumps('channel.'+self.channelName))
             else:
                 self.sendMessage('ready 0')
+        elif code >= 5 and self.messageNumber >= 5 and len(self.queuedChanges) > 0:
+            self.initDone = True
+            self.updateFollowButtons(self.queuedChanges[0])
+            self.queuedChanges = self.queuedChanges[1:]
+        elif code >= 5 and self.messageNumber >= 5 and msg.split(" ")[0] == "ok":
+            self.initDone = True
         else:
             # don't do anything immediately
             pass
@@ -5777,9 +5791,13 @@ class MarathonFFZWebsocket:
         
     def on_close(self):
         logger.debug("Websocket closed")
+        MarathonBot.instance.ffz = None
         
     def updateFollowButtons(self, channels):
-        self.sendMessage("update_follow_buttons %s" % json.dumps([self.channelName, channels]))
+        if not self.initDone:
+            self.queuedChanges.append(channels)
+        else:
+            self.sendMessage("update_follow_buttons %s" % json.dumps([self.channelName, channels]))
         
                         
                 
