@@ -1062,6 +1062,7 @@ function bootServer(callback) {
                 case "sets":
                 case "smartsets":
                 case "smartsetsdata":
+                case "tracker":
                 case "fancybooster": {
                     res.writeHead(410, 'Gone');
                     res.end();
@@ -1109,10 +1110,10 @@ function bootServer(callback) {
                     pullfeed(req, res, q.query);
                     break;
                 }
-                case "tracker": {
-                    tracker(req, res, q.query);
-                    break;
-                }
+                // case "tracker": {
+                    // tracker(req, res, q.query);
+                    // break;
+                // }
                 default: {
                     res.writeHead(404, {'Content-Type': 'text/html'});
                     res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
