@@ -21,6 +21,9 @@ import sys
 import re
 import logging
 
+import websocket
+import _thread as thread
+
 formatter = logging.Formatter('[%(asctime)s][%(name)s][%(levelname)s] %(message)s')
 logger = logging.getLogger('nepbot')
 logger.setLevel(logging.DEBUG)
@@ -38,21 +41,6 @@ logger.addHandler(ch)
 logging.getLogger('tornado.application').addHandler(fh)
 logging.getLogger('tornado.application').addHandler(ch)
 
-gamesdict = {
-    'Opening Set Up': 'Hyperdimension Neptunia',
-    'Hyperdimension Neptunia Victory Vs Rebirth 3': 'Hyperdimension Neptunia Victory',
-    'SetUp 1 Block - Interview': 'Hyperdimension Neptunia',
-    'Bid War Game': 'Hyperdimension Neptunia',
-    'Set Up Block 2': 'Hyperdimension Neptunia',
-    'Interview Q/A 1': 'Hyperdimension Neptunia',
-    'Interview Q/A 2': 'Hyperdimension Neptunia',
-    'Set Up Block 3': 'Hyperdimension Neptunia',
-    'Set Up Block 4': 'Hyperdimension Neptunia',
-    'Set Up Block 5 - Interview': 'Hyperdimension Neptunia',
-    'Hyperdimension Neptunia Re;birth 1 Plus': 'Hyperdimension Neptunia Re;Birth1',
-    'Credits': 'Hyperdimension Neptunia'
-}
-
 ffzws = 'wss://andknuckles.frankerfacez.com'
 pool = pydle.ClientPool()
 current_milli_time = lambda: int(round(time.time() * 1000))
@@ -63,7 +51,6 @@ dbhost = None
 dbuser = None
 silence = False
 debugMode = False
-hdnoauth = None
 streamlabsclient = None
 twitchclientsecret = None
 bannedWords = []
@@ -84,8 +71,6 @@ try:
             dbhost = value
         if name == "dbuser":
             dbuser = value
-        if name == "hdnoauth":
-            hdnoauth = value
         if name == "streamlabsclient":
             streamlabsclient = value
         if name == "twitchclientsecret":
@@ -112,9 +97,6 @@ try:
         sys.exit(1)
     if dbuser is None:
         logger.error("Database user not set. Please add it to the config file, with 'dbuser=<user>'")
-        sys.exit(1)
-    if hdnoauth is None:
-        logger.error("HDNMarathon Channel oauth not set. Please add it to the conig file, with 'hdnoauth=<pw>'")
         sys.exit(1)
     if twitchclientsecret is None:
         logger.error("Twitch Client Secret not set. Please add it to the conig file, with 'twitchclientsecret=<pw>'")
@@ -295,19 +277,33 @@ def getBetResults(betid):
                      placements]
     cur.close()
     return {"result": timeresult, "winners": actualwinners}
+    
+class NotEnoughBetsException(Exception):
+    pass
 
 
-def startBet(channel):
-    cur = db.cursor()
-    cur.execute("SELECT id FROM bets WHERE channel = %s AND status = 'open' LIMIT 1", [channel])
-    row = cur.fetchone()
-    if row is not None:
-        cur.execute("UPDATE bets SET startTime = %s, status = 'started' WHERE id = %s", [current_milli_time(), row[0]])
-        cur.close()
-        return True
-    else:
-        cur.close()
-        return False
+class NoBetException(Exception):
+    pass
+    
+
+class NotOpenLongEnoughException(Exception):
+    pass
+
+
+def startBet(channel, confirmed=False):
+    with db.cursor() as cur:
+        cur.execute("SELECT id, openedTime FROM bets WHERE channel = %s AND status = 'open' LIMIT 1", [channel])
+        row = cur.fetchone()
+        if row is not None:
+            if not confirmed:
+                cur.execute("SELECT COUNT(*) FROM placed_bets WHERE betid = %s", [row[0]])
+                if cur.fetchone()[0] < int(config["betMinimumEntriesForPayout"]):
+                    raise NotEnoughBetsException()
+            if row[1] is not None and int(row[1]) + int(config["betMinimumMinutesOpen"])*60000 > current_milli_time():
+                raise NotOpenLongEnoughException()
+            cur.execute("UPDATE bets SET startTime = %s, status = 'started' WHERE id = %s", [current_milli_time(), row[0]])
+        else:
+            raise NoBetException()
 
 
 def openBet(channel):
@@ -318,7 +314,7 @@ def openBet(channel):
         cur.close()
         return False
     else:
-        cur.execute("INSERT INTO bets(channel, status) VALUE (%s, 'open')", [channel])
+        cur.execute("INSERT INTO bets(channel, status, openedTime) VALUES (%s, 'open', %s)", [channel, current_milli_time()])
         cur.close()
         return True
 
@@ -524,16 +520,18 @@ def getRawRunner(runner):
 
 
 def updateBoth(game, title):
+    if not booleanConfig("marathonBotFunctions"):
+        return
     myheaders = headers.copy()
-    myheaders["Authorization"] = "OAuth " + str(hdnoauth).replace("oauth:", "")
+    myheaders["Authorization"] = "OAuth " + config["marathonOAuth"].replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
     myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
     body = {"channel": {"status": str(title), "game": str(game)}}
-    # print("headers: " + str(myheaders))
-    # print("body: " + str(body))
-    r = requests.put("https://api.twitch.tv/kraken/channels/143262392", headers=myheaders, json=body)
+    logger.debug(str(body))
+    r = requests.put("https://api.twitch.tv/kraken/channels/"+config["marathonChannelID"], headers=myheaders, json=body)
     try:
         j = r.json()
+        logger.debug("Response from twitch: "+str(j))
         # print("tried to update channel title, response: " + str(j))
     except Exception:
         logger.error(str(r.status_code))
@@ -541,34 +539,32 @@ def updateBoth(game, title):
 
 
 def updateTitle(title):
+    if not booleanConfig("marathonBotFunctions"):
+        return
     myheaders = headers.copy()
-    myheaders["Authorization"] = "OAuth " + str(hdnoauth).replace("oauth:", "")
+    myheaders["Authorization"] = "OAuth " + config["marathonOAuth"].replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
     myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
     body = {"channel": {"status": str(title)}}
-    # print("headers: " + str(myheaders))
-    # print("body: " + str(body))
-    r = requests.put("https://api.twitch.tv/kraken/channels/143262392", headers=myheaders, json=body)
+    r = requests.put("https://api.twitch.tv/kraken/channels/"+config["marathonChannelID"], headers=myheaders, json=body)
     try:
         j = r.json()
-        # print("tried to update channel title, response: " + str(j))
     except Exception:
         logger.error(str(r.status_code))
         logger.error(r.text)
 
 
 def updateGame(game):
+    if not booleanConfig("marathonBotFunctions"):
+        return
     myheaders = headers.copy()
-    myheaders["Authorization"] = "OAuth " + str(hdnoauth).replace("oauth:", "")
+    myheaders["Authorization"] = "OAuth " + config["marathonOAuth"].replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
     myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
     body = {"channel": {"game": str(game)}}
-    # print("headers: " + str(myheaders))
-    # print("body: " + str(body))
-    r = requests.put("https://api.twitch.tv/kraken/channels/143262392", headers=myheaders, json=body)
+    r = requests.put("https://api.twitch.tv/kraken/channels/"+config["marathonChannelID"], headers=myheaders, json=body)
     try:
         j = r.json()
-        # print("tried to update channel title, response: " + str(j))
     except Exception:
         logger.error(str(r.status_code))
         logger.error(r.text)
@@ -1006,15 +1002,23 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
                 bannedCards = []
             raritymax = int(config["rarity" + str(rarity) + "Max"])
             weighting_column = "(event_weighting*normal_weighting)" if useEventWeightings else "normal_weighting"
+            result = None
             if raritymax > 0:
-                cur.execute(
-                    "SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
-                        weighting_column, banClause), [rarity] + bannedCards + [raritymax])
+                if rarity >= int(config["strongerWeightingMinRarity"]):
+                    cur.execute(
+                        "SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s AND {0} >= 1 ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
+                            weighting_column, banClause), [rarity] + bannedCards + [raritymax])
+                    result = cur.fetchone()
+                if result is None:
+                    cur.execute(
+                        "SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
+                            weighting_column, banClause), [rarity] + bannedCards + [raritymax])
+                    result = cur.fetchone()
             else:
                 cur.execute(
                     "SELECT id FROM waifus WHERE base_rarity = %s{1} ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
                         weighting_column, banClause), [rarity] + bannedCards)
-            result = cur.fetchone()
+                result = cur.fetchone()
             if result is None:
                 # no waifus left at this rarity
                 logger.info("No droppable waifus left at rarity %d" % rarity)
@@ -1032,7 +1036,7 @@ def recordPullMetrics(*cards):
         pullTime = current_milli_time()
         cur.execute(
             "UPDATE waifus SET normal_weighting = normal_weighting / %s, pulls = pulls + 1, last_pull = %s WHERE id IN({0}) AND normal_weighting <= 1".format(
-                inString), [float(config["weighting_increase_amount"]), pullTime] + list(cards))
+                inString), [float(config["weighting_increase_amount"])**4, pullTime] + list(cards))
         cur.execute(
             "UPDATE waifus SET normal_weighting = 1, pulls = pulls + 1, last_pull = %s WHERE id IN({0}) AND normal_weighting > 1".format(
                 inString), [pullTime] + list(cards))
@@ -1255,7 +1259,7 @@ class CantAffordBoosterException(Exception):
 def getPackStats(userid):
     with db.cursor() as cur:
         cur.execute(
-            "SELECT bo.boostername, COUNT(*), SUM(IF(bo.paid > 0, bo.paid, boosters.cost)) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON bo.boostername = boosters.name WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC",
+            "SELECT bo.boostername, COUNT(*) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON (bo.boostername IN(boosters.name, CONCAT('mega', boosters.name))) WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC",
             [userid] * 2)
         packstats = cur.fetchall()
         return packstats
@@ -1314,18 +1318,18 @@ def addSpending(userid, amount):
         cur.execute("UPDATE users SET spending=spending + %s WHERE id = %s", [amount, userid])
 
 
-def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True):
+def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True, mega=False):
     with db.cursor() as cur:
         rarityColumns = ", ".join(
             "rarity" + str(i) + "UpgradeChance" for i in range(int(config["numNormalRarities"]) - 1))
 
         if buying:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
                 [packname])
         else:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, " + rarityColumns + " FROM boosters WHERE name = %s",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, " + rarityColumns + " FROM boosters WHERE name = %s",
                 [packname])
 
         packinfo = cur.fetchone()
@@ -1342,116 +1346,129 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         useEventWeightings = packinfo[6] != 0
         numTokens = packinfo[7]
         tokenChance = packinfo[8]
-        normalChances = packinfo[9:]
+        canMega = packinfo[9]
+        normalChances = packinfo[10:]
         
         if numTokens >= numCards:
             raise InvalidBoosterException()
+            
+        iterations = 1
+        if mega:
+            if not canMega:
+                raise InvalidBoosterException()
+            iterations = 5
 
         if buying:
-            if not hasPoints(userid, cost):
-                raise CantAffordBoosterException(cost)
+            if not hasPoints(userid, cost*iterations):
+                raise CantAffordBoosterException(cost*iterations)
 
-            addPoints(userid, -cost)
-            
-        tokensDropped = 0
-        for n in range(numTokens):
-            if random.random() < tokenChance:
-                tokensDropped += 1
+            addPoints(userid, -cost*iterations)
 
         minScalingRarity = int(config["pullScalingMinRarity"])
         maxScalingRarity = int(config["pullScalingMaxRarity"])
         numScalingRarities = maxScalingRarity - minScalingRarity + 1
         scalingThresholds = [int(config["pullScalingRarity%dThreshold" % rarity]) for rarity in
                              range(minScalingRarity, maxScalingRarity + 1)]
-
+        
         cur.execute("SELECT pullScalingData FROM users WHERE id = %s", [userid])
         scalingRaw = cur.fetchone()[0]
         if scalingRaw is None:
             scalingData = [0] * numScalingRarities
         else:
             scalingData = [int(n) for n in scalingRaw.split(':')]
-
+        
+        totalTokensDropped = 0
         cards = []
         alertwaifus = []
         uniques = getUniqueCards(userid)
         totalDE = 0
-        for i in range(numCards - tokensDropped):
-            # scale chances of the card appropriately
-            currentChances = list(normalChances)
-            guaranteedRarity = 0
-            if listed and buyable:
-                for rarity in range(maxScalingRarity, minScalingRarity - 1, -1):
-                    scaleIdx = rarity - minScalingRarity
-                    if scalingData[scaleIdx] >= scalingThresholds[scaleIdx] * 2:
-                        # guarantee this rarity drops now
-                        if rarity == int(config["numNormalRarities"]) - 1:
-                            currentChances = [1] * len(currentChances)
-                        else:
-                            currentChances = ([1] * rarity) + [
-                                functools.reduce((lambda x, y: x * y), currentChances[:rarity + 1])] + list(
-                                currentChances[rarity + 1:])
-                        guaranteedRarity = rarity
-                        break
-                    elif scalingData[scaleIdx] > scalingThresholds[scaleIdx]:
-                        # make this rarity more likely to drop
-                        oldPromoChance = currentChances[rarity - 1]
-                        currentChances[rarity - 1] = min(currentChances[rarity - 1] * (
-                                (scalingData[scaleIdx] / scalingThresholds[scaleIdx] - 1) * 2 + 1), 1)
-                        if rarity != int(config["numNormalRarities"]) - 1:
-                            # make rarities above this one NOT more likely to drop
-                            currentChances[rarity] /= currentChances[rarity - 1] / oldPromoChance
+        logPackName = "mega" + packname if mega else packname
+        
+        for iter in range(iterations):
+            tokensDropped = 0
+            for n in range(numTokens):
+                if random.random() < tokenChance:
+                    tokensDropped += 1
+                    
+            totalTokensDropped += tokensDropped
+            iterDE = 0
+            for i in range(numCards - tokensDropped):
+                # scale chances of the card appropriately
+                currentChances = list(normalChances)
+                guaranteedRarity = 0
+                if listed and buyable:
+                    for rarity in range(maxScalingRarity, minScalingRarity - 1, -1):
+                        scaleIdx = rarity - minScalingRarity
+                        if scalingData[scaleIdx] >= scalingThresholds[scaleIdx] * 2:
+                            # guarantee this rarity drops now
+                            if rarity == int(config["numNormalRarities"]) - 1:
+                                currentChances = [1] * len(currentChances)
+                            else:
+                                currentChances = ([1] * rarity) + [
+                                    functools.reduce((lambda x, y: x * y), currentChances[:rarity + 1])] + list(
+                                    currentChances[rarity + 1:])
+                            guaranteedRarity = rarity
+                            break
+                        elif scalingData[scaleIdx] > scalingThresholds[scaleIdx]:
+                            # make this rarity more likely to drop
+                            oldPromoChance = currentChances[rarity - 1]
+                            currentChances[rarity - 1] = min(currentChances[rarity - 1] * (
+                                    (scalingData[scaleIdx] / scalingThresholds[scaleIdx] - 1) * 2 + 1), 1)
+                            if rarity != int(config["numNormalRarities"]) - 1:
+                                # make rarities above this one NOT more likely to drop
+                                currentChances[rarity] /= currentChances[rarity - 1] / oldPromoChance
 
-            # account for minrarity for some cards in the pack
-            if i < pgCount and pgRarity > guaranteedRarity:
-                if pgRarity == int(config["numNormalRarities"]) - 1:
-                    currentChances = [1] * len(currentChances)
-                else:
-                    currentChances = ([1] * pgRarity) + [
-                        functools.reduce((lambda x, y: x * y), currentChances[:pgRarity + 1])] + list(
-                        currentChances[pgRarity + 1:])
-
-            logger.debug("using odds for card %d: %s", i, str(currentChances))
-
-            # actually drop the card
-            card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings,
-                                bannedCards=uniques + cards))
-            cards.append(card)
-
-            # check its rarity and adjust scaling data
-            waifu = getWaifuById(card)
-            totalDE += int(config["rarity%dValue" % waifu['base_rarity']])
-
-            if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
-                alertwaifus.append(waifu)
-
-            if listed and buyable:
-                for r in range(numScalingRarities):
-                    if r + minScalingRarity != waifu['base_rarity']:
-                        scalingData[r] += cost / (numCards - tokensDropped)
+                # account for minrarity for some cards in the pack
+                if i < pgCount and pgRarity > guaranteedRarity:
+                    if pgRarity == int(config["numNormalRarities"]) - 1:
+                        currentChances = [1] * len(currentChances)
                     else:
-                        scalingData[r] = 0
+                        currentChances = ([1] * pgRarity) + [
+                            functools.reduce((lambda x, y: x * y), currentChances[:pgRarity + 1])] + list(
+                            currentChances[pgRarity + 1:])
 
-            logDrop(str(userid), str(card), waifu['base_rarity'], "boosters.%s" % packname, channel, isWhisper)
+                # actually drop the card
+                logger.debug("using odds for card %d: %s", i, str(currentChances))
+                card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings,
+                                    bannedCards=uniques + cards))
+                cards.append(card)
+
+                # check its rarity and adjust scaling data
+                waifu = getWaifuById(card)
+                iterDE += int(config["rarity%dValue" % waifu['base_rarity']])
+
+                if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
+                    alertwaifus.append(waifu)
+
+                if listed and buyable:
+                    for r in range(numScalingRarities):
+                        if r + minScalingRarity != waifu['base_rarity']:
+                            scalingData[r] += cost / (numCards - tokensDropped)
+                        else:
+                            scalingData[r] = 0
+
+                logDrop(str(userid), str(card), waifu['base_rarity'], "boosters.%s" % logPackName, channel, isWhisper)
+                
+            totalDE += iterDE
+            # did they win a free amount-based reward pack?
+            if packname in packAmountRewards and iterDE in packAmountRewards[packname]:
+                reward = packAmountRewards[packname][iterDE]
+                giveFreeBooster(userid, reward)
+                msgArgs = (reward, packname, iterDE, reward)
+                bot.message("#%s" % username, "You won a free %s pack due to getting a %s pack worth %d points. Open it with !freepacks open %s" % msgArgs, True)
 
         cards.sort()
         recordPullMetrics(*cards)
-        addSpending(userid, cost)
-
-        # did they win a free amount-based reward pack?
-        if packname in packAmountRewards and totalDE in packAmountRewards[packname]:
-            reward = packAmountRewards[packname][totalDE]
-            giveFreeBooster(userid, reward)
-            msgArgs = (reward, packname, totalDE, reward)
-            bot.message("#%s" % username, "You won a free %s pack due to getting a %s pack worth %d points. Open it with !freepacks open %s" % msgArgs, True)
+        addSpending(userid, cost*iterations)
 
         # pity pull data update
         cur.execute("UPDATE users SET pullScalingData = %s, eventTokens = eventTokens + %s WHERE id = %s",
-                    [":".join(str(round(n)) for n in scalingData), tokensDropped, userid])
+                    [":".join(str(round(n)) for n in scalingData), totalTokensDropped, userid])
 
         # insert opened booster
         cur.execute(
             "INSERT INTO boosters_opened (userid, boostername, paid, created, status, eventTokens) VALUES(%s, %s, %s, %s, 'open', %s)",
-            [userid, packname, cost if buying else 0, current_milli_time(), tokensDropped])
+            [userid, logPackName, cost if buying else 0, current_milli_time(), totalTokensDropped])
         boosterid = cur.lastrowid
         cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)",
                         [(boosterid, card) for card in cards])
@@ -1724,8 +1741,11 @@ class NepBot(NepBotClass):
                     if int(config["last_weighting_update"]) < current_milli_time() - int(
                             config["weighting_increase_cycle"]):
                         logger.debug("Increasing card weightings...")
+                        baseIncrease = float(config["weighting_increase_amount"])
                         cur.execute("UPDATE waifus SET normal_weighting = normal_weighting * %s WHERE base_rarity < %s",
-                                    [float(config["weighting_increase_amount"]), int(config["numNormalRarities"])])
+                                    [baseIncrease, int(config["strongerWeightingMinRarity"])])
+                        cur.execute("UPDATE waifus SET normal_weighting = normal_weighting * %s WHERE base_rarity BETWEEN %s AND %s",
+                                    [baseIncrease**2, int(config["strongerWeightingMinRarity"]), int(config["numNormalRarities"])-1])
                         config["last_weighting_update"] = str(current_milli_time())
                         cur.execute("UPDATE config SET value = %s WHERE name = 'last_weighting_update'",
                                     [config["last_weighting_update"]])
@@ -1951,7 +1971,7 @@ class NepBot(NepBotClass):
                 logger.warning("Error: %s", str(sys.exc_info()))
                 logger.warning("Last run query: %s", cur._last_executed)
 
-            if self.autoupdate:
+            if self.autoupdate and booleanConfig("marathonBotFunctions"):
                 logger.debug("Updating Title and Game with horaro info")
                 schedule = getHoraro()
                 try:
@@ -1964,15 +1984,22 @@ class NepBot(NepBotClass):
                         wasNone = True
                     current = current["data"]
                     game = current[0]
-                    category = current[2]
-                    runners = [getRawRunner(runner) for runner in current[4:7] if runner is not None]
+                    category = current[1]
+                    runners = [getRawRunner(runner) for runner in current[2:6] if runner is not None]
                     args = {"game": game}
                     args["category"] = " (%s)" % category if category is not None else ""
                     args["comingup"] = "COMING UP: " if wasNone else ""
                     args["runners"] = (" by " + ", ".join(runners)) if len(runners) > 0 else ""
-                    title = "{comingup}HDNMarathon V - {game}{category}{runners} - !marathon in chat".format(**args)
+                    args["title"] = config["marathonTitle"]
+                    args["command"] = config["marathonHelpCommand"]
+                    title = "{comingup}{title} - {game}{category}{runners} - !{command} in chat".format(**args)
+                    twitchGame = game
+                    if len(current) >= 10 and current[-1] is not None:
+                        twitchGame = current[-1]
 
-                    updateBoth(gamesdict[game] if game in gamesdict else game, title=title)
+                    updateBoth(twitchGame, title=title)
+                    if len(runners) > 0:
+                        thread.start_new_thread(MarathonBot.instance.updateFollowButtons, (runners,))
                 except Exception:
                     logger.warning("Error updating from Horaro. Skipping this cycle.")
                     logger.warning("Error: %s", str(sys.exc_info()))
@@ -2207,10 +2234,15 @@ class NepBot(NepBotClass):
                         self.message(channel, "Usage: !pudding booster <name>", isWhisper)
                         return
                     # check that the pack is actually buyable
+                    truename = boostername = args[1].lower()
+                    mega = False
+                    if boostername.startswith("mega"):
+                        truename = boostername[4:]
+                        mega = True
                     with db.cursor() as cur:
-                        cur.execute("SELECT name, cost FROM boosters WHERE name = %s AND buyable = 1", [args[1]])
+                        cur.execute("SELECT name, cost, canMega FROM boosters WHERE name = %s AND buyable = 1", [truename])
                         booster = cur.fetchone()
-                        if booster is None:
+                        if booster is None or (mega and booster[2] == 0):
                             self.message(channel, "Invalid booster specified.", isWhisper)
                             return
                         # can they actually open it?
@@ -2223,16 +2255,16 @@ class NepBot(NepBotClass):
                                         "%s, you have an open booster already! !booster show to check it." %
                                         tags['display-name'], isWhisper)
                             return
-                        cost = math.ceil(int(booster[1])/int(config["puddingExchangeRate"]))
+                        cost = math.ceil(int(booster[1])/int(config["puddingExchangeRate"]))*(5 if mega else 1)
                         if not hasPudding(tags['user-id'], cost):
-                            self.message(channel, "%s, you can't afford a %s booster. They cost %d pudding." % (tags['display-name'], booster[0], cost), isWhisper)
+                            self.message(channel, "%s, you can't afford a %s booster. They cost %d pudding." % (tags['display-name'], boostername, cost), isWhisper)
                             return
                         takePudding(tags['user-id'], cost)
                         try:
-                            openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, booster[0], False)
+                            openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, truename, False, mega)
                             if checkHandUpgrade(tags['user-id']):
                                 messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
-                            self.message(channel, "%s, you open a %s booster for %d pudding: %s/booster?user=%s" % (tags['display-name'], booster[0], cost, config["siteHost"], sender), isWhisper)
+                            self.message(channel, "%s, you open a %s booster for %d pudding: %s/booster?user=%s" % (tags['display-name'], boostername, cost, config["siteHost"], sender), isWhisper)
                         except InvalidBoosterException:
                             discordbody = {
                                 "username": "WTCG Admin", 
@@ -2722,9 +2754,13 @@ class NepBot(NepBotClass):
                         cur.close()
                         return
 
-                    packname = args[1].lower()
+                    truepackname = packname = args[1].lower()
+                    mega = False
+                    if packname.startswith("mega"):
+                        truepackname = packname[4:]
+                        mega = True
                     try:
-                        openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, packname, True)
+                        openBooster(self, tags['user-id'], sender, tags['display-name'], channel, isWhisper, truepackname, True, mega)
                         if checkHandUpgrade(tags['user-id']):
                             messageForHandUpgrade(tags['user-id'], tags['display-name'], self, channel, isWhisper)
 
@@ -3287,20 +3323,24 @@ class NepBot(NepBotClass):
                              "Usage: !alerts setup OR !alerts test <rarity> OR !alerts config <config Name> <config Value>",
                              isWhisper=isWhisper)
                 return
-            if command == "togglehoraro" and sender in admins:
+            if command == "togglehoraro" and sender in admins and booleanConfig("marathonBotFunctions"):
                 self.autoupdate = not self.autoupdate
                 if self.autoupdate:
                     self.message(channel, "Enabled Horaro Auto-update.", isWhisper=isWhisper)
                 else:
                     self.message(channel, "Disabled Horaro Auto-update.", isWhisper=isWhisper)
                 return
-            if sender in admins and command in ["status", "title"] and isMarathonChannel:
+            if sender in admins and command in ["status", "title"] and isMarathonChannel and booleanConfig("marathonBotFunctions"):
                 updateTitle(" ".join(args))
                 self.message(channel, "%s -> Title updated to %s." % (tags['display-name'], " ".join(args)))
                 return
-            if sender in admins and command == "game" and isMarathonChannel:
+            if sender in admins and command == "game" and isMarathonChannel and booleanConfig("marathonBotFunctions"):
                 updateGame(" ".join(args))
                 self.message(channel, "%s -> Game updated to %s." % (tags['display-name'], " ".join(args)))
+                return
+            if sender in admins and booleanConfig("marathonBotFunctions") and command == "ffzfollowing":
+                MarathonBot.instance.updateFollowButtons(args)
+                self.message(channel, "%s -> Attempted to update follower buttons to %s." % (tags['display-name'], ", ".join(args)))
                 return
             if command == "emotewar":
                 if int(config["emoteWarStatus"]) == 0:
@@ -3757,7 +3797,7 @@ class NepBot(NepBotClass):
                         cur.execute("INSERT INTO `contributionLog` (`userid`, `to_id`, `to_choice`, `raw_amount`, `contribution`, `currency`, `timestamp`) " +
                             "VALUES(%s, %s, %s, %s, %s, %s, %s)", logargs)
 
-                        if points + currAmount >= required:
+                        if contribution + currAmount >= required:
                             self.message(channel, "%s -> You successfully donated %s and met the %s incentive!" % (
                                 tags['display-name'], contributionStr, title), isWhisper)
                         else:
@@ -3966,10 +4006,25 @@ class NepBot(NepBotClass):
                             self.message(channel, "%s, your current free packs: %s. !freepacks open <name> to open one." % (tags['display-name'], freeStr), isWhisper)
                         return
             if command == "bet":
+                if isWhisper:
+                    self.message(channel, "You can't use bet commands over whisper.", isWhisper)
+                    return
                 if len(args) < 1:
                     self.message(channel,
-                                 "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results",
+                                 "Usage: !bet <time> OR !bet status OR (as channel owner) !bet open OR !bet start OR !bet end OR !bet cancel OR !bet results OR !bet forcereset",
                                  isWhisper)
+                    return
+                # check restrictions
+                with db.cursor() as cur:
+                    cur.execute("SELECT betsBanned, forceresetsBanned FROM channels WHERE name = %s", [channel[1:]])
+                    restrictions = cur.fetchone()
+                    if restrictions is None:
+                        # this shouldn't ever happen, but just in case...
+                        self.message(channel, "This isn't a Waifu TCG channel. No can do.", isWhisper)
+                        return
+                
+                if restrictions[0] != 0:
+                    self.message(channel, "Bets are currently banned in this channel.")
                     return
                 canAdminBets = sender in superadmins or (sender in admins and isMarathonChannel)
                 isBroadcaster = str(tags["badges"]).find("broadcaster") > -1
@@ -4004,9 +4059,15 @@ class NepBot(NepBotClass):
                                          "There is already a prediction contest in progress in your channel! Use !bet status to check what to do next!")
                         return
                     elif canManageBets and subcmd == "start":
-                        if startBet(channel):
+                        confirmed = args[-1].lower() == "yes"
+                        try:
+                            startBet(channel, confirmed)
                             self.message(channel, "Taking current time as start time! Good Luck! Bets are now closed.")
-                        else:
+                        except NotEnoughBetsException:
+                            self.message(channel, "WARNING: This bet does not currently have enough participants to be eligible for payout. To start anyway, use !bet start yes")
+                        except NotOpenLongEnoughException:
+                            self.message(channel, "You must wait at least %d minutes after opening a bet to start it." % int(config["betMinimumMinutesOpen"]))
+                        except NoBetException:
                             self.message(channel,
                                          "There wasn't an open prediction contest in your channel! Use !bet status to check current contest status.")
                         return
@@ -4025,7 +4086,7 @@ class NepBot(NepBotClass):
                                          "Contest has ended in {time}! The top 3 closest were: {first}, {second}, {third}".format(
                                              time=formattedTime, first=winnerNames[0], second=winnerNames[1],
                                              third=winnerNames[2]))
-                            if not canAdminBets and len(winners) >= 2:
+                            if not canAdminBets and len(winners) >= int(config["betMinimumEntriesForPayout"]):
                                 # notify the discordhook of the new bet completion
                                 chanStr = channel[1:].lower()
                                 discordArgs = {"channel": chanStr, "time": formattedTime, "link": "https://twitch.tv/" + chanStr}
@@ -4178,7 +4239,7 @@ class NepBot(NepBotClass):
                                 self.message(channel, message, isWhisper)
                         cur.close()
                         return
-                    elif subcmd == "forcereset" and canAdminBets:
+                    elif subcmd == "forcereset" and canManageBets:
                         # change a started bet to open, preserving all current bets made
                         with db.cursor() as cur:
                             cur.execute("SELECT id, status FROM bets WHERE channel = %s ORDER BY id DESC LIMIT 1",
@@ -4188,6 +4249,22 @@ class NepBot(NepBotClass):
                             if betRow is None or betRow[1] != 'started':
                                 self.message(channel, "There is no bet in progress in this channel.", isWhisper)
                             else:
+                                if '#' + sender == channel:
+                                    # own channel, check limit and restriction
+                                    if restrictions[1] != 0:
+                                        self.message(channel, "This channel is banned from using self forcereset at the present time.")
+                                        return
+                                    invocation = current_milli_time()
+                                    period = invocation - int(config["betForceResetPeriod"])
+                                    cur.execute("SELECT COUNT(*), MIN(`timestamp`) FROM forceresets WHERE channel = %s AND `timestamp` > %s", [channel, period])
+                                    frData = cur.fetchone()
+                                    if frData[0] >= int(config["betForceResetLimit"]):
+                                        nextUse = int(frData[1]) + int(config["betForceResetPeriod"]) - invocation
+                                        a = datetime.timedelta(milliseconds=nextUse, microseconds=0)
+                                        datestring = "{0}".format(a).split(".")[0]
+                                        self.message(channel, "You are currently out of self forceresets. Your next one will be available in %s." % datestring)
+                                        return
+                                    cur.execute("INSERT INTO forceresets (channel, user, `timestamp`) VALUES(%s, %s, %s)", [channel, tags['user-id'], invocation])
                                 cur.execute("UPDATE bets SET status = 'open', startTime = NULL WHERE id = %s",
                                             [betRow[0]])
                                 self.message(channel, "Reset the bet in progress in this channel to open status.",
@@ -4307,8 +4384,8 @@ class NepBot(NepBotClass):
 
                             numEntries = len(resultData["winners"])
 
-                            if numEntries < 2:
-                                self.message(channel, "This contest had 0 or 1 entrants, no payout.", isWhisper)
+                            if numEntries < int(config["betMinimumEntriesForPayout"]):
+                                self.message(channel, "This contest had less than %d entrants, no payout." % int(config["betMinimumEntriesForPayout"]), isWhisper)
                                 cur.close()
                                 return
 
@@ -4336,7 +4413,7 @@ class NepBot(NepBotClass):
                                     pudding = minPrize + (maxPrize - minPrize) * (numEntries - place) / (numEntries - 1) / (1.4 if place > numEntries / 2 else 1)
                                     if place == 1:
                                         pudding *= 1.3
-                                    if isMarathonChannel:
+                                    if isMarathonChannel and booleanConfig("marathonBetBoost"):
                                         pudding *= 1.5
                                     if canWinBigPrizes and abs(winner["timedelta"]) < resultData["result"] / 120:
                                         pudding *= 1.5
@@ -5618,13 +5695,114 @@ class NepBot(NepBotClass):
                     cur.execute("UPDATE users SET eventTokens = 0")
                     self.message(channel, "Done.", isWhisper)
                     return
+                    
+class MarathonBot(pydle.Client):
+    instance = None
+    pw=None
+
+    def __init__(self):
+        super().__init__(config["marathonChannel"][1:])
+        MarathonBot.instance = self
+        self.ffz = MarathonFFZWebsocket(config["marathonChannel"][1:])
+
+    def start(self, password):
+        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
+        self.pw = password
+        logger.info("Connecting MarathonBot...")
+
+    def on_disconnect(self, expected):
+        logger.warning("MarathonBot Disconnected, reconnecting....")
+        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=self.pw, reconnect=True)
+
+    def on_connect(self):
+        super().on_connect()
+        logger.info("MarathonBot Joining")
+
+    def on_message(self, source, target, message):
+        logger.debug("message on MarathonBot: %s, %s, %s", str(source), str(target), message)
+        
+    def updateFollowButtons(self, channels):
+        if self.ffz is None:
+            self.ffz = MarathonFFZWebsocket(config["marathonChannel"][1:], channels)
+        else:
+            self.ffz.updateFollowButtons(channels)
+        
+    def message(self, *args):
+        logger.info("MarathonBot Sending "+str(args))
+        super().message(*args)
+        
+class MarathonFFZWebsocket:
+    def __init__(self, channelName, newFollowButtons=None):
+        self.channelName = channelName
+        self.messageNumber = 0
+        self.queuedChanges = []
+        self.initDone = False
+        if newFollowButtons is not None:
+            self.queuedChanges.append(newFollowButtons)
+        self.ws = websocket.WebSocketApp(ffzws, on_message = self.on_message, on_error = self.on_error, on_close = self.on_close)
+        self.ws.on_open = self.on_open
+        thread.start_new_thread(self.ws.run_forever, (), {"origin": ""})
+        
+        
+    def sendMessage(self, message):
+        self.messageNumber += 1
+        self.ws.send("%d %s" % (self.messageNumber, message))
+        
+    def on_open(self):
+        self.sendMessage('hello ["waifutcg-ffzclient",false]')
+    
+    def on_message(self, message):
+        logger.debug("Websocket recv: "+message)
+        code, msg = message.split(" ", 1)
+        code = int(code)
+        if code == -1:
+            # probably authorize
+            if msg.startswith("do_authorize"):
+                # must send auth code
+                authCode = json.loads(msg[13:])
+                logger.debug("trying to authenticate with FFZ "+authCode)
+                MarathonBot.instance.message("#frankerfacezauthorizer", "AUTH "+authCode)
+        elif code == self.messageNumber and self.messageNumber < 5 and msg.split(" ")[0] == "ok":
+            # send the rest of the intro
+            if self.messageNumber == 1:
+                self.sendMessage('setuser %s' % json.dumps(self.channelName))
+            elif self.messageNumber == 2:
+                self.sendMessage('sub %s' % json.dumps('room.'+self.channelName))
+            elif self.messageNumber == 3:
+                self.sendMessage('sub %s' % json.dumps('channel.'+self.channelName))
+            else:
+                self.sendMessage('ready 0')
+        elif code >= 5 and self.messageNumber >= 5 and len(self.queuedChanges) > 0:
+            self.initDone = True
+            self.updateFollowButtons(self.queuedChanges[0])
+            self.queuedChanges = self.queuedChanges[1:]
+        elif code >= 5 and self.messageNumber >= 5 and msg.split(" ")[0] == "ok":
+            self.initDone = True
+        else:
+            # don't do anything immediately
+            pass
+            
+    def on_error(self, error):
+        logger.debug("WS Error: "+error)
+        self.ws.close()
+        
+    def on_close(self):
+        logger.debug("Websocket closed")
+        MarathonBot.instance.ffz = None
+        
+    def updateFollowButtons(self, channels):
+        if not self.initDone:
+            self.queuedChanges.append(channels)
+        else:
+            self.sendMessage("update_follow_buttons %s" % json.dumps([self.channelName, channels]))
+        
                         
                 
 
 
 curg = db.cursor()
 logger.info("Fetching channel list...")
-curg.execute("SELECT * FROM channels")
+curg.execute("SELECT name FROM channels")
 channels = []
 for row in curg.fetchall():
     channels.append("#" + row[0])
@@ -5648,6 +5826,11 @@ except Exception:
 config["twitchid"] = str(twitchid)
 b = NepBot(config, channels)
 b.start(config["oauth"])
+
+# marathon bot?
+if booleanConfig("marathonBotFunctions"):
+    maraBot = MarathonBot()
+    maraBot.start(config["marathonOAuth"])
 
 logger.debug("past start")
 
