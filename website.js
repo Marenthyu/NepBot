@@ -119,7 +119,6 @@ let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
     '<div class="invisible-space-holder">&nbsp;</div>' +
     '<div class="rarity-holder rarity-{RARITY}">{RARITY}</div>' +
-    '{AMOUNTHOLDER}' +
     '{PROMOTEDHOLDER}' +
     '</div>' +
     '<div class="card-footer text-center">' +
@@ -137,7 +136,6 @@ let bootstraphandeventtoken = '<div class="card card-tcg">' +
     '<b>{CARDNAME}</b><br />' +
     '</div>' +
     '</div>';
-let bootstraphandamtholder = '<div class="amount-holder rarity-{RARITY}">x{AMOUNT}</div>';
 let bootstraphandpromoholder = '<div class="promotion-holder rarity-{RARITY}">{STARS}</div>';
 let bootstrapboostertpl = fs.readFileSync('bootstrapboostertemplate.htm', 'utf8');
 let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
@@ -301,7 +299,7 @@ function smartsetsdata(req, res, query) {
             if (setIDs.length > 0) {
                 let bindArray = [user].concat(setIDs);
                 let inBinds = "?, ".repeat(setIDs.length).substring(0, setIDs.length * 3 - 2);
-                con.query("SELECT setID, a.name AS userName, waifus.id AS waifuID, waifus.Name AS waifuName, waifus.base_rarity AS waifuRarity, waifus.image AS waifuImage, waifus.series AS waifuSeries FROM set_cards LEFT JOIN (SELECT DISTINCT has_waifu.waifuid, users.name FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.name = ?) AS a ON set_cards.cardID = a.waifuid JOIN waifus ON set_cards.cardID = waifus.id WHERE set_cards.setID IN(" + inBinds + ") ORDER BY waifuID", bindArray,
+                con.query("SELECT setID, a.name AS userName, waifus.id AS waifuID, waifus.name AS waifuName, waifus.base_rarity AS waifuRarity, waifus.image AS waifuImage, waifus.series AS waifuSeries FROM set_cards LEFT JOIN (SELECT DISTINCT has_waifu.waifuid, users.name FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE users.name = ?) AS a ON set_cards.cardID = a.waifuid JOIN waifus ON set_cards.cardID = waifus.id WHERE set_cards.setID IN(" + inBinds + ") ORDER BY waifuID", bindArray,
                     function (err, result2) {
                         if (err) throw err;
                         for (let row of result2) {
@@ -348,7 +346,7 @@ function smartsetsdata(req, res, query) {
 
 function claimedsets(req, res, query) {
     con.query("SELECT setID, sets.name as setNam, waifus.id as waifuID, " +
-        "waifus.Name as waifuName, waifus.base_rarity as waifuRarity, waifus.image as image, waifus.series as waifuSeries, " +
+        "waifus.name as waifuName, waifus.base_rarity as waifuRarity, waifus.image as image, waifus.series as waifuSeries, " +
         "sort_index, sets.reward as setReward, sets.rewardPudding as setRewardPudding, users.name as userName " +
         "FROM set_cards " +
         "JOIN sets ON set_cards.setID = sets.id " +
@@ -358,7 +356,7 @@ function claimedsets(req, res, query) {
         "ORDER BY sort_index, setID, waifus.id",
         function (err, result) {
             if (err) throw err;
-            con.query("SELECT setID, rarity_sets.name as setNam, waifus.id as waifuID, waifus.Name as waifuName, waifus.base_rarity as waifuRarity, waifus.image as image, waifus.series as waifuSeries," +
+            con.query("SELECT setID, rarity_sets.name as setNam, waifus.id as waifuID, waifus.name as waifuName, waifus.base_rarity as waifuRarity, waifus.image as image, waifus.series as waifuSeries," +
                 "rarity_sets.grouping as sort_index, rarity_sets.reward as setReward, 0 as setRewardPudding, users.name as userName " +
                 "FROM rarity_sets_cards JOIN rarity_sets ON rarity_sets_cards.setID = rarity_sets.id " +
                 "JOIN waifus ON cardID = waifus.id " +
@@ -441,7 +439,6 @@ function claimedsets(req, res, query) {
 }
 
 function getCardHtml(template, row) {
-    template = template.replace(/{AMOUNTHOLDER}/g, row.amount > 1 ? bootstraphandamtholder : '');
     template = template.replace(/{PROMOTEDHOLDER}/g, row.rarity > row.base_rarity ? bootstraphandpromoholder : '');
     if (row.rarity > row.base_rarity && row.rarity < 8) {
         template = template.replace(/{STARS}/g, "★".repeat(row.rarity - row.base_rarity));
@@ -451,10 +448,9 @@ function getCardHtml(template, row) {
     }
     template = template.replace(/{ID}/g, row.id.toString());
     template = template.replace(/{IMAGE}/g, (row.custom_image || row.image).toString());
-    template = template.replace(/{CARDNAME}/g, row.Name.toString());
+    template = template.replace(/{CARDNAME}/g, row.name.toString());
     template = template.replace(/{SERIES}/g, row.series.toString());
     template = template.replace(/{RARITY}/g, getRarityName(row.rarity));
-    template = template.replace(/{AMOUNT}/g, row.amount.toString());
     return template;
 }
 
@@ -465,8 +461,8 @@ function bootstraphand(req, res, query) {
         return;
     }
 
-    con.query("SELECT waifus.*, rarity, amount, custom_image FROM waifus JOIN has_waifu ON waifus.id = has_waifu.waifuid JOIN users ON " +
-        "has_waifu.userid = users.id WHERE users.name = ? ORDER BY (has_waifu.rarity < 8) DESC, waifus.id ASC, has_waifu.rarity ASC", query.user, function (err, result) {
+    con.query("SELECT waifus.*, rarity, customImage FROM waifus JOIN cards ON waifus.id = cards.waifuid JOIN users ON " +
+        "cards.userid = users.id WHERE users.name = ? ORDER BY (cards.rarity < 8) DESC, waifus.id ASC, cards.rarity ASC", query.user, function (err, result) {
         if (err) throw err;
         let wantJSON = false;
         if ("accept" in req.headers && req.headers["accept"] === "application/json") {
@@ -502,12 +498,12 @@ function bootstraphand(req, res, query) {
                 for (let row of result) {
                     let obj = {
                         "id": row.id,
-                        "Name": row.Name,
+                        "Name": row.name,
                         "series": row.series,
                         "image": row.custom_image || row.image,
                         "base_rarity": row.base_rarity,
                         "rarity": row.rarity,
-                        "amount": row.amount
+                        "amount": 1
                     };
                     sanitizedResult.push(obj);
                 }
@@ -540,7 +536,7 @@ function bootstrapbooster(req, res, query) {
         return;
     }
 
-    con.query("SELECT waifus.* FROM boosters_opened JOIN users ON boosters_opened.userid = users.id LEFT JOIN boosters_cards ON boosters_opened.id = boosters_cards.boosterid JOIN waifus ON boosters_cards.waifuid = waifus.id WHERE users.name = ? AND boosters_opened.status = 'open' ORDER BY waifus.id ASC", query.user, function (err, result) {
+    con.query("SELECT waifus.* FROM boosters_opened JOIN users ON boosters_opened.userid = users.id LEFT JOIN cards ON boosters_opened.id = cards.boosterid JOIN waifus ON cards.waifuid = waifus.id WHERE users.name = ? AND boosters_opened.status = 'open' ORDER BY waifus.id ASC", query.user, function (err, result) {
         if (err) throw err;
         let wantJSON = false;
         if ("accept" in req.headers && req.headers["accept"] === "application/json") {
@@ -587,7 +583,7 @@ function bootstrapbooster(req, res, query) {
                 for (let row of result) {
                     let obj = {};
                     obj.id = row.id;
-                    obj.Name = row.Name;
+                    obj.name = row.name;
                     obj.image = row.image;
                     obj.rarity = row.base_rarity;
                     obj.series = row.series;
@@ -601,7 +597,7 @@ function bootstrapbooster(req, res, query) {
                     let card = bootstrapboostercard;
                     card = card.replace(/{ID}/g, row.id.toString());
                     card = card.replace(/{IMAGE}/g, row.image.toString());
-                    card = card.replace(/{CARDNAME}/g, row.Name.toString());
+                    card = card.replace(/{CARDNAME}/g, row.name.toString());
                     card = card.replace(/{SERIES}/g, row.series.toString());
                     card = card.replace(/{RARITY}/g, getRarityName(row.base_rarity));
                     cards += card;
@@ -626,7 +622,7 @@ function bootstrapbooster(req, res, query) {
 
 function pullfeed(req, res, query) {
 
-    con.query("SELECT drops.rarity, drops.source, drops.channel, drops.timestamp, waifus.id AS waifuID, waifus.Name as waifuName, waifus.series AS waifuSeries, waifus.image AS waifuImage, users.name AS username " +
+    con.query("SELECT drops.rarity, drops.source, drops.channel, drops.timestamp, waifus.id AS waifuID, waifus.name as waifuName, waifus.series AS waifuSeries, waifus.image AS waifuImage, users.name AS username " +
         "FROM drops JOIN waifus ON drops.waifuid = waifus.id JOIN users ON drops.userid = users.id WHERE drops.rarity >= 4 ORDER BY drops.id DESC LIMIT 100", function (err, result) {
         if (err) throw err;
         let wantJSON = false;
@@ -844,7 +840,7 @@ function profile(req, res, query) {
                 badge = badge.replace(/{CARDNAME}/g, row.name);
                 badges += badge;
             }
-            con.query("SELECT waifus.id, waifus.Name, waifus.image, waifus.base_rarity, waifus.series, has_waifu.rarity, has_waifu.custom_image FROM waifus LEFT JOIN has_waifu ON (has_waifu.waifuid = waifus.id AND has_waifu.userid = ?) WHERE id = ? ORDER BY has_waifu.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
+            con.query("SELECT waifus.id, waifus.name, waifus.image, waifus.base_rarity, waifus.series, has_waifu.rarity, has_waifu.custom_image FROM waifus LEFT JOIN has_waifu ON (has_waifu.waifuid = waifus.id AND has_waifu.userid = ?) WHERE id = ? ORDER BY has_waifu.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
                 if (err) throw err;
 
                 let row = resultInner[0];

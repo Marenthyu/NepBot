@@ -1006,7 +1006,7 @@ def maxBadgeID():
 def getUniqueCards(userid):
     with db.cursor() as cur:
         uniqueRarities = [rarity for rarity in range(int(config["numNormalRarities"])) if
-                          int(config["rarity%dMax" % rarity]) == 1]
+                          int(config["rarity%dBuyPrice" % rarity]) <= 0]
         if len(uniqueRarities) == 0:
             return []
         else:
@@ -2540,9 +2540,9 @@ class NepBot(NepBotClass):
                     args = ["select", "deall"]
 
                 cur = db.cursor()
-                openBooster = getOpenBooster(tags['user-id'])
+                currBooster = getOpenBooster(tags['user-id'])
 
-                if (cmd == "show" or cmd == "select") and openBooster is None:
+                if (cmd == "show" or cmd == "select") and currBooster is None:
                     self.message(channel, tags[
                         'display-name'] + ", you do not have an open booster. Buy one using !booster buy <%s>" % visiblepacks,
                                  isWhisper=isWhisper)
@@ -2564,7 +2564,7 @@ class NepBot(NepBotClass):
                     # check for shorthand syntax
                     if len(args) == 2:
                         if args[1].lower() == 'deall' or args[1].lower() == 'disenchantall':
-                            selectArgs = ["disenchant"] * len(openBooster['cards'])
+                            selectArgs = ["disenchant"] * len(currBooster['cards'])
                         elif args[1].lower() == 'keep' or args[1].lower() == 'disenchant':
                             selectArgs = args[1:]
                         else:
@@ -2583,7 +2583,7 @@ class NepBot(NepBotClass):
                     else:
                         selectArgs = args[1:]
 
-                    if len(selectArgs) != len(openBooster['cards']):
+                    if len(selectArgs) != len(currBooster['cards']):
                         self.message(channel, "You did not specify the correct amount of keep/disenchant.",
                                      isWhisper=isWhisper)
                         cur.close()
@@ -2601,8 +2601,8 @@ class NepBot(NepBotClass):
                     keepCards = []
                     deCards = []
                     keepingCount = 0
-                    for i in range(len(openBooster['cards'])):
-                        card = openBooster['cards'][i]
+                    for i in range(len(currBooster['cards'])):
+                        card = currBooster['cards'][i]
                         if selectArgs[i].lower() == "keep":
                             keepCards.append(card)
                             if card['base_rarity'] < int(config["numNormalRarities"]):
@@ -2625,11 +2625,11 @@ class NepBot(NepBotClass):
                         return
                     trash = len(keepCards) == 0
                     # if we made it through the whole pack without tripping confirmation, we can actually do it now
-                    for keCard in keepCards:
+                    for card in keepCards:
                         updateCard(card['cardid'], {"boosterid": None})
                     gottenpoints = 0
                     ordersFilled = 0
-                    for deCard in deCards:
+                    for card in deCards:
                         baseValue = int(config["rarity" + str(card['base_rarity']) + "Value"])
                         gain = disenchant(self, card['cardid'])
                         gottenpoints += gain
@@ -2639,7 +2639,7 @@ class NepBot(NepBotClass):
                             # valuable waifu being disenchanted
                             threading.Thread(target=sendDisenchantAlert,
                                              args=(channel, getWaifuById(card['waifuid']), str(tags["display-name"]))).start()
-                    cardIDs = [row['waifuid'] for row in openBooster['cards']]
+                    cardIDs = [row['waifuid'] for row in currBooster['cards']]
                     attemptPromotions(*cardIDs)
 
                     # compile the message to be sent in chat
@@ -2658,7 +2658,7 @@ class NepBot(NepBotClass):
                     self.message(channel, response + ((" netting " + str(gottenpoints) + " points.") if gottenpoints>0 else ""),
                                  isWhisper=isWhisper)
                     cur.execute("UPDATE boosters_opened SET status = 'closed', updated = %s WHERE id = %s",
-                                [current_milli_time(), boosterinfo[0]])
+                                [current_milli_time(), currBooster['id']])
                     cur.close()
                     return
 
@@ -2671,7 +2671,7 @@ class NepBot(NepBotClass):
                     return
                 
                 if cmd == "buy":
-                    if openBooster is not None:
+                    if currBooster is not None:
                         self.message(channel,
                                      "You already have an open booster. Close it first!",
                                      isWhisper=isWhisper)
@@ -4312,7 +4312,7 @@ class NepBot(NepBotClass):
                         return
                     else:
                         cur = db.cursor()
-                        cur.executemany("INSERT INTO waifus (Name, image, base_rarity, series) VALUES(%s, %s, %s, %s)",
+                        cur.executemany("INSERT INTO waifus (name, image, base_rarity, series) VALUES(%s, %s, %s, %s)",
                                         [(waifu["name"], waifu["link"], int(waifu["rarity"]), waifu["series"].strip())
                                          for waifu in addwaifus])
                         cur.close()
