@@ -915,28 +915,31 @@ def getWaifuOwners(id, rarity):
     with db.cursor() as cur:
         baseRarityName = config["rarity%dName" % rarity]
         cur.execute(
-            "SELECT users.name, cards.rarity, COUNT(*) AS amount FROM cards JOIN users ON cards.userid = users.id WHERE cards.waifuid = %s AND cards.boosterid IS NULL GROUP BY cards.userid, cards.rarity ORDER BY has_waifu.rarity DESC, amount DESC, users.name ASC",
+            "SELECT users.name, cards.rarity, COUNT(*) AS amount, IF(cards.boosterid IS NOT NULL, 1, 0) FROM cards JOIN users ON cards.userid = users.id WHERE cards.waifuid = %s GROUP BY cards.userid, cards.rarity, IF(cards.boosterid IS NOT NULL, 1, 0) ORDER BY has_waifu.rarity DESC, amount DESC, users.name ASC",
             [id])
         allOwners = cur.fetchall()
 
-    # compile per-owner data
-    ownerData = OrderedDict()
-    ownedByOwner = {}
-    for row in allOwners:
-        if row[0] not in ownerData:
-            ownerData[row[0]] = []
-            ownedByOwner[row[0]] = 0
-        rarityName = config["rarity%dName" % row[1]]
-        ownerData[row[0]].append(rarityName if row[2] == 1 else "%d %s" % (row[2], rarityName))
-        ownedByOwner[row[0]] += row[2]
+    # compile per-owner data grouped into not in booster / in booster
+    ownerDescriptions = [[], []]
+    for i in range(2):
+        ownerData = OrderedDict()
+        ownedByOwner = {}
+        for row in allOwners:
+            if row[3] != i:
+                continue
+            if row[0] not in ownerData:
+                ownerData[row[0]] = []
+                ownedByOwner[row[0]] = 0
+            rarityName = config["rarity%dName" % row[1]]
+            ownerData[row[0]].append(rarityName if row[2] == 1 else "%d %s" % (row[2], rarityName))
+            ownedByOwner[row[0]] += row[2]
 
-    ownerDescriptions = []
-    for owner in ownerData:
-        if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner] or ownedByOwner[owner] > 1:
-            # verbose
-            ownerDescriptions.append(owner + " (" + ", ".join(ownerData[owner]) + ")")
-        else:
-            ownerDescriptions.append(owner)
+        for owner in ownerData:
+            if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner] or ownedByOwner[owner] > 1:
+                # verbose
+                ownerDescriptions[i].append(owner + " (" + ", ".join(ownerData[owner]) + ")")
+            else:
+                ownerDescriptions[i].append(owner)
             
     return ownerDescriptions
 
@@ -2938,18 +2941,16 @@ class NepBot(NepBotClass):
                         waifu = getWaifuById(args[0])
                         assert waifu is not None
                         assert waifu['can_lookup'] == 1
-
-                        ownerDescriptions = getWaifuOwners(waifu['id'], waifu['base_rarity'])
+                        
+                        ownerData = getWaifuOwners(waifu['id'], waifu['base_rarity'])
+                        
+                        ownerDescriptions = ownerData[0]
+                        packholders = ownerData[1]
                         if len(ownerDescriptions) > 3:
                             ownerDescriptions = ownerDescriptions[0:2] + ["%d others" % (len(ownerDescriptions) - 2)]
                         waifu["rarity"] = config["rarity%dName" % waifu["base_rarity"]]
 
                         # check for packs
-                        with db.cursor() as cur:
-                            cur.execute(
-                                "SELECT users.name FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid = boosters_opened.id JOIN users ON boosters_opened.userid = users.id WHERE boosters_cards.waifuid = %s AND boosters_opened.status = 'open'",
-                                [waifu['id']])
-                            packholders = [row[0] for row in cur.fetchall()]
 
                         if len(ownerDescriptions) > 0:
                             waifu["owned"] = " - owned by " + ", ".join(ownerDescriptions)
@@ -3030,15 +3031,10 @@ class NepBot(NepBotClass):
                         assert waifu is not None
                         assert waifu['can_lookup'] == 1
 
-                        ownerDescriptions = getWaifuOwners(waifu['id'], waifu['base_rarity'])
+                        ownerData = getWaifuOwners(waifu['id'], waifu['base_rarity'])
+                        ownerDescriptions = ownerData[0]
+                        packholders = ownerData[1]
                         waifu["rarity"] = config["rarity%dName" % waifu["base_rarity"]]
-
-                        # check for packs
-                        with db.cursor() as cur:
-                            cur.execute(
-                                "SELECT users.name FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid = boosters_opened.id JOIN users ON boosters_opened.userid = users.id WHERE boosters_cards.waifuid = %s AND boosters_opened.status = 'open'",
-                                [waifu['id']])
-                            packholders = [row[0] for row in cur.fetchall()]
 
                         if len(ownerDescriptions) > 0:
                             waifu["owned"] = " is owned by " + ", ".join(ownerDescriptions)
