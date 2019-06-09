@@ -893,25 +893,19 @@ def followsme(userid):
 def getWaifuById(id):
     try:
         id = int(id)
-        if id < 1 or id > maxWaifuID():
+        if id < 1:
             return None
     except ValueError:
         return None
-    cur = db.cursor()
-    cur.execute("SELECT id, name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite, can_purchase FROM waifus WHERE id=%s",
-                [id])
-    row = cur.fetchone()
-    ret = {"id": row[0], "name": row[1], "image": row[2], "base_rarity": row[3], "series": row[4], "can_lookup": row[5],
-           "pulls": row[6], "last_pull": row[7], "can_favourite": row[8], "can_purchase": row[9]}
-    cur.close()
-    # print("Fetched Waifu from id: " + str(ret))
-    return ret
+    with db.cursor(pymysql.cursors.DictCursor) as cur:
+        cur.execute("SELECT id, name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite, can_purchase FROM waifus WHERE id=%s", [id])
+        return cur.fetchone()
     
 def getWaifuOwners(id, rarity):
     with db.cursor() as cur:
         baseRarityName = config["rarity%dName" % rarity]
         cur.execute(
-            "SELECT users.name, cards.rarity, COUNT(*) AS amount, IF(cards.boosterid IS NOT NULL, 1, 0) FROM cards JOIN users ON cards.userid = users.id WHERE cards.waifuid = %s GROUP BY cards.userid, cards.rarity, IF(cards.boosterid IS NOT NULL, 1, 0) ORDER BY has_waifu.rarity DESC, amount DESC, users.name ASC",
+            "SELECT users.name, cards.rarity, COUNT(*) AS amount, IF(cards.boosterid IS NOT NULL, 1, 0) FROM cards JOIN users ON cards.userid = users.id WHERE cards.waifuid = %s AND cards.userid IS NOT NULL GROUP BY cards.userid, cards.rarity, IF(cards.boosterid IS NOT NULL, 1, 0) ORDER BY cards.rarity DESC, amount DESC, users.name ASC",
             [id])
         allOwners = cur.fetchall()
 
@@ -3085,7 +3079,8 @@ class NepBot(NepBotClass):
 
                         if sender not in superadmins:
                             useInfoCommand(tags['user-id'], sender, channel, isWhisper)
-                    except Exception:
+                    except Exception as ex:
+                        raise ex
                         self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
 
                 return
