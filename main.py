@@ -337,24 +337,54 @@ def getHand(twitchid):
     except Exception:
         logger.error("Got non-integer id for getHand. Aborting.")
         return []
-    cur = db.cursor()
-    cur.execute(
-        "SELECT amount, waifus.name, waifus.id, rarity, series, image, base_rarity, custom_image FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.userid = %s ORDER BY (rarity < %s) DESC, waifus.id ASC",
+    with db.cursor(pymysql.cursors.DictCursor) as cur:
+        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid IS NULL ORDER BY (rarity < %s) DESC, waifus.id ASC",
         [tID, int(config["numNormalRarities"])])
-    rows = cur.fetchall()
-    cur.close()
-    return [{"name": row[1], "amount": row[0], "id": row[2], "rarity": row[3], "series": row[4], "image": row[7] or row[5],
-             "base_rarity": row[6]} for row in rows]
-
+        return cur.fetchall()
+             
+def getOpenBooster(twitchid):
+    try:
+        tID = int(twitchid)
+    except Exception:
+        logger.error("Got non-integer id for getBooster. Aborting.")
+        return []
+    with db.cursor(pymysql.cursors.DictCursor) as cur:
+        cur.execute("SELECT id, boostername, paid FROM boosters_opened WHERE userid = %s AND status = 'open' LIMIT 1", [tID])
+        booster = cur.fetchone()
+        if booster is None:
+            return None
+        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid = %s ORDER BY waifus.id ASC", [tID, booster['id']])
+        booster['cards'] = cur.fetchall()
+        return booster
+             
+def getCard(cardID):
+    with db.cursor(pymysql.cursors.DictCursor) as cur:
+        cur.execute("SELECT cards.*, waifus.base_rarity FROM cards JOIN waifus ON cards.waifuid=waifus.id WHERE cards.id = %s", [cardID])
+        return cur.fetchone()
+        
+def addCard(userid, waifuid, source, boosterid=None, rarity=None):
+    with db.cursor() as cur:
+        if rarity is None:
+            cur.execute("SELECT base_rarity FROM waifus WHERE id = %s", [waifuid])
+            rarity = cur.fetchone()[0]
+            
+        waifuInfo = [userid, boosterid, waifuid, rarity, current_milli_time(), userid, boosterid, source]
+        cur.execute("INSERT INTO cards (userid, boosterid, waifuid, rarity, created, originalOwner, originalBooster, source) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)", waifuInfo)
+        return cur.lastrowid
+        
+def updateCard(id, changes):
+    changes["updated"] = current_milli_time()
+    with db.cursor() as cur:
+        cur.execute('UPDATE cards SET {} WHERE id = %s'.format(', '.join('{}=%s'.format(k) for k in changes)), list(changes.values()) + [id])
 
 def search(query, series=None):
     cur = db.cursor()
     if series is None:
-        cur.execute("SELECT id, Name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND Name LIKE %s",
+        cur.execute("SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name LIKE %s",
                     ["%" + query + "%"])
     else:
         cur.execute(
-            "SELECT id, Name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND Name LIKE %s AND series LIKE %s",
+            "SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name LIKE %s AND series LIKE %s",
             ["%" + query + "%", "%" + series + "%"])
     rows = cur.fetchall()
     ret = []
@@ -384,7 +414,7 @@ def paidHandUpgrades(userid):
 def currentCards(userid, verbose=False):
     cur = db.cursor()
     cur.execute(
-        "SELECT (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE userid = %s AND rarity < %s), (SELECT COUNT(*) FROM bounties WHERE userid = %s AND status = 'open')",
+        "SELECT (SELECT COUNT(*) FROM cards WHERE userid = %s AND boosterid IS NULL AND rarity < %s), (SELECT COUNT(*) FROM bounties WHERE userid = %s AND status = 'open')",
         [userid, int(config["numNormalRarities"]), userid])
     result = cur.fetchone()
     cur.close()
@@ -400,24 +430,33 @@ def upgradeHand(userid, gifted=False):
         "UPDATE users SET paidHandUpgrades = paidHandUpgrades + %s, freeUpgrades = freeUpgrades + %s WHERE id = %s",
         [0 if gifted else 1, 1 if gifted else 0, userid])
     cur.close()
-
-
-def attemptBountyFill(bot, waifuid):
-    # return profit from the bounty
+    
+def disenchant(bot, cardid):
+    # return amount of points gained
     with db.cursor() as cur:
+        card = getCard(cardid)
+        deValue = int(config["rarity" + str(card["rarity"]) + "Value"])
+        # bounty to fill?
         cur.execute(
             "SELECT bounties.id, bounties.userid, users.name, bounties.amount, waifus.name, waifus.base_rarity FROM bounties JOIN users ON bounties.userid = users.id JOIN waifus ON bounties.waifuid = waifus.id WHERE bounties.waifuid = %s AND bounties.status = 'open' ORDER BY bounties.amount DESC LIMIT 1",
-            [waifuid])
+            [card["waifuid"]])
         order = cur.fetchone()
 
         if order is not None:
             # fill their order instead of actually disenchanting
-            giveCard(order[1], waifuid, order[5])
+            if card["rarity"] != card["base_rarity"]:
+                # make a new card if it got demoted
+                filledCardID = addCard(order[1], waifuid, "bounty")
+                updateCard(cardID, {"userid": None, "boosterid": None})
+            else:
+                # transfer the card to them
+                updateCard(cardID, {"userid": order[1], "boosterid": None})
+                filledCardID = cardID
             bot.message('#%s' % order[2],
                         "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (
                             waifuid, order[4], order[3]), True)
-            cur.execute("UPDATE bounties SET status = 'filled', updated = %s WHERE id = %s",
-                        [current_milli_time(), order[0]])
+            cur.execute("UPDATE bounties SET status = 'filled', filledBy = %s, updated = %s WHERE id = %s",
+                        [filledCardID, current_milli_time(), order[0]])
             # alert people with lower bounties but above the cap?
             base_value = int(config["rarity" + str(order[5]) + "Value"])
             min_bounty = int(config["rarity" + str(order[5]) + "MinBounty"])
@@ -431,10 +470,10 @@ def attemptBountyFill(bot, waifuid):
                                 waifuid, order[4]), True)
             # give the disenchanter appropriate profit
             # everything up to the min bounty, 1/2 of any amount between the min and max bounties, 1/4 of anything above the max bounty.
-            return (min_bounty - base_value) + max(min(order[3] - min_bounty, rarity_cap - min_bounty) // 2, 0) + max((order[3] - rarity_cap) // 4, 0)
-        else:
-            # no bounty
-            return 0
+            deValue += (min_bounty - base_value) + max(min(order[3] - min_bounty, rarity_cap - min_bounty) // 2, 0) + max((order[3] - rarity_cap) // 4, 0)
+            
+        addPoints(card["userid"], deValue)
+        return deValue
 
 
 def setFavourite(userid, waifu):
@@ -455,7 +494,7 @@ def checkFavouriteValidity(userid):
             valid = False
         elif favourite["base_rarity"] >= int(config["numNormalRarities"]):
             # must be owned
-            cur.execute("SELECT COUNT(*) FROM has_waifu WHERE waifuid = %s AND userid = %s", [favourite["id"], userid])
+            cur.execute("SELECT COUNT(*) FROM cards WHERE waifuid = %s AND boosterid IS NULL AND userid = %s", [favourite["id"], userid])
             valid = cur.fetchone()[0] > 0
             
         if not valid:
@@ -869,7 +908,7 @@ def getWaifuById(id):
     except ValueError:
         return None
     cur = db.cursor()
-    cur.execute("SELECT id, Name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite, can_purchase FROM waifus WHERE id=%s",
+    cur.execute("SELECT id, name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite, can_purchase FROM waifus WHERE id=%s",
                 [id])
     row = cur.fetchone()
     ret = {"id": row[0], "name": row[1], "image": row[2], "base_rarity": row[3], "series": row[4], "can_lookup": row[5],
@@ -882,7 +921,7 @@ def getWaifuOwners(id, rarity):
     with db.cursor() as cur:
         baseRarityName = config["rarity%dName" % rarity]
         cur.execute(
-            "SELECT users.name, has_waifu.rarity, has_waifu.amount FROM has_waifu JOIN users ON has_waifu.userid = users.id WHERE has_waifu.waifuid = %s ORDER BY has_waifu.rarity DESC, has_waifu.amount DESC, users.name ASC",
+            "SELECT users.name, cards.rarity, COUNT(*) AS amount FROM cards JOIN users ON cards.userid = users.id WHERE cards.waifuid = %s AND cards.boosterid IS NULL GROUP BY cards.userid, cards.rarity ORDER BY has_waifu.rarity DESC, amount DESC, users.name ASC",
             [id])
         allOwners = cur.fetchall()
 
@@ -975,7 +1014,7 @@ def getUniqueCards(userid):
             return []
         else:
             inStr = ",".join(["%s"] * len(uniqueRarities))
-            cur.execute("SELECT waifuid FROM has_waifu WHERE userid = %s AND rarity IN ({0})".format(inStr),
+            cur.execute("SELECT DISTINCT waifuid FROM cards WHERE userid = %s AND boosterid IS NULL AND rarity IN ({0})".format(inStr),
                         [userid] + uniqueRarities)
             rows = cur.fetchall()
             return [row[0] for row in rows]
@@ -1004,16 +1043,10 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
             else:
                 banClause = ""
                 bannedCards = []
-            raritymax = int(config["rarity" + str(rarity) + "Max"])
             weighting_column = "(event_weighting*normal_weighting)" if useEventWeightings else "normal_weighting"
-            if raritymax > 0:
-                cur.execute(
-                    "SELECT id FROM waifus WHERE base_rarity = %s{1} AND (SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = waifus.id) + (SELECT COUNT(*) FROM boosters_cards JOIN boosters_opened ON boosters_cards.boosterid=boosters_opened.id WHERE boosters_cards.waifuid = waifus.id AND boosters_opened.status = 'open') < %s ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
-                        weighting_column, banClause), [rarity] + bannedCards + [raritymax])
-            else:
-                cur.execute(
-                    "SELECT id FROM waifus WHERE base_rarity = %s{1} ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
-                        weighting_column, banClause), [rarity] + bannedCards)
+            cur.execute(
+                "SELECT id FROM waifus WHERE base_rarity = %s{1} ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(
+                    weighting_column, banClause), [rarity] + bannedCards)
             result = cur.fetchone()
             if result is None:
                 # no waifus left at this rarity
@@ -1038,20 +1071,6 @@ def recordPullMetrics(*cards):
                 inString), [pullTime] + list(cards))
 
 
-def giveCard(userid, id, rarity, amount=1):
-    with db.cursor() as cur:
-        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s",
-                    [userid, id, rarity])
-        currentAmount = cur.fetchone()[0]
-
-        if currentAmount != 0:
-            cur.execute("UPDATE has_waifu SET amount = amount + %s WHERE userid = %s AND waifuid = %s AND rarity = %s",
-                        [amount, userid, id, rarity])
-        else:
-            cur.execute("INSERT INTO has_waifu(userid, waifuid, rarity, amount) VALUES(%s, %s, %s, %s)",
-                        [userid, id, rarity, amount])
-
-
 def attemptPromotions(*cards):
     promosDone = {}
     with db.cursor() as cur:
@@ -1059,7 +1078,7 @@ def attemptPromotions(*cards):
             while True:
                 usersThisCycle = []
                 cur.execute(
-                    "SELECT userid, rarity, amount FROM has_waifu JOIN waifus ON has_waifu.waifuid = waifus.id WHERE has_waifu.waifuid = %s AND has_waifu.amount > 1 AND waifus.can_promote = 1 ORDER BY has_waifu.rarity ASC, RAND() ASC",
+                    "SELECT userid, rarity, COUNT(*) AS amount FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.waifuid = %s AND cards.boosterid IS NULL AND waifus.can_promote = 1 GROUP BY cards.userid, cards.rarity HAVING COUNT(*) > 1 ORDER BY cards.rarity ASC, RAND() ASC",
                     [waifuid])
                 candidates = cur.fetchall()
                 for row in candidates:
@@ -1075,30 +1094,19 @@ def attemptPromotions(*cards):
                         promoteAmount = int(config["rarity%dPromoteAmount" % rarity])
                         amountToMake = amount // promoteAmount
 
-                        # limit check?
-                        newRarityLimit = int(config["rarity%dMax" % (rarity + 1)])
-                        if newRarityLimit != 0:
-                            cur.execute(
-                                "SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE waifuid = %s AND rarity >= %s",
-                                [waifuid, rarity + 1])
-                            currentOwned = cur.fetchone()[0]
-                            amountToMake = max(min(amountToMake, newRarityLimit - currentOwned), 0)
-
                         if amountToMake != 0:
                             usersThisCycle.append(userid)
-                            leftAtCurrentRarity = amount - (amountToMake * promoteAmount)
-
-                            # fix quantity of current rarity
-                            if leftAtCurrentRarity == 0:
-                                cur.execute("DELETE FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s",
-                                            [userid, waifuid, rarity])
-                            else:
-                                cur.execute(
-                                    "UPDATE has_waifu SET amount = %s WHERE userid = %s AND waifuid = %s AND rarity = %s",
-                                    [leftAtCurrentRarity, userid, waifuid, rarity])
-
-                            # give card(s) at promoted rarity
-                            giveCard(userid, waifuid, rarity + 1, amountToMake)
+                            # fetch card ids to use - take the ones with the least trade restrictions
+                            cur.execute("SELECT id, COALESCE(tradeableAt, 0) FROM cards WHERE waifuid = %s AND userid = %s AND rarity = %s AND boosterid IS NULL ORDER BY tradeableAt ASC", [waifuid, userid, rarity])
+                            fodder = cur.fetchall()
+                            for i in range(amountToMake):
+                                material = fodder[i*promoteAmount:(i+1)*promoteAmount]
+                                tradeTS = max([row[1] for row in material])
+                                for row in material:
+                                    updateCard(row[0], {"userid": None, "boosterid": None})
+                                newID = addCard(userid, waifuid, 'promotion', None, rarity+1)
+                                if tradeTS > 0:
+                                    updateCard(newID, {"tradeableAt": tradeTS})
 
                             # update promosDone
                             if userid not in promosDone:
@@ -1115,31 +1123,6 @@ def attemptPromotions(*cards):
         for waifu in promosDone[user]:
             if promosDone[user][waifu] >= int(config["promotionAlertMinimumRarity"]):
                 threading.Thread(target=sendPromotionAlert, args=(user, waifu, promosDone[user][waifu])).start()
-
-
-def takeCard(userid, id, rarity, amount=1):
-    with db.cursor() as cur:
-        cur.execute("SELECT COALESCE(SUM(amount), 0) FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s",
-                    [userid, id, rarity])
-        currentAmount = cur.fetchone()[0]
-        if currentAmount > amount:
-            cur.execute("UPDATE has_waifu SET amount = amount - %s WHERE userid = %s AND waifuid = %s AND rarity = %s",
-                        [amount, userid, id, rarity])
-        elif currentAmount == amount:
-            cur.execute("DELETE FROM has_waifu WHERE userid = %s AND waifuid = %s AND rarity = %s",
-                        [userid, id, rarity])
-        else:
-            raise ValueError(
-                "Couldn't remove %d of waifu %s at rarity %s from user %s as they don't own it/that many!" % (
-                    amount, str(id), str(rarity), str(userid)))
-
-
-def logDrop(userid, waifuid, rarity, source, channel, isWhisper):
-    trueChannel = "$$whisper$$" if isWhisper else channel
-    cur = db.cursor()
-    cur.execute("INSERT INTO drops(userid, waifuid, rarity, source, channel, timestamp) VALUES(%s, %s, %s, %s, %s, %s)",
-                (userid, waifuid, rarity, source, trueChannel, current_milli_time()))
-    cur.close()
 
 
 def formatRank(rankNum):
@@ -1196,50 +1179,38 @@ class CardNotInHandException(Exception):
     pass
 
 
-class CardRarityNotInHandException(CardNotInHandException):
+class CardIDNotInHandException(CardNotInHandException):
+    pass
+    
+    
+class AmbiguousWaifuException(Exception):
     pass
 
 
-class AmbiguousRarityException(Exception):
-    pass
-
-
-# given a string specifying a card id + optional rarity, return id+rarity of the hand card matching it
-# throw various exceptions for invalid format / card not in hand / ambiguous rarity
+# given a string specifying a waifu id or card id, return card id of the hand card matching it
+# throw various exceptions for invalid format / card not in hand / owns more than 1 copy of the waifu
 def parseHandCardSpecifier(hand, specifier):
-    if "-" in specifier:
-        id = int(specifier.split("-", 1)[0])
-        rarity = parseRarity(specifier.split("-", 1)[1])
-
-        foundID = False
-
-        for waifu in hand:
-            if waifu['id'] == id and waifu['rarity'] == rarity:
-                # done
-                return {"id": id, "base_rarity": waifu['base_rarity'], "rarity": rarity}
-            elif waifu['id'] == id:
-                foundID = True
-
-        if foundID:
-            raise CardRarityNotInHandException()
-        else:
-            raise CardNotInHandException()
-    else:
-        id = int(specifier)
-        rarity = None
-        base_rarity = None
-        for waifu in hand:
-            if waifu['id'] == id:
-                if rarity is None:
-                    rarity = waifu['rarity']
-                    base_rarity = waifu['base_rarity']
+    id = int(specifier)
+    
+    if id < int(config["minimumCardID"]):
+        # waifuid
+        cardFound = None
+        for card in hand:
+            if card['waifuid'] == id:
+                if cardFound is None:
+                    cardFound = card
                 else:
-                    raise AmbiguousRarityException()
-
-        if rarity is None:
+                    raise AmbiguousWaifuException()
+        
+        if cardFound is None:
             raise CardNotInHandException()
-        else:
-            return {"id": id, "base_rarity": base_rarity, "rarity": rarity}
+        
+        return cardFound
+    else:
+        for card in hand:
+            if card['cardid'] == id:
+                return card
+        raise CardIDNotInHandException()
 
 
 class InvalidBoosterException(Exception):
@@ -1312,6 +1283,14 @@ def messageForHandUpgrade(userid, username, bot, channel, isWhisper):
 def addSpending(userid, amount):
     with db.cursor() as cur:
         cur.execute("UPDATE users SET spending=spending + %s WHERE id = %s", [amount, userid])
+        
+def addBooster(userid, boostername, paid, status, eventTokens, channel, isWhisper):
+    with db.cursor() as cur:
+        trueChannel = "$$whisper$$" if isWhisper else channel
+        cur.execute(
+            "INSERT INTO boosters_opened (userid, boostername, paid, created, status, eventTokens, channel) VALUES(%s, %s, %s, %s, %s, %s, %s)",
+            [userid, boostername, paid, current_milli_time(), status, eventTokens, trueChannel])
+        return cur.lastrowid
 
 
 def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True):
@@ -1431,8 +1410,6 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                     else:
                         scalingData[r] = 0
 
-            logDrop(str(userid), str(card), waifu['base_rarity'], "boosters.%s" % packname, channel, isWhisper)
-
         cards.sort()
         recordPullMetrics(*cards)
         addSpending(userid, cost)
@@ -1449,12 +1426,9 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                     [":".join(str(round(n)) for n in scalingData), tokensDropped, userid])
 
         # insert opened booster
-        cur.execute(
-            "INSERT INTO boosters_opened (userid, boostername, paid, created, status, eventTokens) VALUES(%s, %s, %s, %s, 'open', %s)",
-            [userid, packname, cost if buying else 0, current_milli_time(), tokensDropped])
-        boosterid = cur.lastrowid
-        cur.executemany("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)",
-                        [(boosterid, card) for card in cards])
+        boosterid = addBooster(userid, packname, cost if buying else 0, 'open', tokensDropped, channel, isWhisper)
+        for card in cards:
+            addCard(userid, card, 'booster', boosterid)
 
         # alerts
         alertname = display_name if display_name.lower() == username.lower() else "%s (%s)" % (display_name, username)
@@ -1697,26 +1671,26 @@ class NepBot(NepBotClass):
                     packsToClose = cur.fetchall()
                     for pack in packsToClose:
                         userid = pack[1]
-                        cur.execute("SELECT waifuid FROM boosters_cards WHERE boosterid = %s ORDER BY waifuid ASC",
+                        cur.execute("SELECT id FROM cards WHERE boosterid = %s ORDER BY waifuid ASC",
                                     [pack[0]])
                         cardIDs = [row[0] for row in cur.fetchall()]
-                        cards = [getWaifuById(card) for card in cardIDs]
+                        cards = [getCard(card) for card in cardIDs]
+                        waifuIDs = [card['waifuid'] for card in cards]
                         # keep the best cards
-                        cards.sort(key=lambda waifu: -waifu['base_rarity'])
-                        numKeep = int(min(max(handLimit(userid) - currentCards(userid), 0), len(cards)))
+                        cards.sort(key=lambda card: -card['base_rarity'])
+                        # count any cards in the pack that don't take up hand space
+                        # we can use this as a shortcut since these will always be the highest rarities too
+                        nonSpaceCards = sum((1 if card['base_rarity'] >= int(config["numNormalRarities"]) else 0) for card in cards)
+                        numKeep = int(min(max(handLimit(userid) - currentCards(userid), 0) + nonSpaceCards, len(cards)))
                         keeps = cards[:numKeep]
                         des = cards[numKeep:]
                         logger.info("Expired pack for user %s (%d): keeping %s, disenchanting %s", pack[2], userid,
                                     str(keeps), str(des))
-                        for waifu in keeps:
-                            giveCard(userid, waifu['id'], waifu['base_rarity'])
-                        gottenpoints = 0
-                        for waifu in des:
-                            baseValue = int(config["rarity" + str(waifu['base_rarity']) + "Value"])
-                            profit = attemptBountyFill(self, waifu['id'])
-                            gottenpoints += baseValue + profit
-                        addPoints(userid, gottenpoints)
-                        attemptPromotions(*cardIDs)
+                        for card in keeps:
+                            updateCard(card['id'], {"boosterid": None})
+                        for card in des:
+                            disenchant(card['id'])
+                        attemptPromotions(*waifuIDs)
                         cur.execute("UPDATE boosters_opened SET status='closed', updated = %s WHERE id = %s",
                                     [current_milli_time(), pack[0]])
 
@@ -2169,9 +2143,8 @@ class NepBot(NepBotClass):
                                              **msgArgs), True)
                         messages = ["Your current hand is: "]
                         for row in cards:
-                            row['amount'] = "(x%d)" % row['amount'] if row['amount'] > 1 else ""
-                            waifumsg = getWaifuRepresentationString(row['id'], cardrarity=row[
-                                'rarity']) + ' from {series} - {image}{amount}; '.format(**row)
+                            waifumsg = getWaifuRepresentationString(row['waifuid'], cardrarity=row[
+                                'rarity']) + ' from {series} - {image} (Card ID {cardid}); '.format(**row)
                             if len(messages[-1]) + len(waifumsg) > 400:
                                 messages.append(waifumsg)
                             else:
@@ -2343,19 +2316,14 @@ class NepBot(NepBotClass):
                         
                         row = getWaifuById(wid)
                         recordPullMetrics(row['id'])
-                        logDrop(str(tags['user-id']), row['id'], row['base_rarity'], "freebie", channel, isWhisper)
                         if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                             threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
-
+                        
+                        boosterid = None
                         if not spaceInHand:
-                            cur.execute(
-                                "INSERT INTO boosters_opened (userid, boostername, paid, created, status) VALUES(%s, 'freebie', 0, %s, 'open')",
-                                [tags['user-id'], current_milli_time()])
-                            boosterid = cur.lastrowid
-                            cur.execute("INSERT INTO boosters_cards (boosterid, waifuid) VALUES(%s, %s)",
-                                        [boosterid, row['id']])
-                        else:
-                            giveCard(tags['user-id'], row['id'], row['base_rarity'])
+                            boosterid = addBooster(tags['user-id'], 'freebie', 0, 0, channel, isWhisper)
+                        addCard(tags['user-id'], row['id'], 'freebie', boosterid)
+                        if spaceInHand:
                             attemptPromotions(row['id'])
                             
                         droplink = config["siteHost"] + "/booster?user=" + sender
@@ -2427,7 +2395,7 @@ class NepBot(NepBotClass):
                                          "%s, you are trying to disenchant one or more waifus of %s rarity or higher! If you are sure you want to do this, append \" yes\" to the end of your command." % (
                                              tags['display-name'], confirmRarityName), isWhisper)
                             return
-                        if deTarget['rarity'] != deTarget['base_rarity'] and not hasConfirmed:
+                        if deTarget['rarity'] != cardInfo['base_rarity'] and not hasConfirmed:
                             self.message(channel,
                                          "%s, you are trying to disenchant one or more promoted waifus! If you are sure you want to do this, append \" yes\" to the end of your command." %
                                          tags['display-name'], isWhisper)
@@ -2435,13 +2403,13 @@ class NepBot(NepBotClass):
                         disenchants.append(deTarget)
                     except CardNotInHandException:
                         dontHave.append(arg)
-                    except AmbiguousRarityException:
+                    except AmbiguousWaifuException:
                         self.message(channel,
-                                     "You have more than one rarity of waifu %s in your hand. Please specify a rarity as well by appending a hyphen and then the rarity e.g. !disenchant %s-god" % (
-                                         arg, arg), isWhisper)
+                                     "You have more than one copy of waifu %s in your hand. Please specify a card ID instead. You can find your card IDs using !checkhand" % (
+                                         arg), isWhisper)
                         return
                     except ValueError:
-                        self.message(channel, "Could not decipher one or more of the waifu IDs you provided.",
+                        self.message(channel, "Could not decipher one or more of the waifu/card IDs you provided.",
                                      isWhisper)
                         return
 
@@ -2459,21 +2427,20 @@ class NepBot(NepBotClass):
                 ordersFilled = 0
                 checkPromos = []
                 for row in disenchants:
-                    if row['id'] not in checkPromos:
-                        checkPromos.append(row['id'])
-                    takeCard(tags['user-id'], row['id'], row['rarity'])
+                    if row['waifuid'] not in checkPromos:
+                        checkPromos.append(row['waifuid'])
+                    baseValue = int(config["rarity" + str(row['rarity']) + "Value"])
+                    gain = disenchant(row['cardid'])
                     
                     if row['base_rarity'] >= int(config["numNormalRarities"]):
                         disenchantingSpecial = True
-
-                    baseValue = int(config["rarity" + str(row['rarity']) + "Value"])
-                    profit = attemptBountyFill(self, row['id'])
-                    pointsGain += baseValue + profit
-                    if profit > 0:
+                    
+                    pointsGain += gain
+                    if gain > baseValue:
                         ordersFilled += 1
                     elif row['rarity'] >= int(config["disenchantAlertMinimumRarity"]):
                         # valuable waifu disenchanted
-                        waifuData = getWaifuById(row['id'])
+                        waifuData = getWaifuById(row['waifuid'])
                         waifuData['base_rarity'] = row['rarity']  # cheat to make it show any promoted rarity override
                         threading.Thread(target=sendDisenchantAlert,
                                          args=(channel, waifuData, tags["display-name"])).start()
@@ -2486,8 +2453,7 @@ class NepBot(NepBotClass):
                                 # request was cancelled
                                 waifuData = getWaifuById(row['id'])
                                 self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you disenchanted it." % (row['id'], waifuData['name']), True)
-
-                addPoints(tags['user-id'], pointsGain)
+                
                 attemptPromotions(*checkPromos)
                 
                 if disenchantingSpecial:
@@ -2496,7 +2462,7 @@ class NepBot(NepBotClass):
                 if len(disenchants) == 1:
                     buytext = " (bounty filled)" if ordersFilled > 0 else ""
                     self.message(channel, "Successfully disenchanted waifu %d%s. %s gained %d points" % (
-                        disenchants[0]['id'], buytext, str(tags['display-name']), pointsGain), isWhisper=isWhisper)
+                        disenchants[0]['waifuid'], buytext, str(tags['display-name']), pointsGain), isWhisper=isWhisper)
                 else:
                     buytext = " (%d bounties filled)" % ordersFilled if ordersFilled > 0 else ""
                     self.message(channel,
@@ -2527,10 +2493,10 @@ class NepBot(NepBotClass):
                     self.message(channel, "Unknown rarity. Usage: !buy <rarity> (So !buy uncommon for an uncommon)",
                                  isWhisper=isWhisper)
                     return
-                if rarity >= int(config["numNormalRarities"]) or int(config["rarity" + str(rarity) + "Max"]) == 1:
+                price = int(config["rarity" + str(rarity) + "BuyPrice"])
+                if rarity >= int(config["numNormalRarities"]) or price <= 0:
                     self.message(channel, "You can't buy that rarity of waifu.", isWhisper=isWhisper)
                     return
-                price = int(config["rarity" + str(rarity) + "Value"]) * 5
                 if not hasPoints(tags['user-id'], price):
                     self.message(channel, "You do not have enough points to buy a " + str(
                         config["rarity" + str(rarity) + "Name"]) + " waifu. You need " + str(price) + " points.",
@@ -2548,8 +2514,7 @@ class NepBot(NepBotClass):
                         series=row['series'],
                         link=row['image'], price=str(price)), isWhisper=isWhisper)
                     recordPullMetrics(row['id'])
-                    giveCard(tags['user-id'], row['id'], row['base_rarity'])
-                    logDrop(str(tags['user-id']), row['id'], rarity, "buy", channel, isWhisper)
+                    addCard(tags['user-id'], row['id'], 'buy')
                     if row['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                         threading.Thread(target=sendDrawAlert, args=(channel, row, str(tags["display-name"]))).start()
                     attemptPromotions(row['id'])
@@ -2578,10 +2543,9 @@ class NepBot(NepBotClass):
                     args = ["select", "deall"]
 
                 cur = db.cursor()
-                cur.execute("SELECT id FROM boosters_opened WHERE userid = %s AND status = 'open'", [tags['user-id']])
-                boosterinfo = cur.fetchone()
+                openBooster = getOpenBooster(tags['user-id'])
 
-                if (cmd == "show" or cmd == "select") and boosterinfo is None:
+                if (cmd == "show" or cmd == "select") and openBooster is None:
                     self.message(channel, tags[
                         'display-name'] + ", you do not have an open booster. Buy one using !booster buy <%s>" % visiblepacks,
                                  isWhisper=isWhisper)
@@ -2600,13 +2564,12 @@ class NepBot(NepBotClass):
                     return
 
                 if cmd == "select":
-                    cur.execute("SELECT waifuid FROM boosters_cards WHERE boosterid = %s", [boosterinfo[0]])
-                    cardrows = cur.fetchall()
-                    cards = [row[0] for row in cardrows]
                     # check for shorthand syntax
                     if len(args) == 2:
                         if args[1].lower() == 'deall' or args[1].lower() == 'disenchantall':
-                            selectArgs = ["disenchant"] * len(cards)
+                            selectArgs = ["disenchant"] * len(openBooster['cards'])
+                        elif args[1].lower() == 'keep' or args[1].lower() == 'disenchant':
+                            selectArgs = args[1:]
                         else:
                             selectArgs = []
                             for letter in args[1].lower():
@@ -2623,7 +2586,7 @@ class NepBot(NepBotClass):
                     else:
                         selectArgs = args[1:]
 
-                    if len(selectArgs) != len(cards):
+                    if len(selectArgs) != len(openBooster['cards']):
                         self.message(channel, "You did not specify the correct amount of keep/disenchant.",
                                      isWhisper=isWhisper)
                         cur.close()
@@ -2641,15 +2604,15 @@ class NepBot(NepBotClass):
                     keepCards = []
                     deCards = []
                     keepingCount = 0
-                    for i in range(len(cards)):
-                        waifu = getWaifuById(cards[i])
+                    for i in range(len(openBooster['cards'])):
+                        card = openBooster['cards'][i]
                         if selectArgs[i].lower() == "keep":
-                            keepCards.append(waifu)
-                            if waifu['base_rarity'] < int(config["numNormalRarities"]):
+                            keepCards.append(card)
+                            if card['base_rarity'] < int(config["numNormalRarities"]):
                                 keepingCount += 1
                         else:
                             # disenchant
-                            if waifu['base_rarity'] >= int(
+                            if card['base_rarity'] >= int(
                                     config["disenchantRequireConfirmationRarity"]) and not hasConfirmed:
                                 confirmRarityName = config[
                                     "rarity%sName" % config["disenchantRequireConfirmationRarity"]]
@@ -2657,36 +2620,36 @@ class NepBot(NepBotClass):
                                              "%s, you are trying to disenchant one or more waifus of %s rarity or higher! If you are sure you want to do this, append \" yes\" to the end of your command." % (
                                                  tags['display-name'], confirmRarityName), isWhisper)
                                 return
-                            deCards.append(waifu)
+                            deCards.append(card)
 
                     if keepingCount + currentCards(tags['user-id']) > handLimit(tags['user-id']) and keepingCount != 0:
                         self.message(channel, "You can't keep that many waifus! !disenchant some!", isWhisper=isWhisper)
                         cur.close()
                         return
-                    trash = (keepingCount == 0)
+                    trash = len(keepCards) == 0
                     # if we made it through the whole pack without tripping confirmation, we can actually do it now
-                    for waifu in keepCards:
-                        giveCard(tags['user-id'], waifu['id'], waifu['base_rarity'])
+                    for keCard in keepCards:
+                        updateCard(card['cardid'], {"boosterid": None})
                     gottenpoints = 0
                     ordersFilled = 0
-                    for waifu in deCards:
-                        baseValue = int(config["rarity" + str(waifu['base_rarity']) + "Value"])
-                        profit = attemptBountyFill(self, waifu['id'])
-                        gottenpoints += baseValue + profit
-                        if profit > 0:
+                    for deCard in deCards:
+                        baseValue = int(config["rarity" + str(card['base_rarity']) + "Value"])
+                        gain = disenchant(card['cardid'])
+                        gottenpoints += gain
+                        if gain > baseValue:
                             ordersFilled += 1
-                        elif waifu['base_rarity'] >= int(config["disenchantAlertMinimumRarity"]):
+                        elif card['base_rarity'] >= int(config["disenchantAlertMinimumRarity"]):
                             # valuable waifu being disenchanted
                             threading.Thread(target=sendDisenchantAlert,
-                                             args=(channel, waifu, str(tags["display-name"]))).start()
-                    addPoints(tags['user-id'], gottenpoints)
-                    attemptPromotions(*cards)
+                                             args=(channel, getWaifuById(card['waifuid']), str(tags["display-name"]))).start()
+                    cardIDs = [row['waifuid'] for row in openBooster['cards']]
+                    attemptPromotions(*cardIDs)
 
                     # compile the message to be sent in chat
                     response = "You %s your booster pack%s" % (("trash", "") if trash else ("take"," and: "))
 
                     if len(keepCards) > 0:
-                        response += " keep " + ', '.join(str(x['id']) for x in keepCards) + ";"
+                        response += " keep " + ', '.join(str(x['waifuid']) for x in keepCards) + ";"
                     if len(deCards) > 0 and not trash:
                         response += " disenchant the rest"
 
@@ -2711,7 +2674,7 @@ class NepBot(NepBotClass):
                     return
                 
                 if cmd == "buy":
-                    if boosterinfo is not None:
+                    if openBooster is not None:
                         self.message(channel,
                                      "You already have an open booster. Close it first!",
                                      isWhisper=isWhisper)
