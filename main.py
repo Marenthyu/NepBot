@@ -441,25 +441,25 @@ def disenchant(bot, cardid):
 
         if order is not None:
             # fill their order instead of actually disenchanting
-            filledCardID = addCard(order[1], waifuid, "bounty")
-            # when we spawn a bounty card, carry over the old owner info
-            updateCard(filledCardID, {"originalOwner": card['originalOwner'], "originalBooster": card['originalBooster']})
+            filledCardID = addCard(order[1], card['waifuid'], "bounty")
+            # when we spawn a bounty card, carry over the old original owner id
+            updateCard(filledCardID, {"originalOwner": card['originalOwner']})
             bot.message('#%s' % order[2],
                         "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (
-                            waifuid, order[4], order[3]), True)
-            cur.execute("UPDATE bounties SET status = 'filled', filledBy = %s, updated = %s WHERE id = %s",
-                        [filledCardID, current_milli_time(), order[0]])
+                            card['waifuid'], order[4], order[3]), True)
+            cur.execute("UPDATE bounties SET status = 'filled', oldCard = %s, newCard = %s, updated = %s WHERE id = %s",
+                        [cardid, filledCardID, current_milli_time(), order[0]])
             # alert people with lower bounties but above the cap?
             base_value = int(config["rarity" + str(order[5]) + "Value"])
             min_bounty = int(config["rarity" + str(order[5]) + "MinBounty"])
             rarity_cap = int(config["rarity" + str(order[5]) + "MaxBounty"])
             cur.execute(
                 "SELECT users.name FROM bounties JOIN users ON bounties.userid = users.id WHERE bounties.waifuid = %s AND bounties.status = 'open' AND bounties.amount > %s",
-                [waifuid, rarity_cap])
+                [card['waifuid'], rarity_cap])
             for userrow in cur.fetchall():
                 bot.message('#%s' % userrow[0],
                             "A higher bounty for [%d] %s than yours was filled, so you can now cancel yours and get full points back provided you don't change it." % (
-                                waifuid, order[4]), True)
+                                card['waifuid'], order[4]), True)
             # give the disenchanter appropriate profit
             # everything up to the min bounty, 1/2 of any amount between the min and max bounties, 1/4 of anything above the max bounty.
             deValue += (min_bounty - base_value) + max(min(order[3] - min_bounty, rarity_cap - min_bounty) // 2, 0) + max((order[3] - rarity_cap) // 4, 0)

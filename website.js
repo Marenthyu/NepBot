@@ -451,7 +451,7 @@ function bootstraphand(req, res, query) {
     }
 
     con.query("SELECT waifus.*, rarity, customImage FROM waifus JOIN cards ON waifus.id = cards.waifuid JOIN users ON " +
-        "cards.userid = users.id WHERE users.name = ? ORDER BY (cards.rarity < 8) DESC, waifus.id ASC, cards.rarity ASC", query.user, function (err, result) {
+        "cards.userid = users.id WHERE users.name = ? AND cards.boosterid IS NULL ORDER BY (cards.rarity < 8) DESC, waifus.id ASC, cards.rarity ASC", query.user, function (err, result) {
         if (err) throw err;
         let wantJSON = false;
         if ("accept" in req.headers && req.headers["accept"] === "application/json") {
