@@ -5246,9 +5246,9 @@ class NepBot(NepBotClass):
                 godRarity = int(config["numNormalRarities"]) - 1
                 if len(args) < 1:
                     if canManageImages:
-                        self.message(channel, "Usage: !godimage change / changeglobal / queue / check / acceptsingle / acceptglobal / reject", isWhisper)
+                        self.message(channel, "Usage: !godimage change / queue / check / accept / reject", isWhisper)
                     else:
-                        self.message(channel, "Usage: !godimage change / changeglobal / list / cancel", isWhisper)
+                        self.message(channel, "Usage: !godimage change / list / cancel", isWhisper)
                     return
                 subcmd = args[0].lower()
                 if subcmd in ["change", "request"]:
@@ -5374,7 +5374,7 @@ class NepBot(NepBotClass):
                             queueStr = ", ".join(str(item[0]) for item in queue)
                             self.message(channel, "Current requested IDs for image changes: %s. !godimage check <id> to see each request." % queueStr, isWhisper)
                         return
-                elif canManageImages and subcmd in ["check", "acceptsingle", "reject"]:
+                elif canManageImages and subcmd in ["check", "acceptsingle", "accept", "reject"]:
                     if len(args) < 2:
                         self.message(channel, "Usage: !godimage %s <card id>" % subcmd, isWhisper)
                         return
@@ -5397,7 +5397,7 @@ class NepBot(NepBotClass):
                         if subcmd == "check":
                             msgArgs = {"user": request[3], "waifuid": request[4], "name": request[5], "image": request[1], "cardid": request[6]}
                             self.message(channel, ("{user} requested their copy of [{waifuid}] {name}'s image to be changed to {image} ." + 
-                            " You can accept this request with !godimage acceptsingle {cardid}" +
+                            " You can accept this request with !godimage accept {cardid}" +
                             " or deny it with !godimage reject {cardid} <reason>.").format(**msgArgs), isWhisper)
                         elif subcmd == "reject":
                             if len(args) < 3:
@@ -5408,7 +5408,7 @@ class NepBot(NepBotClass):
                             cur.execute("UPDATE godimage_requests SET state = 'rejected', moderatorid = %s, updated = %s, rejection_reason = %s WHERE id = %s", queryArgs)
 
                             # notify them
-                            self.message("#%s" % request[4], "Your image change request for [%d] %s was rejected with the following reason: %s" % (request[4], request[5], rejectionReason), True)
+                            self.message("#%s" % request[3], "Your image change request for [%d] %s was rejected with the following reason: %s" % (request[4], request[5], rejectionReason), True)
 
                             self.message(channel, "Request rejected and user notified.", isWhisper)
                         else:
@@ -5424,7 +5424,7 @@ class NepBot(NepBotClass):
                             cur.execute("UPDATE godimage_requests SET state = 'accepted_single', moderatorid = %s, updated = %s WHERE id = %s", queryArgs)
 
                             # notify them
-                            self.message("#%s" % request[4], "Your image change request for your copy of [%d] %s was accepted." % (request[4], request[5]), True)
+                            self.message("#%s" % request[3], "Your image change request for your copy of [%d] %s was accepted." % (request[4], request[5]), True)
 
                             self.message(channel, "Request accepted. The new image for %s's copy of [%d] %s is %s" % (request[3], request[4], request[5], hostedURL), isWhisper)
                         return
