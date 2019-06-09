@@ -5307,10 +5307,10 @@ class NepBot(NepBotClass):
 
                             # record a new request
                             insertArgs = [tags['user-id'], card['cardid'], args[2], current_milli_time()]
-                            cur.execute("INSERT INTO godimage_requests (requesterid, waifuid, image, state, created) VALUES(%s, %s, %s, 'pending', %s)", insertArgs)
+                            cur.execute("INSERT INTO godimage_requests (requesterid, cardid, image, state, created) VALUES(%s, %s, %s, 'pending', %s)", insertArgs)
 
                             # notify the discordhook of the new request
-                            discordArgs = {"user": tags['display-name'], "waifuid": card['waifuid'], "cardid": card['cardid'], "name": waifu["name"], "image": args[2]}
+                            discordArgs = {"user": tags['display-name'], "waifuid": card['waifuid'], "cardid": card['cardid'], "name": card["name"], "image": args[2]}
                             discordbody = {
                                 "username": "WTCG Admin", 
                                 "content" : "{user} requested an image change for [{waifuid}] {name} to <{image}>!\nUse `!godimage check {cardid}` in any chat to check it.".format(**discordArgs)

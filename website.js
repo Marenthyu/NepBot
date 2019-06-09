@@ -436,7 +436,7 @@ function getCardHtml(template, row) {
         template = template.replace(/{STARS}/g, "");
     }
     template = template.replace(/{ID}/g, row.id.toString());
-    template = template.replace(/{IMAGE}/g, (row.custom_image || row.image).toString());
+    template = template.replace(/{IMAGE}/g, (row.customImage || row.image).toString());
     template = template.replace(/{CARDNAME}/g, row.name.toString());
     template = template.replace(/{SERIES}/g, row.series.toString());
     template = template.replace(/{RARITY}/g, getRarityName(row.rarity));
@@ -489,7 +489,7 @@ function bootstraphand(req, res, query) {
                         "id": row.id,
                         "Name": row.name,
                         "series": row.series,
-                        "image": row.custom_image || row.image,
+                        "image": row.customImage || row.image,
                         "base_rarity": row.base_rarity,
                         "rarity": row.rarity,
                         "amount": 1
@@ -837,7 +837,7 @@ function profile(req, res, query) {
                 badge = badge.replace(/{CARDNAME}/g, row.name);
                 badges += badge;
             }
-            con.query("SELECT waifus.id, waifus.name, waifus.image, waifus.base_rarity, waifus.series, has_waifu.rarity, has_waifu.custom_image FROM waifus LEFT JOIN has_waifu ON (has_waifu.waifuid = waifus.id AND has_waifu.userid = ?) WHERE id = ? ORDER BY has_waifu.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
+            con.query("SELECT waifus.id, waifus.name, waifus.image, waifus.base_rarity, waifus.series, cards.rarity, cards.customImage FROM waifus LEFT JOIN cards ON (cards.waifuid = waifus.id AND cards.userid = ? AND cards.boosterid IS NULL) WHERE waifus.id = ? ORDER BY cards.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
                 if (err) throw err;
 
                 let row = resultInner[0];
