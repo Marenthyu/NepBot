@@ -1683,7 +1683,7 @@ class NepBot(NepBotClass):
                         for card in keeps:
                             updateCard(card['id'], {"boosterid": None})
                         for card in des:
-                            disenchant(card['id'])
+                            disenchant(self, card['id'])
                         attemptPromotions(*waifuIDs)
                         cur.execute("UPDATE boosters_opened SET status='closed', updated = %s WHERE id = %s",
                                     [current_milli_time(), pack[0]])
@@ -2424,7 +2424,7 @@ class NepBot(NepBotClass):
                     if row['waifuid'] not in checkPromos:
                         checkPromos.append(row['waifuid'])
                     baseValue = int(config["rarity" + str(row['rarity']) + "Value"])
-                    gain = disenchant(row['cardid'])
+                    gain = disenchant(self, row['cardid'])
                     
                     if row['base_rarity'] >= int(config["numNormalRarities"]):
                         disenchantingSpecial = True
@@ -2628,7 +2628,7 @@ class NepBot(NepBotClass):
                     ordersFilled = 0
                     for deCard in deCards:
                         baseValue = int(config["rarity" + str(card['base_rarity']) + "Value"])
-                        gain = disenchant(card['cardid'])
+                        gain = disenchant(self, card['cardid'])
                         gottenpoints += gain
                         if gain > baseValue:
                             ordersFilled += 1
