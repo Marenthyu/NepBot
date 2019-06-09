@@ -3079,8 +3079,7 @@ class NepBot(NepBotClass):
 
                         if sender not in superadmins:
                             useInfoCommand(tags['user-id'], sender, channel, isWhisper)
-                    except Exception as ex:
-                        raise ex
+                    except Exception:
                         self.message(channel, "Invalid waifu ID.", isWhisper=isWhisper)
 
                 return
