@@ -442,6 +442,8 @@ def disenchant(bot, cardid):
         if order is not None:
             # fill their order instead of actually disenchanting
             filledCardID = addCard(order[1], waifuid, "bounty")
+            # when we spawn a bounty card, carry over the old owner info
+            updateCard(filledCardID, {"originalOwner": card['originalOwner'], "originalBooster": card['originalBooster']})
             bot.message('#%s' % order[2],
                         "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (
                             waifuid, order[4], order[3]), True)
@@ -1068,7 +1070,7 @@ def attemptPromotions(*cards):
             while True:
                 usersThisCycle = []
                 cur.execute(
-                    "SELECT userid, rarity, COUNT(*) AS amount FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.waifuid = %s AND cards.boosterid IS NULL AND waifus.can_promote = 1 GROUP BY cards.userid, cards.rarity HAVING COUNT(*) > 1 ORDER BY cards.rarity ASC, RAND() ASC",
+                    "SELECT userid, rarity, COUNT(*) AS amount FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.waifuid = %s AND cards.boosterid IS NULL AND cards.userid IS NOT NULL AND waifus.can_promote = 1 GROUP BY cards.userid, cards.rarity HAVING COUNT(*) > 1 ORDER BY cards.rarity ASC, RAND() ASC",
                     [waifuid])
                 candidates = cur.fetchall()
                 for row in candidates:
@@ -2413,7 +2415,7 @@ class NepBot(NepBotClass):
                                          "%s, you are trying to disenchant one or more waifus of %s rarity or higher! If you are sure you want to do this, append \" yes\" to the end of your command." % (
                                              tags['display-name'], confirmRarityName), isWhisper)
                             return
-                        if deTarget['rarity'] != cardInfo['base_rarity'] and not hasConfirmed:
+                        if deTarget['rarity'] != deTarget['base_rarity'] and not hasConfirmed:
                             self.message(channel,
                                          "%s, you are trying to disenchant one or more promoted waifus! If you are sure you want to do this, append \" yes\" to the end of your command." %
                                          tags['display-name'], isWhisper)
