@@ -2725,7 +2725,7 @@ class NepBot(NepBotClass):
 
                         # look for trade row
                         cur.execute(
-                            "SELECT id, want, have, points, payup, want_rarity, have_rarity FROM trades WHERE fromid = %s AND toid = %s AND status = 'open' LIMIT 1",
+                            "SELECT id, want, have, points, payup FROM trades WHERE fromid = %s AND toid = %s AND status = 'open' LIMIT 1",
                             [otherid, ourid])
                         trade = cur.fetchone()
 
@@ -2735,21 +2735,23 @@ class NepBot(NepBotClass):
                                          isWhisper=isWhisper)
                             return
 
-                        want = trade[1]
-                        have = trade[2]
+                        want = getCard(trade[1])
+                        have = getCard(trade[2])
                         tradepoints = trade[3]
                         payup = trade[4]
-                        want_rarity = trade[5]
-                        have_rarity = trade[6]
+                        
+                        # check that cards are still in place and owned by us
+                        if want['userid'] is None or want['userid'] != ourid or have['userid'] is None or have['userid'] != otherid:
+                            self.message("%s, one or more of the cards involved in the trade are no longer in their owners hands. Trade cancelled." % tags['display-name'], isWhisper)
+                            cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                            return
 
                         if subarg == "check":
-                            wantdata = getWaifuById(want)
-                            havedata = getWaifuById(have)
+                            wantdata = getWaifuById(want['waifuid'])
+                            havedata = getWaifuById(have['waifuid'])
 
-                            haveStr = getWaifuRepresentationString(have, havedata['base_rarity'], have_rarity,
-                                                                   havedata['name'])
-                            wantStr = getWaifuRepresentationString(want, wantdata['base_rarity'], want_rarity,
-                                                                   wantdata['name'])
+                            haveStr = getWaifuRepresentationString(havedata['id'], havedata['base_rarity'], have['rarity'], havedata['name'])
+                            wantStr = getWaifuRepresentationString(wantdata['id'], wantdata['base_rarity'], want['rarity'], wantdata['name'])
 
                             payer = "they will pay you" if otherid == payup else "you will pay them"
                             if tradepoints > 0:
@@ -2770,41 +2772,6 @@ class NepBot(NepBotClass):
                             return
                         else:
                             # accept
-                            # check that cards are still in place
-                            ourhand = getHand(ourid)
-                            otherhand = getHand(otherid)
-
-                            try:
-                                parseHandCardSpecifier(ourhand, "%d-%d" % (want, want_rarity))
-                            except CardRarityNotInHandException:
-                                self.message(channel,
-                                             "%s, the rarity of waifu %d in your hand has changed! Trade cancelled." % (
-                                                 tags['display-name'], want), isWhisper)
-                                cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s",
-                                            [current_milli_time(), trade[0]])
-                                return
-                            except CardNotInHandException:
-                                self.message(channel, "%s, you no longer own waifu %d! Trade cancelled." % (
-                                    tags['display-name'], want), isWhisper)
-                                cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s",
-                                            [current_milli_time(), trade[0]])
-                                return
-
-                            try:
-                                parseHandCardSpecifier(otherhand, "%d-%d" % (have, have_rarity))
-                            except CardRarityNotInHandException:
-                                self.message(channel,
-                                             "%s, the rarity of %s's copy of waifu %d has changed! Trade cancelled." % (
-                                                 tags['display-name'], otherparty, have), isWhisper)
-                                cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s",
-                                            [current_milli_time(), trade[0]])
-                                return
-                            except CardNotInHandException:
-                                self.message(channel, "%s, %s no longer owns waifu %d! Trade cancelled." % (
-                                    tags['display-name'], otherparty, have), isWhisper)
-                                cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s",
-                                            [current_milli_time(), trade[0]])
-                                return
 
                             cost = int(config["tradingFee"])
 
@@ -2822,35 +2789,28 @@ class NepBot(NepBotClass):
                                 return
 
                             # move the cards
-                            # should preserve God image changes through the trade
+                            updateCard(want['id'], {"userid": otherid, "boosterid": None})
+                            updateCard(have['id'], {"userid": ourid, "boosterid": None})
+                            # cancel pending godimage requests for these cards
                             godRarity = int(config["numNormalRarities"]) - 1
-                            if want_rarity == godRarity:
-                                cur.execute("UPDATE has_waifu SET userid = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [otherid, ourid, want, want_rarity])
-                                cur.execute("UPDATE godimage_requests SET state = 'cancelled' WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [ourid, want])
+                            if want['rarity'] == godRarity:
+                                cur.execute("UPDATE godimage_requests SET state = 'cancelled' WHERE cardid = %s AND state = 'pending'", [want['id']])
                                 if cur.rowcount > 0:
                                     # a request was actually cancelled
-                                    wantdata = getWaifuById(want)
-                                    self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you traded it away." % (want, wantdata['name']), True)
-
-                            else:
-                                takeCard(ourid, want, want_rarity)
-                                giveCard(otherid, want, want_rarity)
+                                    wantdata = getWaifuById(want['waifuid'])
+                                    self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you traded it away." % (want['waifuid'], wantdata['name']), True)
                                 
-                            if have_rarity == godRarity:
-                                cur.execute("UPDATE has_waifu SET userid = %s WHERE userid = %s AND waifuid = %s AND rarity = %s", [ourid, otherid, have, have_rarity])
-                                cur.execute("UPDATE godimage_requests SET state = 'cancelled' WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [otherid, have])
+                            if have['rarity'] == godRarity:
+                                cur.execute("UPDATE godimage_requests SET state = 'cancelled' WHERE cardid = %s AND state = 'pending'", [have['id']])
                                 if cur.rowcount > 0:
                                     # a request was actually cancelled
-                                    havedata = getWaifuById(have)
-                                    self.message("#%s" % otherparty, "Your image change request for [%d] %s was cancelled since you traded it away." % (have, havedata['name']), True)
-                            else:
-                                takeCard(otherid, have, have_rarity)
-                                giveCard(ourid, have, have_rarity)
+                                    havedata = getWaifuById(have['waifuid'])
+                                    self.message("#%s" % otherparty, "Your image change request for [%d] %s was cancelled since you traded it away." % (have['waifuid'], havedata['name']), True)
 
-                            attemptPromotions(want, have)
-                            if want_rarity >= int(config["numNormalRarities"]):
+                            attemptPromotions(want['waifuid'], have['waifuid'])
+                            if want['rarity'] >= int(config["numNormalRarities"]):
                                 checkFavouriteValidity(ourid)
-                            if have_rarity >= int(config["numNormalRarities"]):
+                            if have['rarity'] >= int(config["numNormalRarities"]):
                                 checkFavouriteValidity(otherid)
 
                             # points
@@ -2884,40 +2844,33 @@ class NepBot(NepBotClass):
 
                     try:
                         have = parseHandCardSpecifier(ourhand, args[1])
-                    except CardRarityNotInHandException:
-                        self.message(channel, "%s, you don't own that waifu at that rarity!" % tags['display-name'],
+                    except CardNotInHandException:
+                        self.message(channel, "%s, you don't own that waifu/card!" % tags['display-name'],
                                      isWhisper)
                         return
-                    except CardNotInHandException:
-                        self.message(channel, "%s, you don't own that waifu!" % tags['display-name'], isWhisper)
-                        return
-                    except AmbiguousRarityException:
+                    except AmbiguousWaifuException:
                         self.message(channel,
-                                     "%s, you own more than one rarity of waifu %s! Please specify a rarity as well by appending a hyphen and then the rarity, e.g. %s-god" % (
-                                         tags['display-name'], args[1], args[1]), isWhisper)
+                                     "%s, you own more than one rarity of waifu %s! Please specify a card ID instead. You can find card IDs using !checkhand" % (
+                                         tags['display-name'], args[1]), isWhisper)
                         return
                     except ValueError:
-                        self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
+                        self.message(channel, "Only whole numbers/IDs please.", isWhisper)
                         return
 
                     try:
                         want = parseHandCardSpecifier(otherhand, args[2])
-                    except CardRarityNotInHandException:
-                        self.message(channel,
-                                     "%s, %s doesn't own that waifu at that rarity!" % (tags['display-name'], other),
-                                     isWhisper)
-                        return
                     except CardNotInHandException:
-                        self.message(channel, "%s, %s doesn't own that waifu!" % (tags['display-name'], other),
+                        self.message(channel,
+                                     "%s, %s doesn't own that waifu/card!" % (tags['display-name'], other),
                                      isWhisper)
                         return
-                    except AmbiguousRarityException:
+                    except AmbiguousWaifuException:
                         self.message(channel,
-                                     "%s, %s owns more than one rarity of waifu %s! Please specify a rarity as well by appending a hyphen and then the rarity, e.g. %s-god" % (
-                                         tags['display-name'], other, args[2], args[2]), isWhisper)
+                                     "%s, %s owns more than one rarity of waifu %s! Please specify a card ID instead." % (
+                                         tags['display-name'], other, args[2]), isWhisper)
                         return
                     except ValueError:
-                        self.message(channel, "Only whole numbers/IDs + rarities please.", isWhisper)
+                        self.message(channel, "Only whole numbers/IDs please.", isWhisper)
                         return
                             
                     # actual specials can't be traded
@@ -2948,18 +2901,18 @@ class NepBot(NepBotClass):
                         [current_milli_time(), ourid, otherid])
 
                     # insert new trade
-                    tradeData = [ourid, otherid, want['id'], want['rarity'], have['id'], have['rarity'], points, payup,
+                    tradeData = [ourid, otherid, want['cardid'], have['cardid'], points, payup,
                                  current_milli_time(), "$$whisper$$" if isWhisper else channel]
                     cur.execute(
-                        "INSERT INTO trades (fromid, toid, want, want_rarity, have, have_rarity, points, payup, status, created, originChannel) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)",
+                        "INSERT INTO trades (fromid, toid, want, have, points, payup, status, created, originChannel) VALUES(%s, %s, %s, %s, %s, %s, 'open', %s, %s)",
                         tradeData)
 
-                    havedata = getWaifuById(have['id'])
-                    wantdata = getWaifuById(want['id'])
+                    havedata = getWaifuById(have['waifuid'])
+                    wantdata = getWaifuById(want['waifuid'])
 
-                    haveStr = getWaifuRepresentationString(have['id'], havedata['base_rarity'], have['rarity'],
+                    haveStr = getWaifuRepresentationString(have['waifuid'], havedata['base_rarity'], have['rarity'],
                                                            havedata['name'])
-                    wantStr = getWaifuRepresentationString(want['id'], wantdata['base_rarity'], want['rarity'],
+                    wantStr = getWaifuRepresentationString(want['waifuid'], wantdata['base_rarity'], want['rarity'],
                                                            wantdata['name'])
 
                     paying = ""
