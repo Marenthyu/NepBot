@@ -436,6 +436,7 @@ def disenchant(bot, cardid):
     with db.cursor() as cur:
         card = getCard(cardid)
         deValue = int(config["rarity" + str(card["rarity"]) + "Value"])
+        updateCard(cardid, {"userid": None, "boosterid": None})
         # bounty to fill?
         cur.execute(
             "SELECT bounties.id, bounties.userid, users.name, bounties.amount, waifus.name, waifus.base_rarity FROM bounties JOIN users ON bounties.userid = users.id JOIN waifus ON bounties.waifuid = waifus.id WHERE bounties.waifuid = %s AND bounties.status = 'open' ORDER BY bounties.amount DESC LIMIT 1",
@@ -444,14 +445,7 @@ def disenchant(bot, cardid):
 
         if order is not None:
             # fill their order instead of actually disenchanting
-            if card["rarity"] != card["base_rarity"]:
-                # make a new card if it got demoted
-                filledCardID = addCard(order[1], waifuid, "bounty")
-                updateCard(cardID, {"userid": None, "boosterid": None})
-            else:
-                # transfer the card to them
-                updateCard(cardID, {"userid": order[1], "boosterid": None})
-                filledCardID = cardID
+            filledCardID = addCard(order[1], waifuid, "bounty")
             bot.message('#%s' % order[2],
                         "Your bounty for [%d] %s for %d points has been filled and they have been added to your hand." % (
                             waifuid, order[4], order[3]), True)
