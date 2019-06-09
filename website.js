@@ -27,14 +27,11 @@ for (let line of cfglines) {
     let lineparts = line.split("=");
     if (lineparts[0] === "dbpassword") {
         dbpw = lineparts[1];
-    }
-    else if (lineparts[0] === "database") {
+    } else if (lineparts[0] === "database") {
         dbname = lineparts[1];
-    }
-    else if (lineparts[0] === "dbuser") {
+    } else if (lineparts[0] === "dbuser") {
         dbuser = lineparts[1];
-    }
-    else if (lineparts[0] === "dbhost") {
+    } else if (lineparts[0] === "dbhost") {
         dbhost = lineparts[1];
     }
 }
@@ -162,7 +159,7 @@ let bootstrapboostereventtoken = '<div class="card card-tcg card-{RARITY}">' +
     '<div class="card-footer text-center">' +
     '<div class="card-info">' +
     '<b>{CARDNAME}</b><br />' +
-    '<small>(sent directly to account)</small>' + 
+    '<small>(sent directly to account)</small>' +
     '</div>' +
     '</div>' +
     '</div>';
@@ -178,6 +175,7 @@ let smartsetstpl = fs.readFileSync('smartsets.htm', 'utf8');
 let bootstrapwaifucss = fs.readFileSync('waifus-bootstrap.css', 'utf8');
 let profiletpl = fs.readFileSync('profiletemplate.html', 'utf8');
 let holidaytpl = fs.readFileSync('holidaytemplate.htm', 'utf8');
+let trackertpl = fs.readFileSync('trackertemplate.htm', 'utf8');
 
 let entityMap = {
     '&': '&amp;',
@@ -235,8 +233,7 @@ function smartsetsdata(req, res, query) {
             res.end();
             return;
         }
-    }
-    else if (query.type !== 'allsets') {
+    } else if (query.type !== 'allsets') {
         if (!('q' in query)) {
             res.writeHead(400, "Missing Parameter");
             res.write("Missing Parameter");
@@ -256,24 +253,19 @@ function smartsetsdata(req, res, query) {
     if (query.type === 'setname') {
         sets_query = "SELECT id, name, reward, rewardPudding FROM sets WHERE name LIKE (?) AND claimed_by IS NULL";
         parameter = "%" + query.q + "%";
-    }
-    else if (query.type === 'waifuname') {
+    } else if (query.type === 'waifuname') {
         sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward, sets.rewardPudding FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.name LIKE(?) AND claimed_by IS NULL";
         parameter = "%" + query.q + "%";
-    }
-    else if (query.type === 'waifuseries') {
+    } else if (query.type === 'waifuseries') {
         sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward, sets.rewardPudding FROM sets LEFT JOIN set_cards ON sets.id=set_cards.setID JOIN waifus ON set_cards.cardID=waifus.id WHERE waifus.series LIKE(?) AND claimed_by IS NULL";
         parameter = "%" + query.q + "%";
-    }
-    else if (query.type === 'progress') {
+    } else if (query.type === 'progress') {
         sets_query = "SELECT DISTINCT sets.id, sets.name, sets.reward, sets.rewardPudding FROM set_cards JOIN sets ON set_cards.setID = sets.id LEFT JOIN has_waifu ON set_cards.cardID = has_waifu.waifuid JOIN users ON has_waifu.userid = users.id WHERE users.name = ? AND claimed_by IS NULL";
         parameter = query.user;
-    }
-    else if (query.type === 'allsets') {
+    } else if (query.type === 'allsets') {
         sets_query = "SELECT id, name, reward, rewardPudding FROM sets WHERE claimed_by IS NULL";
         parameter = null;
-    }
-    else {
+    } else {
         res.writeHead(400, "Bad Request");
         res.write("Bad Request");
         res.end();
@@ -334,8 +326,7 @@ function smartsetsdata(req, res, query) {
                         res.end();
 
                     })
-            }
-            else {
+            } else {
                 res.writeHead(200, {'Content-Type': 'text/json'});
                 res.write(JSON.stringify({count: 0, sets: []}));
                 res.end();
@@ -414,10 +405,9 @@ function claimedsets(req, res, query) {
                         res.write(setsethead);
                         res.write(row.setID + "");
                         res.write(setsetbetween);
-                        if(row.setReward > 0) {
+                        if (row.setReward > 0) {
                             res.write("Reward: " + row.setReward + " points");
-                        }
-                        else {
+                        } else {
                             res.write("Reward: " + row.setRewardPudding + " pudding");
                         }
                         res.write(" - Claimed by: " + row.userName + "<br/>");
@@ -442,8 +432,7 @@ function getCardHtml(template, row) {
     template = template.replace(/{PROMOTEDHOLDER}/g, row.rarity > row.base_rarity ? bootstraphandpromoholder : '');
     if (row.rarity > row.base_rarity && row.rarity < 8) {
         template = template.replace(/{STARS}/g, "★".repeat(row.rarity - row.base_rarity));
-    }
-    else {
+    } else {
         template = template.replace(/{STARS}/g, "");
     }
     template = template.replace(/{ID}/g, row.id.toString());
@@ -480,7 +469,7 @@ function bootstraphand(req, res, query) {
             res.end();
             return;
         }
-        con.query("SELECT eventTokens FROM users WHERE users.name = ?", query.user, function(err, resultTokens) {
+        con.query("SELECT eventTokens FROM users WHERE users.name = ?", query.user, function (err, resultTokens) {
             if (resultTokens.length === 0) {
                 if (wantJSON) {
                     res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
@@ -508,7 +497,11 @@ function bootstraphand(req, res, query) {
                     sanitizedResult.push(obj);
                 }
                 res.writeHead(200, {'Content-Type': 'application/json'});
-                res.write(JSON.stringify({'user': query.user, "cards": sanitizedResult, "eventTokens": resultTokens[0].eventTokens}))
+                res.write(JSON.stringify({
+                    'user': query.user,
+                    "cards": sanitizedResult,
+                    "eventTokens": resultTokens[0].eventTokens
+                }))
             } else {
                 res.writeHead(200, {'Content-Type': 'text/html'});
                 let cards = '';
@@ -517,9 +510,17 @@ function bootstraphand(req, res, query) {
                     card = getCardHtml(card, row);
                     cards += card;
                 }
-                if(resultTokens[0].eventTokens > 0) {
+                if (resultTokens[0].eventTokens > 0) {
                     let card = bootstraphandeventtoken;
-                    card = getCardHtml(card, { "id": "", "Name": config.eventTokenName, "series": "", "image": config.eventTokenImage, "base_rarity": 9, "rarity": 9, "amount": resultTokens[0].eventTokens});
+                    card = getCardHtml(card, {
+                        "id": "",
+                        "Name": config.eventTokenName,
+                        "series": "",
+                        "image": config.eventTokenImage,
+                        "base_rarity": 9,
+                        "rarity": 9,
+                        "amount": resultTokens[0].eventTokens
+                    });
                     cards += card;
                 }
                 res.write(bootstraphandtpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user));
@@ -559,8 +560,8 @@ function bootstrapbooster(req, res, query) {
             res.end();
             return;
         }
-        con.query("SELECT boosters_opened.eventTokens FROM boosters_opened JOIN users ON boosters_opened.userid = users.id WHERE users.name = ? AND boosters_opened.status = 'open'", query.user, function(err, resultTokens) {
-            if(resultTokens.length === 0) {
+        con.query("SELECT boosters_opened.eventTokens FROM boosters_opened JOIN users ON boosters_opened.userid = users.id WHERE users.name = ? AND boosters_opened.status = 'open'", query.user, function (err, resultTokens) {
+            if (resultTokens.length === 0) {
                 if (wantJSON) {
                     res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
                     res.write(JSON.stringify({
@@ -589,7 +590,11 @@ function bootstrapbooster(req, res, query) {
                     obj.series = row.series;
                     sanitizedResult.push(obj);
                 }
-                res.write(JSON.stringify({"user": query.user, "cards": sanitizedResult, "eventTokens": resultTokens[0].eventTokens}));
+                res.write(JSON.stringify({
+                    "user": query.user,
+                    "cards": sanitizedResult,
+                    "eventTokens": resultTokens[0].eventTokens
+                }));
             } else {
                 res.writeHead(200, {'Content-Type': 'text/html'});
                 let cards = '';
@@ -602,7 +607,7 @@ function bootstrapbooster(req, res, query) {
                     card = card.replace(/{RARITY}/g, getRarityName(row.base_rarity));
                     cards += card;
                 }
-                for(let i = 0; i < resultTokens[0].eventTokens; i++) {
+                for (let i = 0; i < resultTokens[0].eventTokens; i++) {
                     let card = bootstrapboostereventtoken;
                     card = card.replace(/{ID}/g, "");
                     card = card.replace(/{IMAGE}/g, config.eventTokenImage);
@@ -654,21 +659,17 @@ function pullfeed(req, res, query) {
                 res.write(row.username + " pulled <code>[" + row.waifuID + "][" + getRarityName(row.rarity) + "] " + row.waifuName + " from " + row.waifuSeries + "</code>");
                 if (row.source === 'freewaifu') {
                     res.write(" as a free waifu");
-                }
-                else if (row.source === 'buy') {
+                } else if (row.source === 'buy') {
                     res.write(" using <code>!buy</code>");
-                }
-                else if (row.source.toString().startsWith("boosters.")) {
+                } else if (row.source.toString().startsWith("boosters.")) {
                     res.write(" from a " + row.source.substring(9) + " booster");
-                }
-                else {
+                } else {
                     res.write(" from a mysterious unknown source");
                 }
 
                 if (row.channel === '$$whisper$$') {
                     res.write(" via whisper.");
-                }
-                else {
+                } else {
                     res.write(" in " + row.channel.substring(1) + "&#39;s channel.");
                 }
                 res.write("<br />");
@@ -744,24 +745,21 @@ function api(req, res, query) {
                 res.write(JSON.stringify(wars));
                 res.end();
             });
-        }
-        else if (query.type === 'incentives') {
+        } else if (query.type === 'incentives') {
             con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result) {
                 if (err) throw err;
                 res.writeHead(200, {'Content-Type': 'text/json'});
                 res.write(JSON.stringify(result));
                 res.end();
             });
-        }
-        else if (query.type === 'emotewar') {
+        } else if (query.type === 'emotewar') {
             con.query("SELECT * FROM emoteWar ORDER BY count DESC", function (err, result) {
                 if (err) throw err;
                 res.writeHead(200, {'Content-Type': 'text/json'});
                 res.write(JSON.stringify(result));
                 res.end();
             });
-        }
-        else if (query.type === 'tracker') {
+        } else if (query.type === 'tracker') {
             // All-in-one endpoint for the tracker
             con.query("SELECT * FROM bidWars LEFT JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID WHERE bidWars.status = 'open' ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
                 if (err) throw err;
@@ -803,8 +801,7 @@ function api(req, res, query) {
                     });
                 });
             });
-        }
-        else {
+        } else {
             res.writeHead(400, "Bad Request");
             res.end();
 
@@ -891,34 +888,132 @@ function holiday(req, res, query) {
     if ('user' in query) {
         user = query.user;
     }
-    
+
     con.query("SELECT (SELECT COUNT(*) FROM boosters_opened WHERE boostername = ?)+(SELECT COUNT(*) FROM boosters_opened WHERE boostername = ?)*5 AS cnt", ["holiday", "jumbholiday"], function (err, result) {
         if (err) throw err;
         let goals = [2500, 5000, 7500, 10000, 15000, 20000];
         let holidayCount = result[0].cnt;
-        let highestGoal = goals[goals.length-1];
+        let highestGoal = goals[goals.length - 1];
         let currentAmountCapped = Math.min(highestGoal, holidayCount);
-        let currentWidth = 100*Math.min(highestGoal, holidayCount)/highestGoal;
+        let currentWidth = 100 * Math.min(highestGoal, holidayCount) / highestGoal;
         let response = holidaytpl.replace(/{NAME}/g, escapeHtml(user));
         response = response.replace(/{CURRENT_WIDTH}/g, currentWidth).replace(/{CURRENT_AMOUNT_CAPPED}/g, currentAmountCapped).replace(/{HIGHEST_GOAL_AMOUNT}/g, highestGoal).replace(/{CURRENT_AMOUNT}/g, holidayCount);
         // individual goals
         let goalsOutput = "";
-        for(let i=0;i<goals.length;i++) {
-            goalsOutput += "<h3>Goal "+(i+1)+"</h3>";
-            goalsOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'><div class='progress-bar progress-bar-striped"+(holidayCount >= goals[i] ? " bg-success" : "")+"' style='width: "+(100*Math.min(goals[i], holidayCount)/goals[i])+"%;' aria-valuenow='"+Math.min(goals[i], holidayCount)+"' aria-valuemin='0' aria-valuemax='"+goals[i]+"'>"+Math.min(goals[i], holidayCount)+"/"+goals[i]+(holidayCount >= goals[i] ? " (MET!)" : "")+"</div></div>";
+        for (let i = 0; i < goals.length; i++) {
+            goalsOutput += "<h3>Goal " + (i + 1) + "</h3>";
+            goalsOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'><div class='progress-bar progress-bar-striped" + (holidayCount >= goals[i] ? " bg-success" : "") + "' style='width: " + (100 * Math.min(goals[i], holidayCount) / goals[i]) + "%;' aria-valuenow='" + Math.min(goals[i], holidayCount) + "' aria-valuemin='0' aria-valuemax='" + goals[i] + "'>" + Math.min(goals[i], holidayCount) + "/" + goals[i] + (holidayCount >= goals[i] ? " (MET!)" : "") + "</div></div>";
         }
         response = response.replace(/{GOALS}/g, goalsOutput);
         res.write(response);
         res.end();
-        
-        
+
+
     });
+}
+
+function tracker(req, res, query) {
+    let user = "null";
+    if ('user' in query) {
+        user = query.user;
+    }
+
+    con.query("SELECT * FROM bidWars LEFT JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
+        if (err) throw err;
+        let wars = [];
+        let lastwarid = '';
+        let lastwar = null;
+        for (let row of result) {
+            if (row.id !== lastwarid) {
+                lastwarid = row.id;
+                lastwar = {
+                    "id": row.id,
+                    "title": row.title,
+                    "status": row.status,
+                    "openEntry": row.openEntry !== 0,
+                    "openEntryMinimum": row.openEntryMinimum,
+                    "openEntryMaxLength": row.openEntryMaxLength,
+                    "choices": []
+                };
+                wars.push(lastwar);
+            }
+            if (row.choice !== null) {
+                lastwar.choices.push({
+                    "choice": row.choice,
+                    "amount": row.amount,
+                    "created": row.created,
+                    "creator": row.creator,
+                    "lastVote": row.lastVote,
+                    "lastVoter": row.lastVoter
+                })
+            }
+        }
+        con.query("SELECT * FROM incentives ORDER BY incentives.id ASC", function (err, result2) {
+            let incentives = result2;
+            if (err) {
+                res.writeHead(500, 'Internal Server Error');
+                res.end("Something went wrong. Blame maren.");
+                throw err;
+            }
+
+            let incentivesOutput = "";
+            if (incentives.length > 0) {
+                for (let incentive of incentives) {
+                    incentivesOutput += "<h3>" + incentive['id'] + "</h3>";
+                    incentivesOutput += "<p>" + incentive['title'] + "</p>";
+                    incentivesOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'>" +
+                        "<div class='progress-bar progress-bar-striped" + (incentive['amount'] >= incentive['required'] ? " bg-success" : (incentive['status'] === 'closed' ? " bg-danger" : "")) +
+                        "' style='width: " + (100 * (incentive['amount'] / incentive['required'])) + "%;" +
+                        "' aria-valuenow='" + incentive['amount'] + "' aria-valuemin='0' aria-valuemax='" + incentive['required'] +
+                        "'><span>" + incentive['amount'] + "/" + incentive['required'] + (incentive['amount'] >= incentive['required'] ? " (MET!)" : (incentive['status'] === 'closed' ? " (FAILED!)" : "")) + "</span></div></div><br/>";
+                }
+            } else {
+                incentivesOutput += "Sorry, there are currently no incentives. Check back later. (Or during a marathon!)";
+            }
+
+
+            let warOutput = "";
+            if (wars.length > 0) {
+                for (let war of wars) {
+                    let warTotal = 0;
+                    for (let choice of war['choices']) {
+                        warTotal += choice['amount'];
+                    }
+                    warOutput += "<h3>" + war['id'] + "</h3>";
+                    warOutput += "<p>" + war['title'] + ", " + war['status'] + "</p>";
+                    warOutput += "<h4>Choices:</h4>";
+                    if (war['choices'].length > 0) {
+                        for (let choice of war['choices']) {
+                            warOutput += choice['choice'];
+                            warOutput += "<div class='progress' style='height: 2rem; font-size: 1rem;'>" +
+                                "<div class='progress-bar progress-bar-striped" +
+                                "' style='width: " + (100 * (choice['amount'] / warTotal)) + "%;" +
+                                "' aria-valuenow='" + choice['amount'] + "' aria-valuemin='0' aria-valuemax='" + warTotal.toString() +
+                                "'><span>" + choice['amount'] + "</span></div></div><br/>";
+                        }
+                    } else {
+                        warOutput += "No choices defined yet :(";
+                    }
+
+                }
+            }
+            else {
+                warOutput += "Sorry, no bid wars logged in the system currently.";
+            }
+
+            res.writeHead(200, 'OK');
+            res.end(trackertpl.replace(/{INCENTIVES}/g, incentivesOutput)
+                .replace(/{BIDWARS}/g, warOutput)
+                .replace(/{NAME}/g, user));
+        });
+    });
+
 }
 
 function readConfig(callback) {
     config = {};
-    con.query("SELECT * FROM config", function(err, result) {
-        for(let row of result) {
+    con.query("SELECT * FROM config", function (err, result) {
+        for (let row of result) {
             config[row.name] = row.value;
         }
         callback();
@@ -935,16 +1030,16 @@ function bootServer(callback) {
                     break;
                 }
                 // case "sets": {
-                    // smartsets(req, res, q.query);
-                    // break;
+                // smartsets(req, res, q.query);
+                // break;
                 // }
                 // case "smartsets": {
-                    // smartsets(req, res, q.query);
-                    // break;
+                // smartsets(req, res, q.query);
+                // break;
                 // }
                 // case "smartsetsdata": {
-                    // smartsetsdata(req, res, q.query);
-                    // break;
+                // smartsetsdata(req, res, q.query);
+                // break;
                 // }
 
                 case "claimedsets": {
@@ -956,12 +1051,14 @@ function bootServer(callback) {
                     break;
                 }
                 case "holiday": {
-                    holiday(req, res, q.query);
+                    res.writeHead(410, 'Gone');
+                    res.end();
                     break;
                 }
                 case "sets":
                 case "smartsets":
                 case "smartsetsdata":
+                case "tracker":
                 case "fancybooster": {
                     res.writeHead(410, 'Gone');
                     res.end();
@@ -1009,6 +1106,10 @@ function bootServer(callback) {
                     pullfeed(req, res, q.query);
                     break;
                 }
+                // case "tracker": {
+                    // tracker(req, res, q.query);
+                    // break;
+                // }
                 default: {
                     res.writeHead(404, {'Content-Type': 'text/html'});
                     res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
