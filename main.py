@@ -3336,6 +3336,7 @@ class NepBot(NepBotClass):
 
                 # booster?
                 packid = None
+                cardid = None
                 received = []
                 if redeemdata[3] is not None:
                     # check for an open booster in their account
@@ -3372,7 +3373,7 @@ class NepBot(NepBotClass):
                 # waifu?
                 if redeemdata[2] is not None:
                     waifuinfo = getWaifuById(redeemdata[2])
-                    addCard(tags['user-id'], waifuinfo['id'], 'redeem')
+                    cardid = addCard(tags['user-id'], waifuinfo['id'], 'redeem')
                     if waifuinfo['base_rarity'] < int(config["numNormalRarities"]) - 1:
                         attemptPromotions(waifuinfo['id'])
                     waifuinfo['rarity'] = config["rarity%dName" % waifuinfo['base_rarity']]
@@ -3393,8 +3394,8 @@ class NepBot(NepBotClass):
                         received.append("An invalid badge, or a badge you already had: %s" % badge["name"])
 
                 cur.execute(
-                    "INSERT INTO tokens_claimed (tokenid, userid, points, waifuid, boostername, boosterid, timestamp, badgeID) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)",
-                    [redeemdata[0], tags['user-id'], redeemdata[1], redeemdata[2], redeemdata[3], packid,
+                    "INSERT INTO tokens_claimed (tokenid, userid, points, waifuid, cardid, boostername, boosterid, timestamp, badgeID) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    [redeemdata[0], tags['user-id'], redeemdata[1], redeemdata[2], cardid, redeemdata[3], packid,
                      current_milli_time(), redeemdata[5]])
 
                 # single use?
