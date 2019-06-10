@@ -7,6 +7,7 @@ let fs = require('fs');
 let request = require('request');
 let async = require('async');
 let ejs = require('ejs');
+let moment = require('moment');
 
 let download = function (uri, filename, callback) {
     request.head(uri, function (err, res, body) {
@@ -62,6 +63,15 @@ jsfiles.forEach(function(filename) {
     jsdata[filename] = fs.readFileSync('js/'+filename);
 });
 
+function renderTemplateAndEnd(filename, vars, res) {
+    vars["moment"] = moment;
+    ejs.renderFile(filename, vars, {}, function(err, str) {
+        if(err) { throw err; }
+        res.write(str);
+        res.end();
+    })
+}
+
 function hand(req, res, query) {
     if (!('user' in query)) {
         res.writeHead(400, "Missing Parameter");
@@ -83,11 +93,7 @@ function hand(req, res, query) {
                 res.end();
             } else {
                 res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                ejs.renderFile("templates/hand.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist."}, {}, function(err,str) {
-                    if(err){ throw err; }
-                    res.write(str);
-                    res.end(); 
-                });
+                renderTemplateAndEnd("templates/hand.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist."}, res);
             }
             return;
         }
@@ -99,11 +105,7 @@ function hand(req, res, query) {
                     res.end();
                 } else {
                     res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                    ejs.renderFile("templates/hand.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist."}, {}, function(err,str) {
-                        if(err){ throw err; }
-                        res.write(str);
-                        res.end(); 
-                    });
+                    renderTemplateAndEnd("templates/hand.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist."}, res);
                 }
                 return;
             }
@@ -132,13 +134,8 @@ function hand(req, res, query) {
             } else {
                 // @TODO event tokens
                 res.writeHead(200, {'Content-Type': 'text/html'});
-                ejs.renderFile("templates/hand.ejs", {user: query.user, cards: result, error: ""}, {}, function(err,str) {
-                    if(err){ throw err; }
-                    res.write(str);
-                    res.end(); 
-                });
+                renderTemplateAndEnd("templates/hand.ejs", {user: query.user, cards: result, error: ""}, res);
             }
-            
         });
     });
 }
@@ -168,11 +165,7 @@ function booster(req, res, query) {
                 res.end();
             } else {
                 res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                ejs.renderFile("templates/booster.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist or has no open booster."}, {}, function(err,str) {
-                    if(err){ throw err; }
-                    res.write(str);
-                    res.end(); 
-                });
+                renderTemplateAndEnd("templates/booster.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist or has no open booster."}, res);
             }            
             return;
         }
@@ -189,11 +182,7 @@ function booster(req, res, query) {
                     res.end();
                 } else {
                     res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                    ejs.renderFile("templates/booster.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist or has no open booster."}, {}, function(err,str) {
-                        if(err){ throw err; }
-                        res.write(str);
-                        res.end(); 
-                    });
+                    renderTemplateAndEnd("templates/booster.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist or has no open booster."}, res);
                 }            
                 return;
             }
@@ -218,11 +207,7 @@ function booster(req, res, query) {
             } else {
                 res.writeHead(200, {'Content-Type': 'text/html'});
                 // @TODO event tokens
-                ejs.renderFile("templates/booster.ejs", {user: query.user, cards: result, error: ""}, {}, function(err,str) {
-                    if(err){ throw err; }
-                    res.write(str);
-                    res.end(); 
-                });
+                renderTemplateAndEnd("templates/booster.ejs", {user: query.user, cards: result, error: ""}, res);
             }
         });
     });
@@ -255,11 +240,7 @@ function pullfeed(req, res, query) {
             res.end();
         } else {
             res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
-            ejs.renderFile("templates/pullfeed.ejs", {items: result}, {}, function(err,str) {
-                if(err){ throw err; }
-                res.write(str);
-                res.end(); 
-            });
+            renderTemplateAndEnd("templates/pullfeed.ejs", {items: result}, res);
         }
     });
 
@@ -398,11 +379,7 @@ function profile(req, res, query) {
         if (err) throw err;
         if (resultOuter.length === 0) {
             res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
-            ejs.renderFile("templates/profile.ejs", {user: query.user, error: "404 - User not found."}, {}, function(err,str) {
-                if(err){ throw err; }
-                res.write(str);
-                res.end(); 
-            });
+            renderTemplateAndEnd("templates/profile.ejs", {user: query.user, error: "404 - User not found."}, res);
             return;
         }
         let userID = resultOuter[0].id;
@@ -446,12 +423,7 @@ function profile(req, res, query) {
                         error: "",
                     };
 
-                    
-                    ejs.renderFile("templates/profile.ejs", vars, {}, function(err,str) {
-                        if(err){ throw err; }
-                        res.write(str);
-                        res.end(); 
-                    });
+                    renderTemplateAndEnd("templates/profile.ejs", vars, res);
                 });
             });
         });

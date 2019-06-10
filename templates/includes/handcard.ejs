@@ -23,7 +23,7 @@
                     <% if(card.rarity == 8) { %>
                         Non-tradeable
                     <% } else if(card.tradeableAt && card.tradeableAt > Date.now()) { %>
-                        Non-tradeable until <%= new Date(card.tradeableAt).toISOString() %>
+                        Non-tradeable until <%= moment(new Date(card.tradeableAt)).fromNow() %>
                     <% } else { %>
                         Tradeable
                     <% } %>
