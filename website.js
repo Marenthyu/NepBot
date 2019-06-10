@@ -56,6 +56,11 @@ con.connect(function (err) {
 });
 
 let bootstrapwaifucss = fs.readFileSync('waifus-bootstrap.css', 'utf8');
+let jsdata = {};
+let jsfiles = fs.readdirSync("js/");
+jsfiles.forEach(function(filename) {
+    jsdata[filename] = fs.readFileSync('js/'+filename);
+});
 
 function hand(req, res, query) {
     if (!('user' in query)) {
@@ -468,6 +473,12 @@ function bootServer(callback) {
     http.createServer(function (req, res) {
         let q = url.parse(req.url, true);
         try {
+            if(q.pathname.startsWith("/js/") && jsdata[q.pathname.substring(4)]) {
+                res.writeHead(200, {'Content-Type': 'text/javascript'});
+                res.write(jsdata[q.pathname.substring(4)]);
+                res.end();
+                return;
+            }
             switch (q.pathname.substring(1)) {
                 case "hand": {
                     hand(req, res, q.query);

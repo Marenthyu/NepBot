@@ -28,11 +28,6 @@ Click the button below to load a full list of all claimable sets.
 </div>
     
 <script>
-    if (user === "null") {
-        $("#navbartitle").html("Waifu TCG");
-        $(".nav-link").addClass("disabled").attr('href', '').css('cursor', 'default');
-        $("#inputname").val("");
-    }
     let uniqid = 0;
     let cardtemplate = '<div class="card card-tcg">' +
         '<div class="card-body card-body-tcg">' +
