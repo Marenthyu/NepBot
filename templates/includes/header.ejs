@@ -1,0 +1,51 @@
+<% include functions _%> 
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title><%= title %> - Waifu TCG</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css"
+          integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+            integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+            crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js"
+            integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lazyload@2.0.0-beta.2/lazyload.js"></script>
+    <script>
+        let user = "<%= user %>";
+    </script>
+    <link rel="stylesheet" href="/waifus-bootstrap.css">
+</head>
+<body>
+<nav class="navbar navbar-expand sticky-top navbar-dark bg-dark">
+    <a id="navbartitle" class="navbar-brand" href="/help">Waifu TCG &ndash; <b><%= user %></b></a>
+
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+        <ul class="navbar-nav mr-auto">
+            <li class="nav-item <% if(currentPage === 'hand') { %>active<% } %>">
+                <a class="nav-link" href="/hand?user=<%= user %>">Hand</a>
+            </li>
+            <li class="nav-item <% if(currentPage === 'profile') { %>active<% } %>">
+                <a class="nav-link" href="/profile?user=<%= user %>">Profile</a>
+            </li>
+            <li class="nav-item <% if(currentPage === 'booster') { %>active<% } %>">
+                <a class="nav-link" href="/booster?user=<%= user %>">Booster</a>
+            </li>
+            <li class="nav-item <% if(currentPage === 'sets') { %>active<% } %>">
+                <a class="nav-link" href="/sets?user=<%= user %>">Sets</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link disabled">Super Secret Admin-Panel</a>
+            </li>
+        </ul>
+        <form method="GET" class="form-inline">
+            <input id="inputname" value="<%= user %>" class="form-control" type="search" name="user" placeholder="Search for User"
+                    aria-label="Search">
+            <button class="btn btn-outline-light mx-2" type="submit">Check User</button>
+        </form>
+    </div>
+</nav>
+<div class='container-fluid'>

@@ -1,78 +1,32 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Sets - Waifu TCG</title>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css"
-          integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy" crossorigin="anonymous">
-    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
-            integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
-            crossorigin="anonymous"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/js/bootstrap.min.js"
-            integrity="sha384-a5N7Y/aK3qNeh15eJKGWxsqtnX/wWdSZSKp+81YjTmS15nvnvxKHuzaWwXHDli+4"
-            crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lazyload@2.0.0-beta.2/lazyload.js"></script>
-    <script>
-        let user = "{NAME}";
-    </script>
-    <link rel="stylesheet" href="/waifus-bootstrap.css">
-</head>
-<body>
-<nav class="navbar navbar-expand sticky-top navbar-dark bg-dark">
-        <a id="navbartitle" class="navbar-brand" href="/help">Waifu TCG &ndash; <b>{NAME}</b></a>
-
-        <div class="collapse navbar-collapse" id="navbarSupportedContent">
-            <ul class="navbar-nav mr-auto">
-                <li class="nav-item">
-                    <a class="nav-link" href="/hand?user={NAME}">Hand</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/profile?user={NAME}">Profile</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/booster?user={NAME}">Booster</a>
-                </li>
-                <li class="nav-item active">
-                    <a class="nav-link" href="/sets?user={NAME}">Sets</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link disabled">Super Secret Admin-Panel</a>
-                </li>
-            </ul>
-            <form method="GET" class="form-inline">
-                <input id="inputname" value="{NAME}" class="form-control" type="search" name="user" placeholder="Search for User"
-                       aria-label="Search">
-                <button class="btn btn-outline-light mx-2" type="submit">Check User</button>
-            </form>
-        </div>
-    </nav>
-<div class='container-fluid'>
-    <h1>Available Sets</h1>
-    <p>Use the interface below to search for the sets you want. You can search by the series of any waifu in them or the
-        name of any waifu in them.</p>
-    <form id='searchform'>
-        <input type='text' name='query' placeholder='Enter search text here...' id='query'/><br/>
-        <input type='radio' name='type' value='waifuseries' checked/> Waifu Series <input type='radio' name='type'
-                                                                                          value='waifuname'/> Waifu Name
-    </form>
-    <div id='search-results-holder' class='sets-holder' style='display: none;'></div>
-    <div id='your-set-progress' style='display: none;'>
-        <hr/>
-        <h2>{NAME}'s Set Progress</h2>
-        Below are the claimable sets from which {NAME} owns one or more waifus.
-        <div id='set-progress-holder' class='sets-holder'>
-            <i>Loading...</i>
-        </div>
-    </div>
+<%
+    title = "Sets";
+    currentPage = "sets";
+_%>
+<% include includes/header %>
+<h1>Available Sets</h1>
+<p>Use the interface below to search for the sets you want. You can search by the series of any waifu in them or the
+    name of any waifu in them.</p>
+<form id='searchform'>
+    <input type='text' name='query' placeholder='Enter search text here...' id='query'/><br/>
+    <input type='radio' name='type' value='waifuseries' checked/> Waifu Series <input type='radio' name='type'
+                                                                                        value='waifuname'/> Waifu Name
+</form>
+<div id='search-results-holder' class='sets-holder' style='display: none;'></div>
+<div id='your-set-progress' style='display: none;'>
     <hr/>
-    <h2>All Sets</h2>
-    Click the button below to load a full list of all claimable sets.
-    <div id='all-sets-holder' class='sets-holder'>
-        <button class="btn btn-primary" id="load-allsets-button">Load Full Sets List</button>
+    <h2><%= user %>'s Set Progress</h2>
+    Below are the claimable sets from which <%= user %> owns one or more waifus.
+    <div id='set-progress-holder' class='sets-holder'>
+        <i>Loading...</i>
     </div>
-    <i>All images (c) to their original Artists. No Copyright claimed from the owner of this Website.</i>
 </div>
+<hr/>
+<h2>All Sets</h2>
+Click the button below to load a full list of all claimable sets.
+<div id='all-sets-holder' class='sets-holder'>
+    <button class="btn btn-primary" id="load-allsets-button">Load Full Sets List</button>
+</div>
+    
 <script>
     if (user === "null") {
         $("#navbartitle").html("Waifu TCG");
@@ -182,5 +136,5 @@
         }).removeClass("lazyload");
     });
 </script>
-</body>
-</html>
+
+<% include includes/footer %>

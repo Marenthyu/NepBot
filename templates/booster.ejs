@@ -1,0 +1,43 @@
+<%
+    title = "Booster";
+    currentPage = "booster";
+_%>
+<% include includes/header %>
+<div id='cards-grid'>
+    <% if(cards.length) { %>
+        <% cards.forEach(function(card) { %>
+            <% include includes/boostercard %>
+        <% }); %>
+    <% } else if(error) { %>
+        <%= error %>
+    <% } %>
+</div>
+<div id="output">
+    <input id="textField" onClick="this.select();document.execCommand('copy');" readonly
+                                        style="width: 75%"
+                                        type="text"
+                                        value="Click a checkbox to update this to the command to use to keep/disenchant the corresponding waifu"/>
+</div>
+<script>
+    function update() {
+        let elements = document.querySelectorAll('[type="checkbox"]');
+        textField = document.getElementById("textField");
+
+        actionString = "";
+        for (index = 0, len = elements.length; index < len; ++index) {
+            if (elements[index].checked) {
+                actionString += "k";
+            } else {
+                actionString += "d";
+            }
+        }
+        if (actionString.indexOf("k") == -1) {
+            textField.value = "!booster trash";
+        } else {
+            textField.value = "!booster select " + actionString;
+        }
+    }
+
+    setTimeout(update, 5000);
+</script>
+<% include includes/footer %>

@@ -1,0 +1,20 @@
+<%
+    rarity = getRarityName(card.rarity);
+%>
+<div class="card card-tcg card-<%= rarity %>">
+    <div class="card-body card-body-tcg">
+        <img src="<%= card.customImage || card.image %>" alt="<%= card.name %>" title="<%= card.name %>" class="card-image" />
+        <div class="id-holder rarity-<%= rarity %>"><%= card.id %></div>
+        <div class="invisible-space-holder">&nbsp;</div>
+        <div class="rarity-holder rarity-<%= rarity %>"><%= rarity %></div>
+        <% if(card.rarity > card.base_rarity) { %>
+            <div class="promotion-holder rarity-<%= rarity %>">
+                <%= "★".repeat(card.rarity - card.base_rarity) %>
+            </div>
+        <% } %>
+    </div>
+    <div class="card-footer text-center">
+        <%= card.name %><br />
+        <%= card.series %>
+    </div>
+</div>

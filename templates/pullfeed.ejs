@@ -1,0 +1,33 @@
+<% include includes/functions %> 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Waifu TCG Pull Feed</title>
+</head>
+<body>
+<% items.forEach(function(row) { %>
+    [<%= new Date(row.created).toISOString() %>] <%= row.username %> pulled <code>[<%= row.waifuID %>][<%= getRarityName(row.rarity) %>] <%= row.waifuName %> from <%= row.waifuSeries %></code>
+    <% if(row.source === 'freebie') { %>
+        as a free waifu
+    <% } else if (row.source === 'buy') { %>
+        using <code>!buy</code>
+    <% } else if (row.boostername) { %>
+        from a <%= row.boostername %> booster
+    <% } else { %>
+        from a mysterious unknown source
+    <% } %>
+
+    <% if(row.channel) { %>
+        <% if(row.channel === '$$whisper$$') { %>
+            via whisper.
+        <% } else { %>
+            in <%= row.channel.substring(1) %>&#39;s channel.
+        <% } %>
+    <% } else { %>
+        .
+    <% } %>
+    <br />
+<% }); %>
+</body>
+</html>

@@ -1,0 +1,20 @@
+<%
+    rarity = getRarityName(card.base_rarity);
+%>
+<div class="card card-tcg card-<%= rarity %>">
+    <div class="card-body card-body-tcg">
+        <img src="<%= card.image %>" alt="<%= card.name %>" title="<%= card.name %>" class="card-image" />
+        <div class="id-holder rarity-<%= rarity %>"><%= card.id %></div>
+        <div class="invisible-space-holder">&nbsp;</div>
+        <div class="rarity-holder rarity-<%= rarity %>"><%= rarity %></div>
+    </div>
+    <div class="card-footer text-center">
+        <div class="keep-box">
+            <input type="checkbox" onchange="update()" /><br />Keep?
+        </div>
+        <div class="card-info">
+            <%= card.name %><br />
+            <%= card.series %>
+        </div>
+    </div>
+</div>
