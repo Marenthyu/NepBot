@@ -72,10 +72,38 @@ function renderTemplateAndEnd(filename, vars, res) {
     })
 }
 
+function httpError(res, code, status, body) {
+    res.writeHead(code, status);
+    if(body) {
+        res.write(body);
+    }
+    res.end();
+}
+
+let rarities = {
+    0: "common",
+    1: "uncommon",
+    2: "rare",
+    3: "super",
+    4: "ultra",
+    5: "legendary",
+    6: "mythical",
+    7: "god",
+    8: "special",
+    9: "promo"
+};
+
+function getRarityName (number) {
+    if (number in rarities) {
+        return rarities[number];
+    } else {
+        return "unknown";
+    }
+}
+
 function hand(req, res, query) {
     if (!('user' in query)) {
-        res.writeHead(400, "Missing Parameter");
-        res.end();
+        httpError(res, 400, "Missing Parameter");
         return;
     }
 
@@ -142,8 +170,7 @@ function hand(req, res, query) {
 
 function booster(req, res, query) {
     if (!('user' in query)) {
-        res.writeHead(400, "Missing Parameter");
-        res.end();
+        httpError(res, 400, "Missing Parameter");
         return;
     }
 
@@ -214,7 +241,6 @@ function booster(req, res, query) {
 }
 
 function pullfeed(req, res, query) {
-
     con.query("SELECT cards.rarity, cards.source, boosters_opened.boostername, boosters_opened.channel, cards.created, waifus.id AS waifuID, waifus.name as waifuName, waifus.series AS waifuSeries, waifus.image AS waifuImage, users.name AS username " +
         "FROM cards JOIN waifus ON cards.waifuid = waifus.id JOIN users ON cards.originalOwner = users.id LEFT JOIN boosters_opened ON cards.originalBooster=boosters_opened.id WHERE cards.rarity >= 4 AND cards.source IN('booster', 'freebie', 'buy') ORDER BY cards.id DESC LIMIT 100", function (err, result) {
         if (err) throw err;
@@ -255,20 +281,17 @@ function api(req, res, query) {
     // Authentication
     let key = req.headers["x-waifus-api-key"];
     if (!key) {
-        res.writeHead(401, "Unauthorized");
-        res.end();
+        httpError(res, 401, "Unauthorized");
         return
     }
     con.query("SELECT * FROM api_keys WHERE `value` = ?", key, function (err, result) {
         if (err) throw err;
         if (result.length === 0) {
-            res.writeHead(401, "Unauthorized");
-            res.end();
+            httpError(res, 401, "Unauthorized");
             return
         }
         if (!('type' in query)) {
-            res.writeHead(400, "Missing Parameter");
-            res.end();
+            httpError(res, 400, "Missing Parameter");
             return;
         }
         if (query.type === 'wars') {
@@ -370,8 +393,7 @@ function api(req, res, query) {
 
 function profile(req, res, query) {
     if (!('user' in query)) {
-        res.writeHead(400, "Missing Parameter");
-        res.end();
+        httpError(res, 400, "Missing Parameter");
         return;
     }
     con.query("SELECT profileDescription, favourite, id, spending, paidHandUpgrades FROM users WHERE users.name = ?", query.user, function (err, resultOuter) {
@@ -430,6 +452,209 @@ function profile(req, res, query) {
 
 }
 
+function sets(req, res, query) {
+    let user = "";
+    if ('user' in query) {
+        user = query.user;
+    }
+    res.writeHead(200, {'Content-Type': 'text/html'});
+    renderTemplateAndEnd("templates/sets.ejs", {user: user}, res);
+}
+
+function setsdata(req, res, query) {
+    let hasUser = 'user' in query;
+
+    if (!('type' in query)) {
+        httpError(res, 400, "Missing Parameter", "Missing Parameter");
+        return;
+    }
+
+    if(query.type === 'progress' || query.type === 'claimed') {
+        if(!hasUser) {
+            httpError(res, 400, "Missing Parameter", "Missing Parameter");
+            return;
+        }
+    }
+    else if(query.type !== 'allsets') {
+        if (!('q' in query)) {
+            httpError(res, 400, "Missing Parameter", "Missing Parameter");
+            return;
+        }
+        if (query.q.length < 3) {
+            httpError(res, 400, "Bad Request", "Query string too short");
+            return;
+        }
+    }
+
+    let sets_query = "";
+    let parameters = "";
+
+    if(query.type === 'claimed') {
+        sets_query = "SELECT s.id, s.name, s.claimable, s.firstClaimer, s.lastClaimTime, uf.name AS firstClaimerName, s.rewardPoints, s.rewardPudding, scl.rewardPoints as pointsRecvd, scl.rewardPudding as puddingRecvd, scl.timestamp, b.image, (SELECT COUNT(*) FROM sets_claimed scc WHERE s.id=scc.setid) AS numClaims";
+        sets_query += " FROM sets AS s JOIN sets_claimed AS scl ON s.id = scl.setid JOIN users uc ON scl.userid=uc.id LEFT JOIN users uf ON s.firstClaimer = uf.id"
+        sets_query += " LEFT JOIN badges AS b ON s.badgeid=b.id";
+        sets_query += " WHERE uc.name = ?";
+        parameters = query.user;
+    }
+    else if(['waifuname', 'waifuseries', 'progress', 'allsets'].includes(query.type)) {
+        sets_query = "SELECT DISTINCT s.id, s.name, s.claimable, s.firstClaimer, s.lastClaimTime, uf.name AS firstClaimerName, s.rewardPoints, s.rewardPudding, b.image, (SELECT COUNT(*) FROM sets_claimed scc WHERE s.id=scc.setid) AS numClaims";
+        sets_query += " FROM sets AS s";
+        if(query.type === 'waifuname' || query.type === 'waifuseries') {
+            sets_query += " JOIN set_cards AS sca ON s.id = sca.setID JOIN waifus AS w ON sca.cardID=w.id";
+        }
+        if(query.type === 'progress') {
+            sets_query += " JOIN set_cards AS sca ON s.id = sca.setID JOIN cards AS c ON (sca.cardID = c.waifuid AND c.boosterid IS NULL) JOIN users AS up ON c.userid = up.id";
+        }
+        sets_query += " LEFT JOIN users uf ON s.firstClaimer = uf.id";
+        sets_query += " LEFT JOIN badges AS b ON s.badgeid=b.id";
+        sets_query += " WHERE s.claimable = 1";
+        parameters = [];
+        if(query.type === 'waifuname') {
+            sets_query += " AND w.name LIKE ?";
+            parameters.push("%"+query.q+"%");
+        }
+        if(query.type === 'waifuseries') {
+            sets_query += " AND w.series LIKE ?";
+            parameters.push("%"+query.q+"%");
+        }
+        if(query.type === 'progress') {
+            sets_query += " AND up.name = ?";
+            parameters.push(query.user);
+        }
+        if(hasUser) {
+            sets_query += " AND NOT EXISTS(SELECT * FROM sets_claimed AS scl JOIN users AS u ON scl.userid = u.id WHERE u.name = ? AND scl.setid = s.id)";
+            parameters.push(query.user);
+        }
+    }
+    else {
+        httpError(res, 400, "Bad Request", "Bad Request");
+        return;
+    }
+
+    con.query(sets_query, parameters, function(err, result) {
+        if(err) throw err;
+        let setsById = {};
+        let setIDs = [];
+        let checkOwnership = hasUser && query.type !== 'claimed';
+
+        for(let row of result) {
+            let set = {};
+            set["image"] = row.image || null;
+            set["id"] = row.id;
+            set["name"] = row.name;
+            set["rewardPoints"] = row.rewardPoints;
+            set["rewardPudding"] = row.rewardPudding;
+            set["totalCards"] = 0;
+            set["cardsOwned"] = 0;
+            set["cards"] = [];
+            set["row"] = row;
+            set["claimable"] = row.claimable;
+            setsById[row.id] = set;
+            setIDs.push(row.id);
+        }
+
+        if (setIDs.length > 0) {
+            let baseQuery = "";
+            let params2 = [];
+            if(checkOwnership) {
+                baseQuery = "SELECT setID, a.name AS userName, waifus.id AS waifuID, waifus.name AS waifuName, waifus.base_rarity AS waifuRarity, waifus.image AS waifuImage, waifus.series AS waifuSeries FROM set_cards LEFT JOIN (SELECT DISTINCT cards.waifuid, users.name FROM cards JOIN users ON cards.userid = users.id WHERE users.name = ? AND cards.boosterid IS NULL) AS a ON set_cards.cardID = a.waifuid JOIN waifus ON set_cards.cardID = waifus.id";
+                params2 = [query.user].concat(setIDs);
+            }
+            else {
+                baseQuery = "SELECT setID, NULL as userName, waifus.id AS waifuID, waifus.name AS waifuName, waifus.base_rarity AS waifuRarity, waifus.image AS waifuImage, waifus.series AS waifuSeries FROM set_cards JOIN waifus ON set_cards.cardID = waifus.id";
+                params2 = setIDs;
+            }
+            let inBinds = "?, ".repeat(setIDs.length).substring(0, setIDs.length * 3 - 2);
+            
+            con.query(baseQuery + " WHERE set_cards.setID IN(" + inBinds + ") ORDER BY waifuID", params2,
+                function (err, result2) {
+                    if (err) throw err;
+                    for (let row of result2) {
+                        let waifu = {
+                            id: row.waifuID,
+                            name: row.waifuName,
+                            rarity: getRarityName(row.waifuRarity),
+                            image: row.waifuImage,
+                            series: row.waifuSeries,
+                            owned: row.userName !== null
+                        };
+                        setsById[row.setID].cards.push(waifu);
+                        setsById[row.setID].totalCards += 1;
+                        if (waifu.owned) {
+                            setsById[row.setID].cardsOwned += 1;
+                        }
+                    }
+                    // Build actual response
+                    res.writeHead(200, {'Content-Type': 'text/json'});
+                    let response = {count: 0, sets: []};
+                    for (let setID in setsById) {
+                        let set = setsById[setID];
+                        let row = set.row;
+                        delete set.row;
+                        // Populate display strings in the data
+                        if(query.type === 'claimed') {
+                            set["claimedText"] = "Claimed "+moment(new Date(row.timestamp)).fromNow();
+                            if(row.pointsRecvd || row.puddingRecvd) {
+                                set["claimedText"] += " and received ";
+                                if(row.pointsRecvd) {
+                                    set["claimedText"] += row.pointsRecvd+" points";
+                                }
+                                else {
+                                    set["claimedText"] += row.puddingRecvd+" pudding";
+                                }
+                            }
+                        }
+                        if(!row.claimable) {
+                            set["claimableIcon"] = "cancel";
+                            set["claimableText"] = "Not currently claimable";
+                        }
+                        else if(row.lastClaimTime && new Date(row.lastClaimTime + config.setCooldownDays*86400000) > Date.now()) {
+                            set["claimableIcon"] = "watch_later";
+                            set["claimableText"] = "Claimable in "+moment(new Date(row.lastClaimTime + config.setCooldownDays*86400000)).fromNow();
+                        }
+                        else {
+                            set["claimableIcon"] = (checkOwnership && set.cardsOwned == set.totalCards) ? "done_all" : "done";
+                            set["claimableText"] = "Currently claimable";
+                        }
+                        if(row.claimable && checkOwnership) {
+                            if(set.cardsOwned == set.totalCards) {
+                                set["claimableText"] += " (all cards obtained)";
+                            }
+                            else {
+                                set["claimableText"] += " ("+(set.totalCards - set.cardsOwned)+" cards missing)";
+                            }
+                        }
+                        if(row.numClaims == 0) {
+                            set["numClaimsText"] = "No claims yet";
+                        }
+                        else if(row.numClaims == 1) {
+                            set["numClaimsText"] = "One claim by "+row.firstClaimerName;
+                        }
+                        else {
+                            set["numClaimsText"] = row.numClaims+" claims, first claimer was "+row.firstClaimerName;
+                        }
+                        response.count += 1;
+                        response.sets.push(set);
+                    }
+                    response.sets.sort(
+                        function (a, b) {
+                            let aValue = a.cardsOwned === 0 ? 9999999 : a.totalCards - a.cardsOwned;
+                            let bValue = b.cardsOwned === 0 ? 9999999 : b.totalCards - b.cardsOwned;
+                            return (aValue !== bValue) ? aValue - bValue : a.name.localeCompare(b.name);
+                        });
+                    res.write(JSON.stringify(response));
+                    res.end();
+
+                })
+        } else {
+            res.writeHead(200, {'Content-Type': 'text/json'});
+            res.write(JSON.stringify({count: 0, sets: []}));
+            res.end();
+
+        }
+    });
+}
+
 function readConfig(callback) {
     config = {};
     con.query("SELECT * FROM config", function (err, result) {
@@ -457,6 +682,14 @@ function bootServer(callback) {
                 }
                 case "booster": {
                     booster(req, res, q.query);
+                    break;
+                }
+                case "sets": {
+                    sets(req, res, q.query);
+                    break;
+                }
+                case "setsdata": {
+                    setsdata(req, res, q.query);
                     break;
                 }
                 case "help": {

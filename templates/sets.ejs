@@ -3,29 +3,50 @@
     currentPage = "sets";
 _%>
 <% include includes/header %>
-<h1>Available Sets</h1>
-<p>Use the interface below to search for the sets you want. You can search by the series of any waifu in them or the
-    name of any waifu in them.</p>
-<form id='searchform'>
-    <input type='text' name='query' placeholder='Enter search text here...' id='query'/><br/>
-    <input type='radio' name='type' value='waifuseries' checked/> Waifu Series <input type='radio' name='type'
-                                                                                        value='waifuname'/> Waifu Name
-</form>
-<div id='search-results-holder' class='sets-holder' style='display: none;'></div>
-<div id='your-set-progress' style='display: none;'>
-    <hr/>
-    <h2><%= user %>'s Set Progress</h2>
-    Below are the claimable sets from which <%= user %> owns one or more waifus.
-    <div id='set-progress-holder' class='sets-holder'>
-        <i>Loading...</i>
+<h1>Claimable Sets</h1>
+<ul class="nav nav-tabs" id="availableSetTabs" role="tablist">
+    <li class="nav-item">
+        <a class="nav-link active" id="search-tab" data-toggle="tab" href="#search" role="tab" aria-controls="search" aria-selected="true">Search Sets</a>
+    </li>
+    <% if(user) { %>
+        <li class="nav-item">
+            <a class="nav-link" id="progress-tab" data-toggle="tab" href="#progress" role="tab" aria-controls="progress" aria-selected="false">Sets with Progress</a>
+        </li>
+    <% } %>
+    <li class="nav-item">
+        <a class="nav-link" id="all-tab" data-toggle="tab" href="#all" role="tab" aria-controls="all" aria-selected="false">All Claimable Sets</a>
+    </li>
+</ul>
+<div class="tab-content" id="availableSetTabsContent">
+    <div class="tab-pane fade show active" id="search" role="tabpanel" aria-labelledby="search-tab">
+        <p>Use the interface below to search for the sets you want. You can search by the series of any waifu in them or the
+        name of any waifu in them.</p>
+        <form id='searchform'>
+            <input type='text' name='query' placeholder='Enter search text here...' id='query'/><br/>
+            <input type='radio' name='type' value='waifuseries' checked/> Waifu Series <input type='radio' name='type'
+                                                                                                value='waifuname'/> Waifu Name
+        </form>
+        <div id='search-results-holder' class='sets-holder' style='display: none;'></div>
+    </div>
+    <% if(user) { %>
+        <div class="tab-pane fade" id="progress" role="tabpanel" aria-labelledby="progress-tab">
+            <h2><%= user %>'s Set Progress</h2>
+            Below are the claimable sets from which <%= user %> owns one or more waifus.
+            <div id='set-progress-holder' class='sets-holder'>
+                <i>Loading...</i>
+            </div>
+        </div>
+    <% } %>
+    <div class="tab-pane fade" id="all" role="tabpanel" aria-labelledby="all-tab">
+        <h2>All Sets</h2>
+        Click the button below to load a full list of all claimable sets<% if(user) { %> that <%= user %> has not yet claimed<% } %>.
+        <div id='all-sets-holder' class='sets-holder'>
+            <button class="btn btn-primary" id="load-allsets-button">Load Full Sets List</button>
+        </div>
     </div>
 </div>
 <hr/>
-<h2>All Sets</h2>
-Click the button below to load a full list of all claimable sets.
-<div id='all-sets-holder' class='sets-holder'>
-    <button class="btn btn-primary" id="load-allsets-button">Load Full Sets List</button>
-</div>
+
     
 <script>
     let uniqid = 0;
