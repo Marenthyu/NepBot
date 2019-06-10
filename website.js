@@ -389,7 +389,7 @@ function profile(req, res, query) {
         res.end();
         return;
     }
-    con.query("SELECT profileDescription, favourite, id FROM users WHERE users.name = ?", query.user, function (err, resultOuter) {
+    con.query("SELECT profileDescription, favourite, id, spending, paidHandUpgrades FROM users WHERE users.name = ?", query.user, function (err, resultOuter) {
         if (err) throw err;
         if (resultOuter.length === 0) {
             res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
@@ -401,6 +401,8 @@ function profile(req, res, query) {
             return;
         }
         let userID = resultOuter[0].id;
+        let spending = resultOuter[0].spending;
+        let paidSlots = resultOuter[0].paidHandUpgrades;
         con.query("SELECT badges.name, badges.description, badges.image FROM has_badges JOIN badges ON has_badges.badgeID =" +
             " badges.id JOIN users ON has_badges.userID = users.id WHERE users.id = ?", userID, function (err, result) {
             if (err) throw err;
@@ -412,52 +414,41 @@ function profile(req, res, query) {
 
                 row.amount = 1;
                 row.rarity = (row.rarity && row.rarity > row.base_rarity) ? row.rarity : row.base_rarity;
-
-                con.query("SELECT spending FROM users WHERE id = ?", userID, function (err, resultInnermost) {
+                con.query("SELECT slot, spendings FROM handupgrades", userID, function (err, huLUTresult) {
                     if (err) throw err;
-                    let spending = 0;
-                    spending = resultInnermost[0].spending;
-                    con.query("SELECT slot, spendings, (SELECT paidHandUpgrades FROM users WHERE id = ?) as paidSlots FROM handupgrades", userID, function (err, huLUTresult) {
-                        if (err) throw err;
 
-                        let nextspendings = 0;
-                        let lastspendings = 0;
+                    let nextspendings = 0;
+                    let lastspendings = 0;
 
-                        let paidSlots = huLUTresult[0].paidSlots;
+                    if (paidSlots + 1 < huLUTresult.length) {
+                        nextspendings = huLUTresult[paidSlots + 1].spendings;
+                        lastspendings = huLUTresult[paidSlots].spendings;
+                    } else {
+                        nextspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1) + 1));
+                        lastspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1)));
+                    }
+                    let percentspendings = Math.max(((spending - lastspendings) / (nextspendings - lastspendings)) * 100, 0);
 
-                        if (paidSlots + 1 < huLUTresult.length) {
-                            nextspendings = huLUTresult[paidSlots + 1].spendings;
-                            lastspendings = huLUTresult[paidSlots].spendings;
-                        } else {
-                            nextspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1) + 1));
-                            lastspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1)));
-                        }
-                        let percentspendings = Math.max(((spending - lastspendings) / (nextspendings - lastspendings)) * 100, 0);
+                    let vars = {
+                        badges: result,
+                        description: resultOuter[0].profileDescription,
+                        favourite: row,
+                        nextspendings: nextspendings,
+                        lastspendings: lastspendings,
+                        currentspendings: spending,
+                        percentspendings: percentspendings,
+                        user: query.user,
+                        error: "",
+                    };
 
-                        let vars = {
-                            badges: result,
-                            description: resultOuter[0].profileDescription,
-                            favourite: row,
-                            nextspendings: nextspendings,
-                            lastspendings: lastspendings,
-                            currentspendings: spending,
-                            percentspendings: percentspendings,
-                            user: query.user,
-                            error: "",
-                        };
-
-                        
-                        ejs.renderFile("templates/profile.ejs", vars, {}, function(err,str) {
-                            if(err){ throw err; }
-                            res.write(str);
-                            res.end(); 
-                        });
-
-                    })
-                })
-
+                    
+                    ejs.renderFile("templates/profile.ejs", vars, {}, function(err,str) {
+                        if(err){ throw err; }
+                        res.write(str);
+                        res.end(); 
+                    });
+                });
             });
-
         });
     });
 
