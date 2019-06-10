@@ -414,7 +414,7 @@ function profile(req, res, query) {
 
                 row.amount = 1;
                 row.rarity = (row.rarity && row.rarity > row.base_rarity) ? row.rarity : row.base_rarity;
-                con.query("SELECT slot, spendings FROM handupgrades", userID, function (err, huLUTresult) {
+                con.query("SELECT slot, spendings FROM handupgrades", function (err, huLUTresult) {
                     if (err) throw err;
 
                     let nextspendings = 0;
