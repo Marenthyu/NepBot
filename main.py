@@ -2772,7 +2772,7 @@ class NepBot(NepBotClass):
                         
                         # check that cards are still in place and owned by us
                         if want['userid'] is None or want['userid'] != ourid or have['userid'] is None or have['userid'] != otherid:
-                            self.message("%s, one or more of the cards involved in the trade are no longer in their owners hands. Trade cancelled." % tags['display-name'], isWhisper)
+                            self.message(channel, "%s, one or more of the cards involved in the trade are no longer in their owners hands. Trade cancelled." % tags['display-name'], isWhisper)
                             cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                             return
 
