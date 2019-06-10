@@ -69,7 +69,7 @@ function hand(req, res, query) {
         return;
     }
 
-    con.query("SELECT waifus.*, cards.rarity, cards.customImage, cards.id as cardid FROM waifus JOIN cards ON waifus.id = cards.waifuid JOIN users ON " +
+    con.query("SELECT waifus.*, cards.rarity, cards.customImage, cards.id as cardid, cards.tradeableAt FROM waifus JOIN cards ON waifus.id = cards.waifuid JOIN users ON " +
         "cards.userid = users.id WHERE users.name = ? AND cards.boosterid IS NULL ORDER BY (cards.rarity < 8) DESC, waifus.id ASC, cards.rarity ASC", query.user, function (err, result) {
         if (err) throw err;
         let wantJSON = false;
@@ -412,7 +412,7 @@ function profile(req, res, query) {
             " badges.id JOIN users ON has_badges.userID = users.id WHERE users.id = ?", userID, function (err, result) {
             if (err) throw err;
             res.writeHead(200, {'Content-Type': 'text/html'});
-            con.query("SELECT waifus.id, waifus.name, waifus.image, waifus.base_rarity, waifus.series, cards.rarity, cards.customImage, cards.id AS cardid FROM waifus LEFT JOIN cards ON (cards.waifuid = waifus.id AND cards.userid = ? AND cards.boosterid IS NULL) WHERE waifus.id = ? ORDER BY cards.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
+            con.query("SELECT waifus.id, waifus.name, waifus.image, waifus.base_rarity, waifus.series, cards.rarity, cards.customImage FROM waifus LEFT JOIN cards ON (cards.waifuid = waifus.id AND cards.userid = ? AND cards.boosterid IS NULL) WHERE waifus.id = ? ORDER BY cards.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
                 if (err) throw err;
 
                 let row = resultInner[0];

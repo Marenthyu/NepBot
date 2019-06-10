@@ -14,7 +14,27 @@
         <% } %>
     </div>
     <div class="card-footer text-center">
-        <%= card.name %><br />
-        <%= card.series %>
+        <div class="card-info">
+            <%= card.name %><br />
+            <%= card.series %>
+            <% if(card.cardid) { %>
+                <div class="collapse cardExtraInfo" id="card<%= card.cardid %>ExtraInfo" data-cardid="<%= card.cardid %>">
+                    Card ID: <%= card.cardid %><br />
+                    <% if(card.rarity == 8) { %>
+                        Non-tradeable
+                    <% } else if(card.tradeableAt && card.tradeableAt > Date.now()) { %>
+                        Non-tradeable until <%= new Date(card.tradeableAt).toISOString() %>
+                    <% } else { %>
+                        Tradeable
+                    <% } %>
+                </div>
+            <% } %>
+        </div>
+        <% if(card.cardid) { %>
+            <div class="expand-box">
+                <i class="material-icons collapse-toggler" data-toggle="collapse" data-target="#card<%= card.cardid %>ExtraInfo" id="card<%= card.cardid %>Toggler">expand_more</i>
+            </div>
+        <% } %>
+        
     </div>
 </div>

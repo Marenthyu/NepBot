@@ -129,6 +129,13 @@ nav {
 
 .card-footer {
     overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+
+.card-footer .card-info {
+    overflow: hidden;
+    flex-grow: 1;
 }
 
 .card-footer .owned-icon {
@@ -142,8 +149,18 @@ nav {
     margin-right: 10px;
 }
 
+.card-footer .expand-box {
+    float: right;
+    margin-left: 10px;
+    width: 20px;
+}
+
 .card-footer .card-info {
     overflow: hidden;
+}
+
+.card-footer .collapse-toggler {
+    cursor: pointer;
 }
 
 .owned {
