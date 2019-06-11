@@ -224,3 +224,53 @@ nav {
         color: black;
         margin: 0 auto;
 }
+
+#card-template {
+    display: none;
+}
+
+#set-template {
+    display: none;
+}
+
+.set-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.set-header .col {
+    width: calc(100%/3);
+}
+
+.set-header .image-title {
+    display: flex;
+    align-items: center;
+}
+
+.set-header .set-title {
+    font-size: 200%;
+    font-weight: bold;
+}
+
+.set-header .set-image {
+    height: 50px;
+    width: 50px;
+    padding: 0;
+    margin-right: 20px;
+}
+
+.set-header .set-image img {
+    height: 50px;
+    width: 50px;
+}
+
+.info-row {
+    display: inline-flex;
+    align-items: center;
+}
+
+.info-row span {
+    margin-right: 10px;
+}
+

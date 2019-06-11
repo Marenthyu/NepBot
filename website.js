@@ -462,7 +462,7 @@ function sets(req, res, query) {
 }
 
 function setsdata(req, res, query) {
-    let hasUser = 'user' in query;
+    let hasUser = 'user' in query && query.user;
 
     if (!('type' in query)) {
         httpError(res, 400, "Missing Parameter", "Missing Parameter");
@@ -491,7 +491,7 @@ function setsdata(req, res, query) {
 
     if(query.type === 'claimed') {
         sets_query = "SELECT s.id, s.name, s.claimable, s.firstClaimer, s.lastClaimTime, uf.name AS firstClaimerName, s.rewardPoints, s.rewardPudding, scl.rewardPoints as pointsRecvd, scl.rewardPudding as puddingRecvd, scl.timestamp, b.image, (SELECT COUNT(*) FROM sets_claimed scc WHERE s.id=scc.setid) AS numClaims";
-        sets_query += " FROM sets AS s JOIN sets_claimed AS scl ON s.id = scl.setid JOIN users uc ON scl.userid=uc.id LEFT JOIN users uf ON s.firstClaimer = uf.id"
+        sets_query += " FROM sets AS s JOIN sets_claimed AS scl ON s.id = scl.setid JOIN users AS uc ON scl.userid=uc.id LEFT JOIN users AS uf ON s.firstClaimer = uf.id"
         sets_query += " LEFT JOIN badges AS b ON s.badgeid=b.id";
         sets_query += " WHERE uc.name = ?";
         parameters = query.user;
@@ -505,7 +505,7 @@ function setsdata(req, res, query) {
         if(query.type === 'progress') {
             sets_query += " JOIN set_cards AS sca ON s.id = sca.setID JOIN cards AS c ON (sca.cardID = c.waifuid AND c.boosterid IS NULL) JOIN users AS up ON c.userid = up.id";
         }
-        sets_query += " LEFT JOIN users uf ON s.firstClaimer = uf.id";
+        sets_query += " LEFT JOIN users AS uf ON s.firstClaimer = uf.id";
         sets_query += " LEFT JOIN badges AS b ON s.badgeid=b.id";
         sets_query += " WHERE s.claimable = 1";
         parameters = [];
@@ -610,7 +610,7 @@ function setsdata(req, res, query) {
                         }
                         else if(row.lastClaimTime && new Date(row.lastClaimTime + config.setCooldownDays*86400000) > Date.now()) {
                             set["claimableIcon"] = "watch_later";
-                            set["claimableText"] = "Claimable in "+moment(new Date(row.lastClaimTime + config.setCooldownDays*86400000)).fromNow();
+                            set["claimableText"] = "On cooldown, claimable in "+moment(new Date(row.lastClaimTime + config.setCooldownDays*86400000)).fromNow();
                         }
                         else {
                             set["claimableIcon"] = (checkOwnership && set.cardsOwned == set.totalCards) ? "done_all" : "done";
@@ -642,7 +642,7 @@ function setsdata(req, res, query) {
                             let bValue = b.cardsOwned === 0 ? 9999999 : b.totalCards - b.cardsOwned;
                             return (aValue !== bValue) ? aValue - bValue : a.name.localeCompare(b.name);
                         });
-                    res.write(JSON.stringify(response));
+                    res.write(JSON.stringify(response, null, 2));
                     res.end();
 
                 })
