@@ -12,12 +12,16 @@ function populateSets(destination, data, emptyString, type) {
     uniqid += 1;
     let buttons = "";
     let content = "";
-    buttonTemplate = '<button class="btn btn-primary btn-set" type="button" data-toggle="collapse" data-target="#set{ID}-{UNIQ}" aria-expanded="false" aria-controls="set{ID}-{UNIQ}">{TITLE}</button>&nbsp;';
+    buttonTemplate='<li class="nav-item"><a class="nav-link{ACTIVE}" id="tab-{SRID}" data-toggle="tab" href="#{SRID}" role="tab" aria-controls="{SRID}" aria-selected="{FIRST}">{TITLE}</a></li>';
     let setRows = [];
+    let first = true;
     for (set of data.sets) {
         let setRow = $("#set-template").clone();
         let setRowID = "set"+set.id+"-"+uniqid;
         setRow.attr("id", setRowID);
+        if(first) {
+            setRow.addClass("show active");
+        }
         if(set.image) {
             let setImageHolder = setRow.find(".set-image");
             setImageHolder.html("<img class='lazyload rounded-circle' />");
@@ -48,7 +52,7 @@ function populateSets(destination, data, emptyString, type) {
         setRow.find(".claimable-status-icon").text(set.claimableIcon);
         setRow.find(".claimable-status").text(set.claimableText);
         title = (user !== "" && type !== "claimed") ? set.name + " (" + set.cardsOwned + "/" + set.totalCards + ")" : set.name;
-        buttons += buttonTemplate.replace(/{ID}/g, set.id).replace(/{UNIQ}/g, uniqid).replace(/{TITLE}/g, title);
+        buttons += buttonTemplate.replace(/{SRID}/g, setRowID).replace(/{ACTIVE}/g, first ? " active" : "").replace(/{FIRST}/g, ""+first).replace(/{TITLE}/g, title);
         for (row of set.cards) {
             let cardRow = $("#card-template").clone();
             cardRow.attr("id", "card"+row.id+"-"+set.id+"-"+uniqid);
@@ -65,10 +69,11 @@ function populateSets(destination, data, emptyString, type) {
             setRow.find(".set-cards").append(cardRow);
         }
         setRows.push(setRow);
+        first = false;
     }
-    $(destination).html("<p>" + data.count + " set(s) found.</p><p>" + buttons + "</p><div id='sets-"+uniqid+"'>&nbsp;</div>");
+    $(destination).html("<p>" + data.count + " set(s) found.</p><ul class='nav nav-tabs' id='sets-"+uniqid+"' role='tablist'>" + buttons + "</ul><div class='tab-content' id='sets-"+uniqid+"Content'></div>");
     for(let setRow of setRows) {
-        setRow.appendTo("#sets-"+uniqid);
+        setRow.appendTo("#sets-"+uniqid+"Content");
     }
 }
 
@@ -104,7 +109,7 @@ if (user !== "") {
         populateSets("#set-progress-holder", data, "This user doesn't own any cards in any unclaimed sets right now.", "progress");
     }, 'json');
     $.get("/setsdata", {type: "claimed", user: user}, function (data) {
-        populateSets("#claimed-sets-holder", data, "This user doesn't own any cards in any unclaimed sets right now.", "claimed");
+        populateSets("#claimed-sets-holder", data, "This user hasn't claimed any sets yet.", "claimed");
     }, 'json');
 }
 $("#load-allsets-button").click(function () {

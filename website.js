@@ -610,7 +610,7 @@ function setsdata(req, res, query) {
                         }
                         else if(row.lastClaimTime && new Date(row.lastClaimTime + config.setCooldownDays*86400000) > Date.now()) {
                             set["claimableIcon"] = "watch_later";
-                            set["claimableText"] = "On cooldown, claimable in "+moment(new Date(row.lastClaimTime + config.setCooldownDays*86400000)).fromNow();
+                            set["claimableText"] = "On cooldown, claimable "+moment(new Date(row.lastClaimTime + config.setCooldownDays*86400000)).fromNow();
                         }
                         else {
                             set["claimableIcon"] = (checkOwnership && set.cardsOwned == set.totalCards) ? "done_all" : "done";
