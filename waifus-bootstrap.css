@@ -251,6 +251,11 @@ nav {
 .set-header .set-title {
     font-size: 200%;
     font-weight: bold;
+    margin-right: 20px;
+}
+
+.set-header .set-id {
+    font-style: italic;
 }
 
 .set-header .set-image {

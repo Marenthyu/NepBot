@@ -28,6 +28,7 @@ function populateSets(destination, data, emptyString, type) {
             setImageHolder.find("img").attr("data-src", set.image).attr("alt", set.title).attr("title", set.title);
         }
         setRow.find(".set-title").text(set.name);
+        setRow.find(".set-id").text("ID: "+set.id);
         setRow.find(".claim-info").text(set.numClaimsText);
         if(set.claimable) {
             let rewards = [];
