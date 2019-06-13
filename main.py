@@ -15,7 +15,7 @@ import math
 import functools
 from string import ascii_letters
 from collections import defaultdict, OrderedDict
-from private_functions import validateImageURL, processImageURL, tokenGachaRoll
+from private_functions import validateWaifuURL, processWaifuURL, validateBadgeURL, processBadgeURL
 
 import sys
 import re
@@ -4481,6 +4481,170 @@ class NepBot(NepBotClass):
                 else:
                     self.message(channel, "Usage: !sets OR !sets claim OR !sets checkid <set name>", isWhisper)
                     return
+            if command == "setbadge":
+                canManageImages = sender in superadmins
+                if len(args) < 1:
+                    if canManageImages:
+                        self.message(channel, "Usage: !setbadge change / queue / check / accept / reject", isWhisper)
+                    else:
+                        self.message(channel, "Usage: !setbadge change / list / cancel", isWhisper)
+                    return
+                subcmd = args[0].lower()
+                if subcmd in ["change", "request"]:
+                    if len(args) < 3:
+                        self.message(channel, "Usage: !setbadge change <id> <link>", isWhisper)
+                        return
+
+                    with db.cursor(pymysql.cursors.DictCursor) as cur:
+                        cur.execute("SELECT id, name, firstClaimer, badgeid FROM sets WHERE id = %s", args[1])
+                        setData = cur.fetchone()
+
+                        if setData is None:
+                            self.message(channel, "Invalid set ID.", isWhisper)
+                            return
+
+                        if setData["firstClaimer"] is None or int(setData["firstClaimer"]) != int(tags['user-id']):
+                            self.message(channel, "You aren't the first claimer of %s!" % setData["name"], isWhisper)
+                            return
+
+                        if canManageImages:
+                            # automatically do the change
+                            try:
+                                hostedURL = processBadgeURL(args[2])
+                            except Exception as ex:
+                                self.message(channel, "Could not process image. %s" % str(ex), isWhisper)
+                                return
+                                
+                            cur.execute("UPDATE badges SET image = %s WHERE id = %s", [hostedURL, setData["badgeid"]])
+
+                            # log the change for posterity
+                            insertArgs = [tags['user-id'], setData["id"], args[2], tags['user-id'], current_milli_time()]
+                            cur.execute("INSERT INTO setbadge_requests (requesterid, setid, image, state, moderatorid, created) VALUES(%s, %s, %s, 'auto_accepted', %s, %s)", insertArgs)
+
+                            self.message(channel, "Set badge change processed successfully.", isWhisper)
+                            return
+                        else:
+                            try:
+                                validateBadgeURL(args[2])
+                            except ValueError as ex:
+                                self.message(channel, "Invalid link specified. %s" % str(ex), isWhisper)
+                                return
+                            except Exception:
+                                self.message(channel, "There was an unknown problem with the link you specified. Please try again later.", isWhisper)
+                                return
+                            # cancel any old pending requests for this set
+                            cur.execute("UPDATE setbadge_requests SET state = 'cancelled', updated = %s WHERE setid = %s AND state = 'pending'", [current_milli_time(), setData["id"]])
+
+                            # record a new request
+                            insertArgs = [tags['user-id'], setData["id"], args[2], current_milli_time()]
+                            cur.execute("INSERT INTO setbadge_requests (requesterid, setid, image, state, created) VALUES(%s, %s, %s, 'pending', %s)", insertArgs)
+
+                            # notify the discordhook of the new request
+                            discordArgs = {"user": tags['display-name'], "setid": setData["id"], "name": setData["name"], "image": args[2]}
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "{user} requested a set badge change for {name} to <{image}>!\nUse `!setbadge check {setid}` in any chat to check it.".format(**discordArgs)
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+
+                            self.message(channel, "Your request has been placed. You will be notified when bot staff accept or decline it.", isWhisper)
+                            return
+                elif subcmd == "list":
+                    with db.cursor() as cur:
+                        cur.execute("SELECT sets.id, sets.name FROM setbadge_requests sr JOIN sets ON sr.setid=sets.id WHERE sr.requesterid = %s AND sr.state = 'pending'", [tags['user-id']])
+                        reqs = cur.fetchall()
+
+                        if len(reqs) == 0:
+                            self.message(channel, "You don't have any pending set badge change requests.", isWhisper)
+                        else:
+                            reqList = ", ".join(["[%d] %s" % (req[0], req[1]) for req in reqs])
+                            self.message(channel, "%s, you have pending set badge change requests for: %s." % (tags['display-name'], reqList), isWhisper)
+                        
+                        return
+                elif subcmd == "cancel":
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !setbadge cancel <id>", isWhisper)
+                        return
+                    with db.cursor() as cur:
+                        cur.execute("UPDATE setbadge_requests SET state = 'cancelled', updated = %s WHERE setid = %s AND state = 'pending'", [current_milli_time(), args[1]])
+                        if cur.rowcount > 0:
+                            # send discord notif
+                            cur.execute("SELECT name FROM sets WHERE id = %s", [args[1]])
+                            setName = cur.fetchone()[0]
+                            discordArgs = {"user": tags['display-name'], "id": args[1], "name": setName}
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "{user} cancelled their badge change request for [{id}] {name}.".format(**discordArgs)
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                            self.message(channel, "You cancelled your badge change request for [%d] %s." % (args[1], setName), isWhisper)
+                        else:
+                            self.message(channel, "You didn't have a pending badge change request for that set.", isWhisper)
+                        return
+                elif subcmd == "queue" and canManageImages:
+                    with db.cursor() as cur:
+                        cur.execute("SELECT setid FROM setbadge_requests WHERE state = 'pending' ORDER BY created ASC")
+                        queue = cur.fetchall()
+                        if len(queue) == 0:
+                            self.message(channel, "The request queue is currently empty.", isWhisper)
+                        else:
+                            queueStr = ", ".join(str(item[0]) for item in queue)
+                            self.message(channel, "Current requested IDs for set badge changes: %s. !setbadge check <id> to see each request." % queueStr, isWhisper)
+                        return
+                elif canManageImages and subcmd in ["check", "accept", "reject"]:
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !setbadge %s <set id>" % subcmd, isWhisper)
+                        return
+                    try:
+                        setid = int(args[1])
+                    except ValueError:
+                        self.message(channel, "Usage: !setbadge %s <set id>" % subcmd, isWhisper)
+                        return
+                    with db.cursor() as cur:
+                        cur.execute("SELECT sr.id, sr.image, users.id, users.name, sets.id, sets.name, sets.badgeid FROM setbadge_requests sr"
+                        + " JOIN sets ON sr.setid = sets.id"
+                        + " JOIN users ON sr.requesterid = users.id"
+                        + " WHERE sr.setid = %s AND sr.state = 'pending'", [setid])
+                        request = cur.fetchone()
+                        if request is None:
+                            self.message(channel, "There is no pending request for that set.", isWhisper)
+                            return
+
+                        if subcmd == "check":
+                            msgArgs = {"user": request[3], "setid": request[4], "name": request[5], "image": request[1]}
+                            self.message(channel, ("{user} requested {name}'s set badge image to be changed to {image} ." + 
+                            " You can accept this request with !setbadge accept {setid}" +
+                            " or deny it with !setbadge reject {setid} <reason>.").format(**msgArgs), isWhisper)
+                        elif subcmd == "reject":
+                            if len(args) < 3:
+                                self.message(channel, "You must provide a reason to reject the request. If it is porn/illegal/etc, just ban the user.", isWhisper)
+                                return
+                            rejectionReason = " ".join(args[2:])
+                            queryArgs = [tags['user-id'], current_milli_time(), rejectionReason, request[0]]
+                            cur.execute("UPDATE setbadge_requests SET state = 'rejected', moderatorid = %s, updated = %s, rejection_reason = %s WHERE id = %s", queryArgs)
+
+                            # notify them
+                            self.message("#%s" % request[3], "Your badge change request for %s was rejected with the following reason: %s" % (request[5], rejectionReason), True)
+
+                            self.message(channel, "Request rejected and user notified.", isWhisper)
+                        else:
+                            # update it
+                            try:
+                                hostedURL = processBadgeURL(request[1])
+                            except Exception as ex:
+                                self.message(channel, "Could not process image. %s. Check the URL yourself and if it is invalid reject their request." % str(ex), isWhisper)
+                                return
+
+                            cur.execute("UPDATE badges SET image = %s WHERE id = %s", [hostedURL, request[6]])
+
+                            queryArgs = [tags['user-id'], current_milli_time(), request[0]]
+                            cur.execute("UPDATE setbadge_requests SET state = 'accepted', moderatorid = %s, updated = %s WHERE id = %s", queryArgs)
+
+                            # notify them
+                            self.message("#%s" % request[3], "Your set badge change request for %s was accepted." % request[5], True)
+
+                            self.message(channel, "Request accepted. The new set badge for %s is %s" % (request[5], hostedURL), isWhisper)
+                        return
             if command == "debug" and sender in superadmins:
                 if debugMode:
                     updateBoth("Hyperdimension Neptunia", "Testing title updates.")
@@ -5367,7 +5531,7 @@ class NepBot(NepBotClass):
                         if canManageImages:
                             # automatically do the change
                             try:
-                                hostedURL = processImageURL(args[2])
+                                hostedURL = processWaifuURL(args[2])
                             except Exception as ex:
                                 self.message(channel, "Could not process image. %s" % str(ex), isWhisper)
                                 return
@@ -5382,7 +5546,7 @@ class NepBot(NepBotClass):
                             return
                         else:
                             try:
-                                validateImageURL(args[2])
+                                validateWaifuURL(args[2])
                             except ValueError as ex:
                                 self.message(channel, "Invalid link specified. %s" % str(ex), isWhisper)
                                 return
@@ -5501,7 +5665,7 @@ class NepBot(NepBotClass):
                         else:
                             # update it
                             try:
-                                hostedURL = processImageURL(request[1])
+                                hostedURL = processWaifuURL(request[1])
                             except Exception as ex:
                                 self.message(channel, "Could not process image. %s. Check the URL yourself and if it is invalid reject their request." % str(ex), isWhisper)
                                 return
