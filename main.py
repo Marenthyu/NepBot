@@ -835,7 +835,7 @@ def getWaifuRepresentationString(waifuid, baserarity=None, cardrarity=None, waif
 
     return retStr
 
-def sendSetAlert(channel, user, name, waifus, reward, discord=True):
+def sendSetAlert(channel, user, name, waifus, reward, firstTime, discord=True):
     logger.info("Alerting for set claim %s", name)
     with busyLock:
         with db.cursor() as cur:
@@ -855,7 +855,7 @@ def sendSetAlert(channel, user, name, waifus, reward, discord=True):
 
     discordbody = {"username": "Waifu TCG", "embeds": [
         {
-            "title": "A set has been completed!",
+            "title": "A set has been completed%s!" % (" for the first time" if firstTime else ""),
             "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"])
         },
         {
@@ -3147,7 +3147,7 @@ class NepBot(NepBotClass):
                         if isSet:
                             threading.Thread(target=sendSetAlert, args=(
                                 sender, sender, "Test Set", ["Neptune", "Nepgear", "Some other test waifu"], "0 pudding",
-                                False)).start()
+                                False, False)).start()
                         else:
                             threading.Thread(target=sendDrawAlert, args=(
                                 sender, {"name": "Test Alert, please ignore", "base_rarity": rarity,
@@ -4458,7 +4458,7 @@ class NepBot(NepBotClass):
                             cur.execute("SELECT waifus.name FROM set_cards INNER JOIN waifus ON set_cards.cardID = waifus.id WHERE setID = %s", [row["id"]])
                             cards = [sc["name"] for sc in cur.fetchall()]
                             threading.Thread(target=sendSetAlert,
-                                         args=(channel, tags["display-name"], row["name"], cards, reward)).start()
+                                         args=(channel, tags["display-name"], row["name"], cards, reward, first)).start()
 
                         if claimable == 0:
                             self.message(channel, "You do not have any completed sets that are available to be claimed. !sets to check progress.", isWhisper)
