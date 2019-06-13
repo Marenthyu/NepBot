@@ -596,7 +596,10 @@ function setsdata(req, res, query) {
                             set["claimedText"] = "Claimed "+moment(new Date(row.timestamp)).fromNow();
                             if(row.pointsRecvd || row.puddingRecvd) {
                                 set["claimedText"] += " and received ";
-                                if(row.pointsRecvd) {
+                                if(row.pointsRecvd && row.puddingRecvd) {
+                                    set["claimedText"] += row.pointsRecvd+" points and "+row.puddingRecvd+" pudding";
+                                }
+                                else if(row.pointsRecvd) {
                                     set["claimedText"] += row.pointsRecvd+" points";
                                 }
                                 else {

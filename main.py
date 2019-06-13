@@ -835,7 +835,7 @@ def getWaifuRepresentationString(waifuid, baserarity=None, cardrarity=None, waif
 
     return retStr
 
-def sendSetAlert(channel, user, name, waifus, pudding, discord=True):
+def sendSetAlert(channel, user, name, waifus, reward, discord=True):
     logger.info("Alerting for set claim %s", name)
     with busyLock:
         with db.cursor() as cur:
@@ -861,7 +861,7 @@ def sendSetAlert(channel, user, name, waifus, pudding, discord=True):
         {
             "type": "rich",
             "title": "{user} completed the set {name}!".format(user=str(user), name=name),
-            "description": "They gathered {waifus} and received {pudding} pudding as their reward.".format(waifus=naturalJoinNames(waifus), pudding=str(pudding)),
+            "description": "They gathered {waifus} and received {reward} as their reward.".format(waifus=naturalJoinNames(waifus), reward=reward),
             "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
             "color": int(config["rarity" + str(int(config["numNormalRarities"]) - 1) + "EmbedColor"]),
             "footer": {
@@ -3146,7 +3146,7 @@ class NepBot(NepBotClass):
                     else:
                         if isSet:
                             threading.Thread(target=sendSetAlert, args=(
-                                sender, sender, "Test Set", ["Neptune", "Nepgear", "Some other test waifu"], 0,
+                                sender, sender, "Test Set", ["Neptune", "Nepgear", "Some other test waifu"], "0 pudding",
                                 False)).start()
                         else:
                             threading.Thread(target=sendDrawAlert, args=(
@@ -4393,8 +4393,94 @@ class NepBot(NepBotClass):
                     logger.error("Error importing waifus: %s", str(sys.exc_info()))
                     return
             if command == "sets" or command == "set":
-                # TODO
-                return
+                if len(args) == 0:
+                    self.message(channel,
+                                 "Available sets: %s/sets?user=%s . !sets claim to claim all sets you are eligible for." % (
+                                     config["siteHost"], sender.lower()), isWhisper)
+                    return
+                
+                subcmd = args[0].lower()
+
+                if subcmd == "claim":
+                    with db.cursor(pymysql.cursors.DictCursor) as cur:
+                        claimable = 0
+
+                        cur.execute("SELECT sets.* FROM sets LEFT JOIN sets_claimed ON (sets.id=sets_claimed.setid AND sets_claimed.userid = %s) WHERE sets.claimable = 1 AND sets_claimed.userid IS NULL AND id NOT IN(SELECT DISTINCT setID FROM set_cards LEFT JOIN cards ON (set_cards.cardID=cards.waifuid AND cards.userid=%s) WHERE cards.userid IS NULL)", [tags['user-id']]*2)
+
+                        for row in cur.fetchall():
+                            claimable += 1
+                            if row["lastClaimTime"] is not None:
+                                cooldown = row["lastClaimTime"] + int(config["setCooldownDays"])*86400000 - current_milli_time()
+                                if cooldown > 0:
+                                    # on cooldown
+                                    a = datetime.timedelta(milliseconds=cooldown, microseconds=0)
+                                    datestring = "{0}".format(a).split(".")[0]
+                                    self.message(channel, "Could not claim the set %s as it is on cooldown, try again in %s" % (row["name"], datestring), isWhisper)
+                                    continue
+                            
+                            # calculate rewards
+                            rPts = row["rewardPoints"]
+                            rPud = row["rewardPudding"]
+                            first = False
+                            badgeid = row["badgeid"]
+                            
+                            if row["firstClaimer"] is None:
+                                first = True
+                                rPts *= 2
+                                rPud *= 2
+                                badgeid = addBadge(row["name"], config["setBadgeDescription"], config["setBadgeDefaultImage"])
+                            
+                            # give rewards
+                            addPoints(tags['user-id'], rPts)
+                            addPudding(tags['user-id'], rPud)
+                            giveBadge(tags['user-id'], badgeid)
+                            claimTime = current_milli_time()
+
+                            # record everything
+                            scValues = [row["id"], tags['user-id'], rPts, rPud, claimTime]
+                            cur.execute("INSERT INTO sets_claimed (setid, userid, rewardPoints, rewardPudding, timestamp) VALUES(%s, %s, %s, %s, %s)", scValues)
+
+                            firstClaimer = tags['user-id'] if first else row["firstClaimer"]
+                            cur.execute("UPDATE sets SET firstClaimer = %s, lastClaimTime = %s, badgeid = %s WHERE id = %s", [firstClaimer, claimTime, badgeid, row["id"]])
+
+                            # let them know what happened
+                            if rPts > 0 and rPud > 0:
+                                reward = "%d points and %d pudding" % (rPts, rPud)
+                            elif rPts > 0:
+                                reward = "%d points" % rPts
+                            else:
+                                reward = "%d pudding" % rPud
+                            
+                            msgArgs = (row["name"], " (first claim!)" if first else "", tags['display-name'], reward)
+                            self.message(channel, "Successfully claimed the set %s%s and rewarded %s with %s!" % msgArgs, isWhisper)
+
+                            # send alert
+                            cur.execute("SELECT waifus.name FROM set_cards INNER JOIN waifus ON set_cards.cardID = waifus.id WHERE setID = %s", [row["id"]])
+                            cards = [sc["name"] for sc in cur.fetchall()]
+                            threading.Thread(target=sendSetAlert,
+                                         args=(channel, tags["display-name"], row["name"], cards, reward)).start()
+
+                        if claimable == 0:
+                            self.message(channel, "You do not have any completed sets that are available to be claimed. !sets to check progress.", isWhisper)
+                            return
+                elif subcmd == "checkid":
+                    if len(args) == 1:
+                        self.message(channel, "Usage: !sets checkid <set name>", isWhisper)
+                        return
+                    
+                    checkname = " ".join(args[1:])
+                    with db.cursor() as cur:
+                        cur.execute("SELECT id, name FROM sets WHERE name = %s", checkname)
+                        setData = cur.fetchone()
+
+                        if setData is None:
+                            self.message(channel, "Could not find that set name in the database.", isWhisper)
+                        else:
+                            self.message(channel, "Set %s's ID is %d." % (setData[1], setData[0]), isWhisper)
+                        return
+                else:
+                    self.message(channel, "Usage: !sets OR !sets claim OR !sets checkid <set name>", isWhisper)
+                    return
             if command == "debug" and sender in superadmins:
                 if debugMode:
                     updateBoth("Hyperdimension Neptunia", "Testing title updates.")
