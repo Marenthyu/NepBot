@@ -5748,6 +5748,96 @@ class NepBot(NepBotClass):
 
                             self.message(channel, "Request accepted. The new image for %s's copy of [%d] %s is %s" % (request[3], request[4], request[5], hostedURL), isWhisper)
                         return
+            if command == "sendpoints":
+                # expire old points transfers
+                with db.cursor(pymysql.cursors.DictCursor) as cur:
+                    cur.execute("UPDATE points_transfers SET status = 'expired' WHERE status = 'pending' AND created < %s", [current_milli_time() - 420000])
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !sendpoints <user> <amount> <reason> OR !sendpoints confirm <code>", isWhisper)
+                        return
+                    
+                    if args[0].lower() == "confirm":
+                        code = args[1]
+                        
+                        cur.execute("SELECT pt.*, users.name AS toName FROM points_transfers AS pt JOIN users ON pt.toid = users.id WHERE pt.fromid = %s ORDER BY pt.id DESC LIMIT 1", [tags['user-id']])
+                        transfer = cur.fetchone()
+
+                        if transfer is None or transfer["status"] in ["confirmed", "confirm_failed"]:
+                            self.message(channel, "%s, you have no pending points transfer." % tags['display-name'], isWhisper)
+                            return
+                        
+                        if transfer["status"] == "expired":
+                            self.message(channel, "%s, your points transfer has expired. Please try sending a new one." % tags['display-name'], isWhisper)
+                            return
+
+                        if "%s-%d" % (transfer["toName"], transfer["paid"]) != code:
+                            cur.execute("UPDATE points_transfers SET status='confirm_failed' WHERE id = %s", [transfer["id"]])
+                            self.message(channel, "%s, the confirmation code you entered was wrong. Please try sending a new points transfer." % tags['display-name'], isWhisper)
+                            return
+                        
+                        if not hasPoints(tags['user-id'], transfer["paid"]):
+                            cur.execute("UPDATE points_transfers SET status='confirm_failed' WHERE id = %s", [transfer["id"]])
+                            self.message(channel, "%s, you no longer have enough points to complete this transfer. Please try sending a new points transfer." % tags['display-name'], isWhisper)
+                            return
+
+                        addPoints(tags['user-id'], -transfer["paid"])
+                        addPoints(transfer["toid"], transfer["sent"])
+
+                        if int(transfer["sent"]) >= 1000:
+                            self.message("#%s" % transfer["toName"], "%s sent you %d points with the reason: %s" % [tags["display-name"], transfer["sent"], transfer["reason"]])
+                        
+                        cur.execute("UPDATE points_transfers SET status='confirmed', confirmed=%s WHERE id = %s", [current_milli_time(), transfer["id"]])
+
+                        self.message(channel, "%s, you successfully paid %d points to send %d points to %s." % (tags["display-name"], transfer["paid"], transfer["sent"], transfer["toName"]))
+                    else:
+                        if len(args) < 3:
+                            self.message(channel, "Usage: !sendpoints <user> <amount> <reason>", isWhisper)
+                            return
+
+                        otherparty = args[0].lower()
+
+                        cur.execute("SELECT id FROM users WHERE name = %s", [otherparty])
+                        otheridrow = cur.fetchone()
+                        if otheridrow is None:
+                            self.message(channel, "I don't recognize that username.", isWhisper)
+                            return
+                        otherid = int(otheridrow["id"])
+
+                        if otherid == int(tags['user-id']):
+                            self.message(channel, "You can't send points to yourself.", isWhisper)
+                            return
+
+                        try:
+                            amount = int(args[1])
+                        except ValueError:
+                            self.message(channel, "Invalid amount of points entered.", isWhisper)
+                            return
+
+                        if amount < 0 or amount > 1000000:
+                            self.message(channel, "Invalid amount of points entered.", isWhisper)
+                            return
+
+                        reason = " ".join(args[2:])
+
+                        if len(reason) < 10:
+                            self.message(channel, "Your reason for the transfer must be at least 10 characters long.")
+                            return
+
+                        toPay = amount * 2
+
+                        if not hasPoints(tags['user-id'], toPay):
+                            self.message(channel, "You don't have enough points to send %d points. You need %d." % (amount, toPay), isWhisper)
+                            return
+
+                        insertArgs = [tags['user-id'], otherid, amount, toPay, current_milli_time(), reason]
+                        cur.execute("INSERT INTO points_transfers (fromid, toid, sent, paid, status, created, reason) VALUES(%s, %s, %s, %s, 'pending', %s, %s)", insertArgs)
+
+                        msgArgs = (tags["display-name"], amount, otherparty, toPay, otherparty, toPay)
+                        self.message(channel, "%s, you want to send %d points to %s. This will cost you %d points. To confirm this action, enter !sendpoints confirm %s-%d" % msgArgs, isWhisper)
+                    return
+
+                            
+
             
                     
 class MarathonBot(pydle.Client):
