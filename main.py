@@ -5631,7 +5631,7 @@ class NepBot(NepBotClass):
                                 self.message(channel, "Could not process image. %s" % str(ex), isWhisper)
                                 return
                                 
-                            cur.execute("UPDATE cards SET customImage = %s WHERE id = %s", [hostedURL, card['cardid']])
+                            updateCard(card['cardid'], {"customImage": hostedURL})
 
                             # log the change for posterity
                             insertArgs = [tags['user-id'], card['cardid'], args[2], tags['user-id'], current_milli_time()]
