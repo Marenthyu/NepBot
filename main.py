@@ -464,7 +464,6 @@ def disenchant(bot, cardid):
             # everything up to the min bounty, 1/2 of any amount between the min and max bounties, 1/4 of anything above the max bounty.
             deValue += (min_bounty - base_value) + max(min(order[3] - min_bounty, rarity_cap - min_bounty) // 2, 0) + max((order[3] - rarity_cap) // 4, 0)
             
-        addPoints(card["userid"], deValue)
         return deValue
 
 
@@ -1693,8 +1692,10 @@ class NepBot(NepBotClass):
                                     str(keeps), str(des))
                         for card in keeps:
                             updateCard(card['id'], {"boosterid": None})
+                        numPoints = 0
                         for card in des:
-                            disenchant(self, card['id'])
+                            numPoints += disenchant(self, card['id'])
+                        addPoints(userid, numPoints)
                         attemptPromotions(*waifuIDs)
                         cur.execute("UPDATE boosters_opened SET status='closed', updated = %s WHERE id = %s",
                                     [current_milli_time(), pack[0]])
@@ -2515,6 +2516,7 @@ class NepBot(NepBotClass):
                                 self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you disenchanted it." % (row['id'], waifuData['name']), True)
                 
                 attemptPromotions(*checkPromos)
+                addPoints(tags['user-id'], pointsGain)
                 
                 if disenchantingSpecial:
                     checkFavouriteValidity(tags['user-id'])
@@ -2704,6 +2706,7 @@ class NepBot(NepBotClass):
                                              args=(channel, getWaifuById(card['waifuid']), str(tags["display-name"]))).start()
                     cardIDs = [row['waifuid'] for row in currBooster['cards']]
                     attemptPromotions(*cardIDs)
+                    addPoints(tags['user-id'], gottenpoints)
 
                     # compile the message to be sent in chat
                     response = "You %s your booster pack%s" % (("trash", "") if trash else ("take"," and: "))
