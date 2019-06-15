@@ -5505,7 +5505,7 @@ class NepBot(NepBotClass):
                         [current_milli_time(), waifu['id']])
                         
                     if rarity >= int(config["numNormalRarities"]):
-                        cur.execute("UPDATE users SET favourite = 1 WHERE favourite = %s AND (SELECT COUNT(*) FROM has_waifu WHERE has_waifu.userid = users.id AND has_waifu.waifuid = %s) = 0", [waifu['id']] * 2)
+                        cur.execute("UPDATE users SET favourite = 1 WHERE favourite = %s AND (SELECT COUNT(*) FROM cards WHERE cards.userid = users.id AND cards.boosterid IS NULL AND cards.waifuid = %s) = 0", [waifu['id']] * 2)
 
                 # done
                 self.message(channel, "Successfully changed [%d] %s's base rarity to %s." % (
