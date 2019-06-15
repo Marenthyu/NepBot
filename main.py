@@ -1699,6 +1699,22 @@ class NepBot(NepBotClass):
                         cur.execute("UPDATE boosters_opened SET status='closed', updated = %s WHERE id = %s",
                                     [current_milli_time(), pack[0]])
 
+                    # inactivity timeout
+                    cur.execute("SELECT DISTINCT users.id, users.name FROM cards JOIN users ON cards.userid = users.id WHERE cards.rarity < %s AND users.inactivityImmunity = 0 AND (users.lastActiveTimestamp IS NULL OR users.lastActiveTimestamp < %s)", [config["numNormalRarities"], current_milli_time() - int(config["inactivityTimeoutDays"])*86400000])
+                    inactiveUsers = cur.fetchall()
+                    expireCount = len(inactiveUsers)
+                    expireCardCount = 0
+
+                    while len(inactiveUsers) > 0:
+                        inactiveSlice = inactiveUsers[:100]
+                        inactiveUsers = inactiveUsers[100:]
+                        logger.debug("Expiring users: "+(", ".join(row[1] for row in inactiveSlice)))
+                        expireCardCount += cur.execute("UPDATE cards SET userid = NULL, boosterid = NULL WHERE rarity < %s AND userid IN("+(",".join(["%s"] * len(inactiveSlice)))+")", [config["numNormalRarities"]] + [row[0] for row in inactiveSlice])
+                    
+                    if expireCardCount > 0:
+                        logger.debug("Expired %d cards from %d users" % (expireCardCount, expireCount))
+
+
                     # increase weightings
                     if int(config["last_weighting_update"]) < current_milli_time() - int(
                             config["weighting_increase_cycle"]):
@@ -4593,6 +4609,16 @@ class NepBot(NepBotClass):
                             self.message(channel, "Set badge change processed successfully.", isWhisper)
                             return
                         else:
+                            cur.execute("SELECT COALESCE(MAX(created), 0) AS lastReq FROM setbadge_requests WHERE state = 'accepted' AND setid = %s", [setData["id"]])
+                            lastRequest = cur.fetchone()["lastReq"]
+                            cooldown = lastRequest + int(config["imageChangeCooldownDays"])*86400000 - current_milli_time()
+
+                            if cooldown > 0:
+                                a = datetime.timedelta(milliseconds=cooldown, microseconds=0)
+                                datestring = "{0}".format(a).split(".")[0]
+                                self.message(channel, "Sorry, that set has had its badge changed too recently. Please try again in %s" % datestring, isWhisper)
+                                return
+                            
                             try:
                                 validateBadgeURL(args[2])
                             except ValueError as ex:
@@ -5614,6 +5640,16 @@ class NepBot(NepBotClass):
                             self.message(channel, "Image change processed successfully.", isWhisper)
                             return
                         else:
+                            cur.execute("SELECT COALESCE(MAX(created), 0) FROM godimage_requests WHERE state = 'accepted' AND cardid = %s", [card['cardid']])
+                            lastRequest = cur.fetchone()[0]
+                            cooldown = lastRequest + int(config["imageChangeCooldownDays"])*86400000 - current_milli_time()
+
+                            if cooldown > 0:
+                                a = datetime.timedelta(milliseconds=cooldown, microseconds=0)
+                                datestring = "{0}".format(a).split(".")[0]
+                                self.message(channel, "Sorry, that card has had its image changed too recently. Please try again in %s" % datestring, isWhisper)
+                                return
+                            
                             try:
                                 validateWaifuURL(args[2])
                             except ValueError as ex:
@@ -5741,7 +5777,7 @@ class NepBot(NepBotClass):
                             updateCard(request[6], {"customImage": hostedURL})
 
                             queryArgs = [tags['user-id'], current_milli_time(), request[0]]
-                            cur.execute("UPDATE godimage_requests SET state = 'accepted_single', moderatorid = %s, updated = %s WHERE id = %s", queryArgs)
+                            cur.execute("UPDATE godimage_requests SET state = 'accepted', moderatorid = %s, updated = %s WHERE id = %s", queryArgs)
 
                             # notify them
                             self.message("#%s" % request[3], "Your image change request for your copy of [%d] %s was accepted." % (request[4], request[5]), True)
