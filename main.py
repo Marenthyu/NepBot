@@ -5751,7 +5751,7 @@ class NepBot(NepBotClass):
             if command == "sendpoints":
                 # expire old points transfers
                 with db.cursor(pymysql.cursors.DictCursor) as cur:
-                    cur.execute("UPDATE points_transfers SET status = 'expired' WHERE status = 'pending' AND created < %s", [current_milli_time() - 420000])
+                    cur.execute("UPDATE points_transfers SET status = 'expired' WHERE status = 'pending' AND created <= %s", [current_milli_time() - int(config["pointsTransferExpiryMinutes"])*60000])
                     if len(args) < 2:
                         self.message(channel, "Usage: !sendpoints <user> <amount> <reason> OR !sendpoints confirm <code>", isWhisper)
                         return
@@ -5783,7 +5783,7 @@ class NepBot(NepBotClass):
                         addPoints(tags['user-id'], -transfer["paid"])
                         addPoints(transfer["toid"], transfer["sent"])
 
-                        if int(transfer["sent"]) >= 1000:
+                        if int(transfer["sent"]) >= int(config["pointsTransferMinWhisperAmount"]):
                             self.message("#%s" % transfer["toName"], "%s sent you %d points with the reason: %s" % [tags["display-name"], transfer["sent"], transfer["reason"]])
                         
                         cur.execute("UPDATE points_transfers SET status='confirmed', confirmed=%s WHERE id = %s", [current_milli_time(), transfer["id"]])
@@ -5813,7 +5813,7 @@ class NepBot(NepBotClass):
                             self.message(channel, "Invalid amount of points entered.", isWhisper)
                             return
 
-                        if amount < 0 or amount > 1000000:
+                        if amount <= 0 or amount > int(config["pointsTransferMaxAmount"]):
                             self.message(channel, "Invalid amount of points entered.", isWhisper)
                             return
 
