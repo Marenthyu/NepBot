@@ -334,7 +334,7 @@ def getHand(twitchid):
         logger.error("Got non-integer id for getHand. Aborting.")
         return []
     with db.cursor(pymysql.cursors.DictCursor) as cur:
-        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid IS NULL ORDER BY (rarity < %s) DESC, waifus.id ASC",
+        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity, cards.tradeableAt FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid IS NULL ORDER BY (rarity < %s) DESC, waifus.id ASC",
         [tID, int(config["numNormalRarities"])])
         return cur.fetchall()
              
@@ -2737,13 +2737,31 @@ class NepBot(NepBotClass):
                     cur.execute(
                         "UPDATE trades SET status = 'expired', updated = %s WHERE status = 'open' AND created <= %s",
                         [currTime, currTime - 86400000])
-                    if len(args) < 2:
+                    if len(args) < 1 or (len(args) < 2 and args[0].lower() != "list"):
                         self.message(channel,
-                                     "Usage: !trade <check/accept/decline> <user> OR !trade <user> <have> <want>",
+                                     "Usage: !trade <check/accept/decline/cancel> <user> OR !trade <user> <have> <want> OR !trade list",
                                      isWhisper=isWhisper)
                         return
                     subarg = args[0].lower()
-                    if subarg in ["check", "accept", "decline"]:
+                    if subarg == "list":
+                        cur.execute("SELECT users.name FROM trades JOIN users ON trades.toid = users.id WHERE trades.fromid = %s AND trades.status = 'open'", [ourid])
+                        sentTradesTo = [row[0] for row in cur.fetchall()]
+
+                        cur.execute("SELECT users.name FROM trades JOIN users ON trades.fromid = users.id WHERE trades.toid = %s AND trades.status = 'open'", [ourid])
+                        recvdTradesFrom = [row[0] for row in cur.fetchall()]
+
+                        if len(sentTradesTo) == 0 and len(recvdTradesFrom) == 0:
+                            self.message(channel, "You have no unresolved trades right now.", isWhisper)
+                        else:
+                            numTrades = len(sentTradesTo) + len(recvdTradesFrom)
+                            parts = []
+                            if len(sentTradesTo) > 0:
+                                parts.append("Sent trades to: %s." % (", ".join(sentTradesTo)))
+                            if len(recvdTradesFrom) > 0:
+                                parts.append("Received trades from: %s." % (", ".join(recvdTradesFrom)))
+                            self.message(channel, "%s, you have %d pending trade%s. %s"%(tags['display-name'], numTrades, "s" if numTrades > 1 else "", " ".join(parts)), isWhisper)
+                        return
+                    if subarg in ["check", "accept", "decline", "cancel"]:
                         otherparty = args[1].lower()
 
                         cur.execute("SELECT id FROM users WHERE name = %s", [otherparty])
@@ -2752,6 +2770,22 @@ class NepBot(NepBotClass):
                             self.message(channel, "I don't recognize that username.", isWhisper=isWhisper)
                             return
                         otherid = int(otheridrow[0])
+
+                        if ourid == otherid:
+                            self.message(channel, "You cannot trade with yourself.", isWhisper)
+                            return
+
+                        if subarg == "cancel":
+                            # different case here, since the trade is FROM us
+                            cur.execute("SELECT id FROM trades WHERE fromid = %s AND toid = %s AND status = 'open' LIMIT 1", [ourid, otherid])
+                            trade = cur.fetchone()
+
+                            if trade is None:
+                                self.message(channel, "You do not have a pending trade with %s. Send one with !trade %s <have> <want>" % (otherparty, otherparty), isWhisper)
+                            else:
+                                cur.execute("UPDATE trades SET status = 'cancelled', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                                self.message(channel, "You cancelled your pending trade with %s." % otherparty, isWhisper)
+                            return
 
                         # look for trade row
                         cur.execute(
@@ -2773,6 +2807,11 @@ class NepBot(NepBotClass):
                         # check that cards are still in place and owned by us
                         if want['userid'] is None or want['userid'] != ourid or have['userid'] is None or have['userid'] != otherid:
                             self.message(channel, "%s, one or more of the cards involved in the trade are no longer in their owners hands. Trade cancelled." % tags['display-name'], isWhisper)
+                            cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
+                            return
+
+                        if (want['tradeableAt'] is not None and want['tradeableAt'] > current_milli_time()) or (have['tradeableAt'] is not None and have['tradeableAt'] > current_milli_time()):
+                            self.message(channel, "%s, one or more of the cards involved in the trade are no longer able to be traded. Trade cancelled." % tags['display-name'], isWhisper)
                             cur.execute("UPDATE trades SET status = 'invalid', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                             return
 
@@ -2803,19 +2842,12 @@ class NepBot(NepBotClass):
                         else:
                             # accept
 
-                            cost = int(config["tradingFee"])
-
                             nonpayer = ourid if payup == otherid else otherid
 
-                            if not hasPoints(payup, cost + tradepoints):
-                                self.message(channel, "Sorry, but %s cannot cover the %s trading fee." % (
-                                    "you" if payup == ourid else otherparty, "fair" if tradepoints > 0 else "base"),
+                            if tradepoints > 0 and not hasPoints(payup, tradepoints):
+                                self.message(channel, "Sorry, but %s cannot cover the fair trading fee." % (
+                                    "you" if payup == ourid else otherparty),
                                              isWhisper=isWhisper)
-                                return
-
-                            if not hasPoints(nonpayer, cost - tradepoints):
-                                self.message(channel, "Sorry, but %s cannot cover the base trading fee." % (
-                                    "you" if nonpayer == ourid else otherparty), isWhisper=isWhisper)
                                 return
 
                             # move the cards
@@ -2844,8 +2876,8 @@ class NepBot(NepBotClass):
                                 checkFavouriteValidity(otherid)
 
                             # points
-                            addPoints(payup, -(tradepoints + cost))
-                            addPoints(nonpayer, tradepoints - cost)
+                            addPoints(payup, -tradepoints)
+                            addPoints(nonpayer, tradepoints)
 
                             # done
                             cur.execute("UPDATE trades SET status = 'accepted', updated = %s WHERE id = %s",
@@ -2869,6 +2901,11 @@ class NepBot(NepBotClass):
                         return
 
                     otherid = int(otheridrow[0])
+
+                    if ourid == otherid:
+                        self.message(channel, "You cannot trade with yourself.", isWhisper)
+                        return
+                    
                     ourhand = getHand(ourid)
                     otherhand = getHand(otherid)
 
@@ -2887,6 +2924,10 @@ class NepBot(NepBotClass):
                         self.message(channel, "Only whole numbers/IDs please.", isWhisper)
                         return
 
+                    if have["tradeableAt"] is not None and have["tradeableAt"] > current_milli_time():
+                        self.message(channel, "%s, the card you are attempting to send in the trade is not tradeable right now!" % tags['display-name'], isWhisper)
+                        return
+
                     try:
                         want = parseHandCardSpecifier(otherhand, args[2])
                     except CardNotInHandException:
@@ -2901,6 +2942,10 @@ class NepBot(NepBotClass):
                         return
                     except ValueError:
                         self.message(channel, "Only whole numbers/IDs please.", isWhisper)
+                        return
+
+                    if want["tradeableAt"] is not None and want["tradeableAt"] > current_milli_time():
+                        self.message(channel, "%s, the card you are attempting to receive in the trade is not tradeable right now!" % tags['display-name'], isWhisper)
                         return
                             
                     # actual specials can't be traded
