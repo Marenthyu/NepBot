@@ -2242,14 +2242,38 @@ class NepBot(NepBotClass):
                         boosters = cur.fetchall()
                         boosterInfo = ", ".join("%s / %d pudding" % (row[0], math.ceil(int(row[1])/int(config["puddingExchangeRate"]))) for row in boosters)
                         self.message(channel, "Current buyable packs: %s. !pudding booster <name> to buy a booster with pudding." % boosterInfo, isWhisper)
+                elif subcmd == "topup":
+                    if len(args) < 2:
+                        self.message(channel, "Usage: !pudding topup <amount>", isWhisper)
+                        return
+                    try:
+                        amount = int(args[1])
+                    except ValueError:
+                        self.message(channel, "Usage: !pudding topup <amount>", isWhisper)
+                        return
+                    if amount <= 0:
+                        self.message(channel, "Invalid amount of pudding to buy.", isWhisper)
+                        return
+
+                    pointsCost = amount * int(config["puddingExchangeRate"])
+                    if not hasPoints(tags['user-id'], pointsCost):
+                        self.message(channel, "%s, you don't have enough points to buy %d pudding. You need %d." % (tags['display-name'], amount, pointsCost), isWhisper)
+                        return
+                    
+                    addPoints(tags['user-id'], -pointsCost)
+                    addPudding(tags['user-id'], amount)
+                    newBalance = sum(getPuddingBalance(tags['user-id']))
+                    msgArgs = (tags['display-name'], pointsCost, amount, newBalance)
+
+                    self.message(channel, "%s, you spent %d points to buy %d extra pudding. You now have %d total pudding (!pudding for full details)" % msgArgs, isWhisper)
                 else:
                     # base: show pudding balance broken down
                     pudding = getPuddingBalance(tags['user-id'])
                     if sum(pudding) == 0:
                         self.message(channel, "%s, you don't currently have any pudding. You can earn some by participating in bets or completing sets." % tags['display-name'], isWhisper)
                     else:
-                        msgArgs = (tags['display-name'], sum(pudding), pudding[0], pudding[1], pudding[2])
-                        self.message(channel, "%s, you have %d total pudding: %d earned this month, %d earned last month, %d expiring soon. !pudding list to see what boosters you can buy, !pudding booster <name> to buy a booster with pudding." % msgArgs, isWhisper)
+                        msgArgs = (tags['display-name'], sum(pudding), pudding[0], pudding[1], pudding[2], config["puddingExchangeRate"])
+                        self.message(channel, "%s, you have %d total pudding: %d earned this month, %d earned last month, %d expiring soon. !pudding list to see what boosters you can buy, !pudding booster <name> to buy a booster with pudding. !pudding topup <amount> to buy extra pudding (%s points each)" % msgArgs, isWhisper)
                 return
             if command == "freewaifu" or command == "freebie":
                 # print("Checking free waifu egliability for " + str(sender))
