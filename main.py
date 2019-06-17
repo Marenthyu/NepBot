@@ -2207,9 +2207,9 @@ class NepBot(NepBotClass):
                     return
             if command == "pudding":
                 subcmd = "" if len(args) < 1 else args[0].lower()
-                if subcmd == "booster":
+                if subcmd == "booster" || subcmd == "buy":
                     if len(args) < 2:
-                        self.message(channel, "Usage: !pudding booster <name>", isWhisper)
+                        self.message(channel, "Usage: !pudding " + subcmd + " <name>", isWhisper)
                         return
                     # check that the pack is actually buyable
                     truename = boostername = args[1].lower()
