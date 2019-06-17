@@ -65,6 +65,7 @@ jsfiles.forEach(function(filename) {
 
 function renderTemplateAndEnd(filename, vars, res) {
     vars["moment"] = moment;
+    vars["config"] = config;
     ejs.renderFile(filename, vars, {}, function(err, str) {
         if(err) { throw err; }
         res.write(str);
@@ -107,8 +108,8 @@ function hand(req, res, query) {
         return;
     }
 
-    con.query("SELECT waifus.*, cards.rarity, cards.customImage, cards.id as cardid, cards.tradeableAt FROM waifus JOIN cards ON waifus.id = cards.waifuid JOIN users ON " +
-        "cards.userid = users.id WHERE users.name = ? AND cards.boosterid IS NULL ORDER BY (cards.rarity < 8) DESC, waifus.id ASC, cards.rarity ASC", query.user, function (err, result) {
+    con.query("SELECT waifus.*, cards.rarity, cards.customImage, cards.id as cardid, cards.tradeableAt, cards.created FROM waifus JOIN cards ON waifus.id = cards.waifuid JOIN users ON " +
+        "cards.userid = users.id WHERE users.name = ? AND cards.boosterid IS NULL ORDER BY COALESCE(cards.sortValue, 32768) ASC, (cards.rarity < 8) DESC, waifus.id ASC, cards.rarity ASC", query.user, function (err, result) {
         if (err) throw err;
         let wantJSON = false;
         if ("accept" in req.headers && req.headers["accept"] === "application/json") {

@@ -334,7 +334,7 @@ def getHand(twitchid):
         logger.error("Got non-integer id for getHand. Aborting.")
         return []
     with db.cursor(pymysql.cursors.DictCursor) as cur:
-        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity, cards.tradeableAt FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid IS NULL ORDER BY (rarity < %s) DESC, waifus.id ASC",
+        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity, cards.tradeableAt FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid IS NULL ORDER BY COALESCE(cards.sortValue, 32768) ASC, (rarity < %s) DESC, waifus.id ASC",
         [tID, int(config["numNormalRarities"])])
         return cur.fetchall()
              
@@ -5873,6 +5873,52 @@ class NepBot(NepBotClass):
 
                         msgArgs = (tags["display-name"], amount, otherparty, toPay, otherparty, toPay)
                         self.message(channel, "%s, you want to send %d points to %s. This will cost you %d points. To confirm this action, enter !sendpoints confirm %s-%d" % msgArgs, isWhisper)
+                    return
+            if command == "sorthand":
+                if len(args) == 0 or (args[0].lower() != "reset" and len(args) < 2):
+                    self.message(channel, "Usage: !sorthand <comma-delimited card ids> <comma-delimited positions> OR !sorthand reset", isWhisper)
+                    return
+                with db.cursor() as cur:
+                    if args[0].lower() == "reset":
+                        cur.execute("UPDATE cards SET sortValue = NULL WHERE userid = %s", [tags['user-id']])
+                        self.message(channel, "Successfully reset %s's hand to default sort order." % tags['display-name'], isWhisper)
+                    else:
+                        if args[0].count(",") != args[1].count(","):
+                            self.message(channel, "You must provide an equal amount of waifu/card IDs and sort values.")
+                            return
+                        
+                        cardSpecifiers = args[0].split(",")
+                        sortValueStrings = args[1].split(",")
+                        seenIDs = []
+                        updatePairs = []
+                        hand = getHand(tags['user-id'])
+
+                        for i in range(len(cardSpecifiers)):
+                            try:
+                                card = parseHandCardSpecifier(hand, cardSpecifiers[i])
+                                if card['cardid'] in seenIDs:
+                                    self.message(channel, "You entered the same card twice!", isWhisper)
+                                    return
+                                seenIDs.append(card['cardid'])
+                                sortValue = int(sortValueStrings[i])
+                                if sortValue < -32768 or sortValue > 32767:
+                                    self.message(channel, "Invalid sort value entered. Valid values are -32768 to 32767 inclusive.", isWhisper)
+                                    return
+                                updatePairs.append([sortValue, card['cardid']])
+                            except CardNotInHandException:
+                                self.message(channel, "%s, you don't own that waifu/card!" % tags['display-name'],
+                                            isWhisper)
+                                return
+                            except AmbiguousWaifuException:
+                                self.message(channel,
+                                            "%s, you own more than one rarity of waifu %s! Please specify a card ID instead. You can find card IDs using !checkhand" % (
+                                                tags['display-name'], args[1]), isWhisper)
+                                return
+                            except ValueError:
+                                self.message(channel, "Only whole numbers/IDs please.", isWhisper)
+                                return
+                        cur.executemany("UPDATE cards SET sortValue = %s WHERE id = %s", updatePairs)
+                        self.message(channel, "Updated sort values for %d cards in %s's hand." % (len(updatePairs), tags['display-name']), isWhisper)
                     return
 
                             
