@@ -60,7 +60,7 @@ try:
     f = open("nepbot.cfg", "r")
     lines = f.readlines()
     for line in lines:
-        name, value = line.split("=")
+        name, value = line.split("=", 1)
         value = str(value).strip("\n")
         logger.info("Reading config value '%s' = '<redacted>'", name)
         if name == "dbpassword":
@@ -1791,8 +1791,8 @@ class NepBot(NepBotClass):
             self.leavechannels = []
             try:
                 # print("Activitymap: " + str(activitymap))
-                doneusers = []
-                validactivity = []
+                doneusers = set([])
+                validactivity = set([])
                 for channel in self.channels:
                     # print("Fetching for channel " + str(channel))
                     channelName = str(channel).replace("#", "")
@@ -1810,58 +1810,59 @@ class NepBot(NepBotClass):
                             logger.debug("Users in %s: %s", channel, self.channels[channel]['users'])
                             for viewer in self.channels[channel]['users']:
                                 a.append(viewer)
-                        for viewer in a:
-                            if viewer not in doneusers:
-                                doneusers.append(viewer)
-                            if isLive[channelName] and viewer not in validactivity:
-                                validactivity.append(viewer)
+                        doneusers.update(set(a))
+                        if isLive[channelName]:
+                            validactivity.update(set(a))
+                            
                     except Exception:
                         logger.error("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
                         logger.error("Error: %s", str(sys.exc_info()))
 
                 # process all users
                 logger.debug("Caught users, giving points and creating accounts, amount to do = %d" % len(doneusers))
-                newUsers = []
+                newUsers = set([])
 
                 maxPointsInactive = int(config["maxPointsInactive"])
                 overflowPoints = 0
+                passivePoints = int(config["passivePoints"])
+                pointsMult = float(config["pointsMultiplier"])
+                maraPointsMult = float(config["marathonPointsMultiplier"])
 
-                while len(doneusers) > 0:
-                    currentSlice = doneusers[:100]
-                    with busyLock:
-                        cur = db.cursor()
-                        cur.execute("SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(
-                            ["%s"] * len(currentSlice)), currentSlice)
+                doneusers = list(doneusers)
+                with busyLock:
+                    with db.cursor() as cur:
+                        cur.execute('START TRANSACTION')
+                        while len(doneusers) > 0:
+                            logger.debug('Slicing... remaining length: %s' % len(doneusers))
+                            currentSlice = doneusers[:100]
+                            cur.execute("SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(["%s"] * len(currentSlice)), currentSlice)
+                            foundUsersData = cur.fetchall()
+                            
+                            foundUsers = set([row[0] for row in foundUsersData])
+                            newUsers.update(set(currentSlice) - foundUsers)
 
-                        foundUsersData = cur.fetchall()
-                        cur.close()
-                    foundUsers = [row[0] for row in foundUsersData]
-                    newUsers += [user for user in currentSlice if user not in foundUsers]
-                    if len(foundUsers) > 0:
-                        updateData = []
-                        for viewerInfo in foundUsersData:
-                            pointGain = int(config["passivePoints"])
-                            if viewerInfo[0] in activitymap and viewerInfo[0] in validactivity:
-                                pointGain += max(10 - int(activitymap[viewerInfo[0]]), 0)
-                            if viewerInfo[0] in marathonActivityMap and marathonActivityMap[viewerInfo[0]] < 10 and marathonLive:
-                                altPointGain = int(config["passivePoints"]) + 10 - marathonActivityMap[viewerInfo[0]]
-                                altPointGain = round(altPointGain * float(config["marathonPointsMultiplier"]))
-                                pointGain = max(pointGain, altPointGain)
-                            pointGain = int(pointGain * float(config["pointsMultiplier"]))
-                            if viewerInfo[2] is None:
-                                maxPointGain = max(maxPointsInactive - viewerInfo[1], 0)
-                                if pointGain > maxPointGain:
-                                    overflowPoints += pointGain - maxPointGain
-                                    pointGain = maxPointGain
-                            if pointGain > 0:
-                                updateData.append((pointGain, viewerInfo[0]))
-
-                        with busyLock:
-                            cur = db.cursor()
-                            cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
-                            cur.close()
-
-                    doneusers = doneusers[100:]
+                            if len(foundUsers) > 0:
+                                updateData = []
+                                for viewerInfo in foundUsersData:
+                                    pointGain = passivePoints
+                                    if viewerInfo[0] in activitymap and viewerInfo[0] in validactivity:
+                                        pointGain += max(10 - int(activitymap[viewerInfo[0]]), 0)
+                                    if viewerInfo[0] in marathonActivityMap and marathonActivityMap[viewerInfo[0]] < 10 and marathonLive:
+                                        altPointGain = passivePoints + 10 - marathonActivityMap[viewerInfo[0]]
+                                        altPointGain = round(altPointGain * maraPointsMult)
+                                        pointGain = max(pointGain, altPointGain)
+                                    pointGain = int(pointGain * pointsMult)
+                                    if viewerInfo[2] is None:
+                                        maxPointGain = max(maxPointsInactive - viewerInfo[1], 0)
+                                        if pointGain > maxPointGain:
+                                            overflowPoints += pointGain - maxPointGain
+                                            pointGain = maxPointGain
+                                    if pointGain > 0:
+                                        updateData.append((pointGain, viewerInfo[0]))
+                                cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
+                            
+                            doneusers = doneusers[100:]
+                        cur.execute('COMMIT')
 
                 if overflowPoints > 0:
                     logger.debug("Paying %d overflow points to the bot account" % overflowPoints)
@@ -1876,10 +1877,16 @@ class NepBot(NepBotClass):
                     logger.warning(
                         "DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
                     newUsers = newUsers[:10000]
+
+                updateNames = []
+                newAccounts = []
+                updateData = []
+                
+                # don't hold the busyLock the whole time here - since we're dealing with twitch API
                 while len(newUsers) > 0:
                     logger.debug("Adding new users...")
-                    logger.debug("New users to add: %s", str(newUsers))
                     currentSlice = newUsers[:100]
+                    logger.debug("New users to add: %s", str(currentSlice))
                     r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
                                      params={"login": currentSlice})
                     if r.status_code == 429:
@@ -1895,51 +1902,52 @@ class NepBot(NepBotClass):
                     foundIdsData = []
                     if len(currentIdMapping) > 0:
                         with busyLock:
-                            cur = db.cursor()
-                            cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
-                                        [id for id in currentIdMapping])
-                            foundIdsData = cur.fetchall()
-                            cur.close()
+                            with db.cursor() as cur:
+                                cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
+                                            [id for id in currentIdMapping])
+                                foundIdsData = cur.fetchall()
                     localIds = [row[0] for row in foundIdsData]
 
                     # users to update the names for (id already exists)
-                    updateNames = [(currentIdMapping[id], id) for id in currentIdMapping if id in localIds]
-                    if len(updateNames) > 0:
-                        with busyLock:
-                            logger.debug("Updating names...")
-                            cur = db.cursor()
-                            cur.executemany("UPDATE users SET name = %s WHERE id = %s", updateNames)
-                            cur.close()
+                    updateNames.extend([(currentIdMapping[id], id) for id in currentIdMapping if id in localIds])
 
                     # new users (id does not exist)
-                    newAccounts = [(id, currentIdMapping[id]) for id in currentIdMapping if id not in localIds]
-                    if len(newAccounts) > 0:
-                        with busyLock:
-                            cur = db.cursor()
-                            cur.executemany("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)",
-                                            newAccounts)
-                            cur.close()
+                    newAccounts.extend([(id, currentIdMapping[id]) for id in currentIdMapping if id not in localIds])
+
                     # actually give points
-                    updateData = []
                     for id in currentIdMapping:
                         viewer = currentIdMapping[id]
-                        pointGain = int(config["passivePoints"])
+                        pointGain = passivePoints
                         if viewer in activitymap and viewer in validactivity:
                             pointGain += max(10 - int(activitymap[viewer]), 0)
                         if viewer in marathonActivityMap and marathonActivityMap[viewer] < 10 and marathonLive:
-                            altPointGain = int(config["passivePoints"]) + 10 - marathonActivityMap[viewer]
-                            altPointGain = round(altPointGain * float(config["marathonPointsMultiplier"]))
+                            altPointGain = passivePoints + 10 - marathonActivityMap[viewer]
+                            altPointGain = round(altPointGain * maraPointsMult)
                             pointGain = max(pointGain, altPointGain)
-                        pointGain = int(pointGain * float(config["pointsMultiplier"]))
+                        pointGain = int(pointGain * pointsMult)
                         updateData.append((pointGain, viewer))
-
-                    with busyLock:
-                        cur = db.cursor()
-                        cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
-                        cur.close()
 
                     # done with this slice
                     newUsers = newUsers[100:]
+
+                # push new user data to database
+                with busyLock:
+                    with db.cursor() as cur:
+                        cur.execute("START TRANSACTION")
+
+                        if len(updateNames) > 0:
+                            logger.debug("Updating names...")
+                            cur.executemany("UPDATE users SET name = %s WHERE id = %s", updateNames)
+                        
+                        if len(newAccounts) > 0:
+                            cur.executemany("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)",
+                                            newAccounts)
+                        
+                        if len(updateData) > 0:
+                            cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
+
+                        cur.execute("COMMIT")
+
 
                 for user in activitymap:
                     activitymap[user] += 1
