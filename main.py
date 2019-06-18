@@ -5920,7 +5920,7 @@ class NepBot(NepBotClass):
                             except AmbiguousWaifuException:
                                 self.message(channel,
                                             "%s, you own more than one rarity of waifu %s! Please specify a card ID instead. You can find card IDs using !checkhand" % (
-                                                tags['display-name'], args[1]), isWhisper)
+                                                tags['display-name'], cardSpecifiers[i]), isWhisper)
                                 return
                             except ValueError:
                                 self.message(channel, "Only whole numbers/IDs please.", isWhisper)
