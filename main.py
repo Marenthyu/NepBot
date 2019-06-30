@@ -166,11 +166,8 @@ def loadConfig():
         logger.debug("SuperAdmins: %s", str(superadmins))
         revrarity = {config["rarity" + str(i) + "Name"]: i for i in
                      range(int(config["numNormalRarities"]) + int(config["numSpecialRarities"]))}
-        curg.execute("SELECT name FROM blacklist")
-        rows = curg.fetchall()
-        blacklist = []
-        for row in rows:
-            blacklist.append(row[0])
+        curg.execute("SELECT id FROM banned_users WHERE banned = 1")
+        blacklist = [int(row[0]) for row in curg.fetchall()]
 
         # visible packs
         curg.execute("SELECT name FROM boosters WHERE listed = 1 AND buyable = 1 ORDER BY sortIndex ASC")
@@ -2071,51 +2068,70 @@ class NepBot(NepBotClass):
         if 'display-name' not in tags or not tags['display-name']:
             tags['display-name'] = sender
 
-        activeCommands = ["checkhand", "points", "freewaifu", "de", "disenchant", "buy", "booster", "trade", "lookup",
-                          "alerts", "redeem", "upgrade", "search", "promote", "bet", "sets", "set", "giveaway",
-                          "bounty", "emotewar", "wars", "war", "vote", "profile", "owners", "freebie", "godimage",
-                          "freepacks", "freepack", "pudding"]
-
-        if sender not in blacklist and "bot" not in sender:
-            activitymap[sender] = 0
-            activitymap[channelowner] = 0
-            isMarathonChannel = source == config['marathonChannel'] and not isWhisper
-            if isMarathonChannel:
-                marathonActivityMap[sender] = 0
+        activeCommands = ["checkhand", "points", "pudding", "freewaifu", "freebie", "disenchant",
+         "de", "buy", "booster", "trade", "lookup", "owners", "alerts", "alert", "redeem", "wars",
+          "war", "vote", "donate", "incentives", "upgrade", "search", "freepacks", "freepack", "bet",
+           "sets", "set", "setbadge", "giveaway", "raffle", "bounty", "profile", "packspending", "godimage",
+            "sendpoints", "sorthand"]
+        
+        userid = int(tags['user-id'])
+        if userid in blacklist:
+            if message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
+                self.message(source, "Account banned from playing TCG. If you're seeing this without knowing why, contact TCG staff @ %s/discord" % config["siteHost"], isWhisper)
+            return
+        elif "bot" in sender:
             with busyLock:
                 with db.cursor() as cur:
-                    # War?
-                    if int(config["emoteWarStatus"]) == 1:
-                        if sender not in self.emotecooldowns:
-                            self.emotecooldowns[sender] = defaultdict(int)
-                        for emote in emotewaremotes:
-                            if emote in message and self.emotecooldowns[sender][emote] <= current_milli_time() - 60000:
-                                cur.execute("UPDATE emoteWar SET `count` = `count` + 1 WHERE name = %s", [emote])
-                                self.emotecooldowns[sender][emote] = current_milli_time()
+                    cur.execute("SELECT id, banned FROM banned_users WHERE id = %s", [userid])
+                    banrow = cur.fetchone()
+                    if banrow[1] > 0:
+                        # failsafe but shouldnt happen (blacklist updated in DB but not reloaded)
+                        if message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
+                            self.message(source, "Account banned from playing TCG. If you're seeing this without knowing why, contact TCG staff @ %s/discord" % config["siteHost"], isWhisper)
+                        return
+                    elif banrow is None:
+                        cur.execute("INSERT INTO banned_users (id, banned) VALUES(%s, 1)", [userid])
+                        blacklist.append(userid)
+                        if message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
+                            self.message(source, "This account appears to be a bot. If it is not, contact TCG staff @ %s/discord to have it unbanned." % config["siteHost"], isWhisper)
+                        return
+        
+        activitymap[sender] = 0
+        activitymap[channelowner] = 0
+        isMarathonChannel = source == config['marathonChannel'] and not isWhisper
+        if isMarathonChannel:
+            marathonActivityMap[sender] = 0
+        with busyLock:
+            with db.cursor() as cur:
+                # War?
+                if int(config["emoteWarStatus"]) == 1:
+                    if sender not in self.emotecooldowns:
+                        self.emotecooldowns[sender] = defaultdict(int)
+                    for emote in emotewaremotes:
+                        if emote in message and self.emotecooldowns[sender][emote] <= current_milli_time() - 60000:
+                            cur.execute("UPDATE emoteWar SET `count` = `count` + 1 WHERE name = %s", [emote])
+                            self.emotecooldowns[sender][emote] = current_milli_time()
 
-                    cur.execute("SELECT name FROM users WHERE id = %s", [tags['user-id']])
-                    user = cur.fetchone()
-                    if user is None:
-                        cur.execute("INSERT INTO users (id, name, points) VALUE (%s, %s, %s)",
-                                    [tags['user-id'], sender, 0])
-                        logger.info("%s didn't have an account, created it.", tags['display-name'])
-                    elif user[0] != sender:
-                        logger.info("%s got a new name, changing it to: %s", user[0], sender)
-                        cur.execute("UPDATE users SET name = %s WHERE id = %s", [sender, tags['user-id']])
+                cur.execute("SELECT name FROM users WHERE id = %s", [tags['user-id']])
+                user = cur.fetchone()
+                if user is None:
+                    cur.execute("INSERT INTO users (id, name, points) VALUE (%s, %s, %s)",
+                                [tags['user-id'], sender, 0])
+                    logger.info("%s didn't have an account, created it.", tags['display-name'])
+                elif user[0] != sender:
+                    logger.info("%s got a new name, changing it to: %s", user[0], sender)
+                    cur.execute("UPDATE users SET name = %s WHERE id = %s", [sender, tags['user-id']])
 
-            if message.startswith("!"):
-                parts = message.split()
-                command = parts[0][1:].lower()
-                if command in activeCommands:
-                    with busyLock:
-                        with db.cursor() as cur:
-                            cur.execute(
-                                "UPDATE users SET lastActiveTimestamp = %s, lastActiveChannel = %s WHERE id = %s",
-                                [current_milli_time(), "$$whisper$$" if isWhisper else source, tags['user-id']])
-                self.do_command(command, parts[1:], target, source, tags, isWhisper=isWhisper)
-        elif message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
-            self.message(source, "Bad Bot. No. (account banned from playing TCG)", isWhisper)
-            return
+        if message.startswith("!"):
+            parts = message.split()
+            command = parts[0][1:].lower()
+            if command in activeCommands:
+                with busyLock:
+                    with db.cursor() as cur:
+                        cur.execute(
+                            "UPDATE users SET lastActiveTimestamp = %s, lastActiveChannel = %s WHERE id = %s",
+                            [current_milli_time(), "$$whisper$$" if isWhisper else source, tags['user-id']])
+            self.do_command(command, parts[1:], target, source, tags, isWhisper=isWhisper)
 
     def message(self, channel, message, isWhisper=False):
         logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
