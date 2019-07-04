@@ -3,6 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <title>{NAME}'s profile - Waifu TCG</title>
+        <!--<meta name="viewport" content="width=device-width, initial-scale=1.0">-->
         <link crossorigin="anonymous" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.3/css/bootstrap.min.css"
               integrity="sha384-Zug+QiDoJOrZ5t4lssLdxGhVrurbmBWopoEl+M6BdEfwnCJZtKxi1KgxUyJq13dy"
               rel="stylesheet">
@@ -44,13 +45,15 @@
             </div>
         </nav>
         <div class='container-fluid'>
-            <div class="row">
-                <div class="col">
+            <div class="row profile">
+                <div class="col col-badges">
                     <h3>Badges</h3>
                     <br/>
-                    {BADGES}
+                    <div class="badges-container">
+                        {BADGES}
+                    </div>
                 </div>
-                <div class="col">
+                <div class="col col-description">
                     <h3>Description</h3>
                     <br/>
                     {DESCRIPTION}
@@ -68,7 +71,7 @@
                 </div>
             </div>
             <hr>
-            <div class="row">
+            <div class="row upgrade-progress">
                 <div class="col">
                     <div class="outerprogress">
                         <h2>Progress to next hand upgrade:</h2>

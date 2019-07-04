@@ -80,6 +80,7 @@ let sethead = "<!DOCTYPE html>\n" +
     "<head>\n" +
     "    <meta charset=\"UTF-8\">\n" +
     "    <title>Waifu TCG Sets</title>\n" +
+	"	 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
     "    <script src=\"https://code.jquery.com/jquery-3.2.1.min.js\"></script>\n" +
     "    <script src=\"https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.bundle.min.js\" crossorigin=\"anonymous\"></script>\n" +
     "    <script src=\"https://cdn.jsdelivr.net/npm/lazyload@2.0.0-beta.2/lazyload.js\"></script>\n" +
@@ -146,7 +147,7 @@ let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '</div>' +
     '<div class="card-footer text-center">' +
     '<div class="keep-box">' +
-    '<input type="checkbox" onchange="update()" /><br />Keep?' +
+    '<label><input type="checkbox" onchange="update()" /><br />Keep?</label>' +
     '</div>' +
     '<div class="card-info">' +
     '{CARDNAME}<br />' +
