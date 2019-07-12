@@ -1642,6 +1642,32 @@ class NepBot(NepBotClass):
             return
         super().on_unknown(message)
 
+    def handleNameChange(self, oldName, newName):
+        return self.handleNameChanges({oldName: newName})
+
+    def handleNameChanges(self, nameMapping):
+        with db.cursor() as cur:
+            oldNames = list(nameMapping)
+            cur.execute("SELECT name FROM channels WHERE name IN(%s)" % ",".join(["%s" * len(oldNames)]), oldNames)
+            channelsFound = [row[0] for row in cur.fetchall()]
+            for oldName in channelsFound:
+                newName = nameMapping[oldName]
+                hOldName = "#" + oldName
+                hNewName = "#" + newName
+                # channel name changed, attempt to deal with it
+                try:
+                    logger.debug("Attempting to handle channel name change %s -> %s..." % (oldName, newName))
+                    cur.execute("UPDATE channels SET name = %s WHERE name = %s", [newName, oldName])
+                    cur.execute("UPDATE bets SET channel = %s WHERE channel = %s", [hNewName, hOldName])
+                    cur.execute("UPDATE boosters_opened SET channel = %s WHERE channel = %s", [hNewName, hOldName])
+                    self.join(hNewName)
+                    self.addchannels.append(hNewName)
+                    self.leavechannels.append(hOldName)
+                    self.part(hOldName)
+                    logger.debug("OK, should be successful.")
+                except Exception:
+                    logger.debug("Could not handle name change properly, abandoning the attempt.")
+
     def start(self, password):
         pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
         self.pw = password
@@ -1900,13 +1926,18 @@ class NepBot(NepBotClass):
                     if len(currentIdMapping) > 0:
                         with busyLock:
                             with db.cursor() as cur:
-                                cur.execute("SELECT id FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
+                                cur.execute("SELECT id, name FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
                                             [id for id in currentIdMapping])
                                 foundIdsData = cur.fetchall()
                     localIds = [row[0] for row in foundIdsData]
+                    oldIdMapping = {row[0] : row[1] for row in foundIdsData}
 
                     # users to update the names for (id already exists)
                     updateNames.extend([(currentIdMapping[id], id) for id in currentIdMapping if id in localIds])
+                    nameChanges = {oldIdMapping[id] : currentIdMapping[id] for id in currentIdMapping if id in localIds}
+                    if len(nameChanges) > 0:
+                        with busyLock:
+                            self.handleNameChanges(nameChanges)
 
                     # new users (id does not exist)
                     newAccounts.extend([(id, currentIdMapping[id]) for id in currentIdMapping if id not in localIds])
@@ -2121,6 +2152,7 @@ class NepBot(NepBotClass):
                 elif user[0] != sender:
                     logger.info("%s got a new name, changing it to: %s", user[0], sender)
                     cur.execute("UPDATE users SET name = %s WHERE id = %s", [sender, tags['user-id']])
+                    self.handleNameChange(user[0], sender)
 
         if message.startswith("!"):
             parts = message.split()
