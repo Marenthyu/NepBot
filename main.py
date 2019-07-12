@@ -1031,7 +1031,7 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
             weighting_column = "(event_weighting*normal_weighting)" if useEventWeightings else "normal_weighting"
             result = None
             if rarity >= int(config["strongerWeightingMinRarity"]):
-                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} AND {0} >= 1 ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), [rarity] + bannedCards)
+                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} AND normal_weighting >= 1 ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), [rarity] + bannedCards)
                 result = cur.fetchone()
             if result is None:
                 cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), [rarity] + bannedCards)
