@@ -1,12 +1,18 @@
 <%
-    rarity = getRarityName(card.rarity);
+    if(card.firstGod) {
+        displayRarity = getRarityName(card.rarity);
+        rarity = "firstgod";
+    }
+    else {
+        displayRarity = rarity = getRarityName(card.rarity);
+    }
 %>
 <div class="card card-tcg card-<%= rarity %>">
     <div class="card-body card-body-tcg">
         <img src="<%= card.customImage || card.image %>" alt="<%= card.name %>" title="<%= card.name %>" class="card-image" />
         <div class="id-holder rarity-<%= rarity %>"><%= card.id %></div>
         <div class="invisible-space-holder">&nbsp;</div>
-        <div class="rarity-holder rarity-<%= rarity %>"><%= rarity %></div>
+        <div class="rarity-holder rarity-<%= rarity %>"><% if(card.firstGod) { %><span style="text-transform:none;font-weight:700">α&thinsp;</span><% } %><%= displayRarity %></div>
         <% if(card.rarity > card.base_rarity) { %>
             <div class="promotion-holder rarity-<%= rarity %>">
                 <%= "★".repeat(card.rarity - card.base_rarity) %>
@@ -28,7 +34,7 @@
                         Tradeable
                     <% } %><br />
                     <% if(parseInt(card.created) <= parseInt(config.legacyCardCreationCutoff)) { %>
-                        Created pre-July 2019 update
+                        Legacy (pre-July 2019 update)
                     <% } else { %>
                         Created <%= moment(new Date(card.created)).utc().format('MMMM Do YYYY, h:mm:ss a') %>
                     <% } %>
