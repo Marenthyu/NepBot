@@ -300,6 +300,7 @@ nav {
 /* Mobile friendly CSS */
 
 .card-bg-image {
+    display: none;
     position: absolute;
     top: 10px;
     left: 10px;
