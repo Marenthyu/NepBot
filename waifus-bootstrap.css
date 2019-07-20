@@ -103,7 +103,7 @@ nav {
 
 .rarity-firstgod {
     background: radial-gradient(ellipse farthest-corner at right bottom, #FEDB37 0%, #FDB931 8%, #9f7928 30%, #8A6E2F 40%, transparent 80%),
-                radial-gradient(ellipse farthest-corner at left top, #FEDB37 0%, #FDB931 8%, #D1B464 25%, #5d4a1f 62.5%, #5d4a1f 100%);
+        radial-gradient(ellipse farthest-corner at left top, #FEDB37 0%, #FDB931 8%, #D1B464 25%, #5d4a1f 62.5%, #5d4a1f 100%);
     color: white;
 }
 
@@ -118,12 +118,12 @@ nav {
 }
 
 .rarity-special {
-    background: linear-gradient(to right,rgba(255, 0, 0, 0.8),rgba(255, 165, 0, 0.8),rgba(0, 128, 0, 0.8),rgba(0, 0, 255, 0.8),rgba(75, 0, 162, 0.8),rgba(238, 162, 238, 0.8)), black;
+    background: linear-gradient(to right, rgba(255, 0, 0, 0.8), rgba(255, 165, 0, 0.8), rgba(0, 128, 0, 0.8), rgba(0, 0, 255, 0.8), rgba(75, 0, 162, 0.8), rgba(238, 162, 238, 0.8)), black;
     color: white;
 }
 
 .rarity-promo {
-    background: linear-gradient(to left,rgba(255, 0, 0, 0.8),rgba(255, 165, 0, 0.8),rgba(0, 128, 0, 0.8),rgba(0, 0, 255, 0.8),rgba(75, 0, 162, 0.8),rgba(238, 162, 238, 0.8)), black;
+    background: linear-gradient(to left, rgba(255, 0, 0, 0.8), rgba(255, 165, 0, 0.8), rgba(0, 128, 0, 0.8), rgba(0, 0, 255, 0.8), rgba(75, 0, 162, 0.8), rgba(238, 162, 238, 0.8)), black;
     color: white;
 }
 
@@ -147,6 +147,8 @@ nav {
     overflow: hidden;
     display: flex;
     align-items: center;
+    z-index: 2;
+    background-color: rgb(245, 245, 245);
 }
 
 .card-footer .card-info {
@@ -205,13 +207,13 @@ nav {
     margin: 0.5rem;
     display: inline-block;
     width: 170px;
-    border: 1px solid rgba(0,0,0,.125);
+    border: 1px solid rgba(0, 0, 0, .125);
     border-radius: .25rem;
 }
 
 .badge-inf {
     margin-top: 3px;
-    background:  rgb(237, 237, 237);
+    background: rgb(237, 237, 237);
     white-space: pre-wrap;
 }
 
@@ -230,15 +232,15 @@ nav {
 }
 
 .progress {
-    width:  100%;
+    width: 100%;
 }
 
 .progress-bar span {
 
-        position: absolute;
-        z-index: 2;
-        color: black;
-        margin: 0 auto;
+    position: absolute;
+    z-index: 2;
+    color: black;
+    margin: 0 auto;
 }
 
 #card-template {
@@ -295,3 +297,51 @@ nav {
     margin-right: 10px;
 }
 
+/* Mobile friendly CSS */
+
+.card-bg-image {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    background-position: center center;
+    background-repeat: no-repeat;
+    -webkit-background-size: cover;
+    background-size: cover;
+    filter: blur(8px);
+    -webkit-filter: blur(8px);
+}
+
+#cards-grid .card.card-tcg,
+#cards-grid .card-label {
+    display: inline-flex;
+}
+
+@media (max-width: 576px) {
+
+    #cards-grid {
+        display: grid;
+        grid-template-columns: 50% 50%;
+    }
+
+    #cards-grid .card .card-image {
+        max-width: 100%;
+        object-fit: scale-down;
+    }
+
+    .navbar-brand {
+        display: none;
+    }
+
+    .navbar form {
+        display: none;
+    }
+
+
+    #cards-grid .card-body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}

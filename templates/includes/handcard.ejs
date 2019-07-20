@@ -8,6 +8,7 @@
     }
 %>
 <div class="card card-tcg card-<%= rarity %>">
+    <div class="card-bg-image" style="background-image: url(<%= card.customImage || card.image %>);"></div>
     <div class="card-body card-body-tcg">
         <img src="<%= card.customImage || card.image %>" alt="<%= card.name %>" title="<%= card.name %>" class="card-image" />
         <div class="id-holder rarity-<%= rarity %>"><%= card.id %></div>
