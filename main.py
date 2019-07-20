@@ -5542,8 +5542,11 @@ class NepBot(NepBotClass):
                     
                     cur.execute("SELECT id, userid, boosterid FROM cards WHERE userid IS NOT NULL AND waifuid = %s AND rarity < %s", [waifu['id'], rarity])
                     for copy in cur.fetchall():
-                        updateCard(copy[0], {"userid": None, "boosterid": None})
-                        addCard(copy[1], waifu['id'], 'other', copy[2], rarity)
+                        if rarity >= int(config['numNormalRarities']):
+                            updateCard(copy[0], {"rarity": rarity})
+                        else:
+                            updateCard(copy[0], {"userid": None, "boosterid": None})
+                            addCard(copy[1], waifu['id'], 'other', copy[2], rarity)
                     attemptPromotions(waifu['id'])
 
                     # cancel all bounties
