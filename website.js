@@ -80,7 +80,7 @@ let sethead = "<!DOCTYPE html>\n" +
     "<head>\n" +
     "    <meta charset=\"UTF-8\">\n" +
     "    <title>Waifu TCG Sets</title>\n" +
-	"	 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+    "	 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
     "    <script src=\"https://code.jquery.com/jquery-3.2.1.min.js\"></script>\n" +
     "    <script src=\"https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.bundle.min.js\" crossorigin=\"anonymous\"></script>\n" +
     "    <script src=\"https://cdn.jsdelivr.net/npm/lazyload@2.0.0-beta.2/lazyload.js\"></script>\n" +
@@ -112,6 +112,7 @@ let white = "#FFFFFF";
 
 let bootstraphandtpl = fs.readFileSync('bootstraphandtemplate.htm', 'utf8');
 let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
+    '<div class="card-bg-image" style="background-image: url({IMAGE});"></div>' +
     '<div class="card-body card-body-tcg">' +
     '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
     '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
@@ -126,6 +127,7 @@ let bootstraphandcard = '<div class="card card-tcg card-{RARITY}">' +
     '</div>' +
     '</div>';
 let bootstraphandeventtoken = '<div class="card card-tcg">' +
+    '<div class="card-bg-image" style="background-image: url({IMAGE});"></div>' +
     '<div class="card-body card-body-tcg">' +
     '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
     '{AMOUNTHOLDER}' +
@@ -139,6 +141,7 @@ let bootstraphandamtholder = '<div class="amount-holder rarity-{RARITY}">x{AMOUN
 let bootstraphandpromoholder = '<div class="promotion-holder rarity-{RARITY}">{STARS}</div>';
 let bootstrapboostertpl = fs.readFileSync('bootstrapboostertemplate.htm', 'utf8');
 let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
+    '<div class="card-bg-image" style="background-image: url({IMAGE});"></div>' +
     '<div class="card-body card-body-tcg">' +
     '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
     '<div class="id-holder rarity-{RARITY}">{ID}</div>' +
@@ -156,6 +159,7 @@ let bootstrapboostercard = '<div class="card card-tcg card-{RARITY}">' +
     '</div>' +
     '</div>';
 let bootstrapboostereventtoken = '<div class="card card-tcg card-{RARITY}">' +
+    '<div class="card-bg-image" style="background-image: url({IMAGE});"></div>' +
     '<div class="card-body card-body-tcg">' +
     '<img src="{IMAGE}" alt="{CARDNAME}" title="{CARDNAME}" class="card-image" />' +
     '</div>' +
@@ -211,7 +215,9 @@ function smartsets(req, res, query) {
         user = query.user;
     }
     let response = smartsetstpl.replace(/{NAME}/g, escapeHtml(user));
-    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.writeHead(200, {
+        'Content-Type': 'text/html'
+    });
     res.write(response);
     res.end();
 
@@ -313,8 +319,13 @@ function smartsetsdata(req, res, query) {
                             }
                         }
                         // Build actual response
-                        res.writeHead(200, {'Content-Type': 'text/json'});
-                        let response = {count: 0, sets: []};
+                        res.writeHead(200, {
+                            'Content-Type': 'text/json'
+                        });
+                        let response = {
+                            count: 0,
+                            sets: []
+                        };
                         for (let setID in setsById) {
                             response.count += 1;
                             response.sets.push(setsById[setID]);
@@ -330,8 +341,13 @@ function smartsetsdata(req, res, query) {
 
                     })
             } else {
-                res.writeHead(200, {'Content-Type': 'text/json'});
-                res.write(JSON.stringify({count: 0, sets: []}));
+                res.writeHead(200, {
+                    'Content-Type': 'text/json'
+                });
+                res.write(JSON.stringify({
+                    count: 0,
+                    sets: []
+                }));
                 res.end();
 
             }
@@ -356,77 +372,80 @@ function claimedsets(req, res, query) {
                 "JOIN waifus ON cardID = waifus.id " +
                 "JOIN users ON rarity_sets.claimed_by = users.id " +
                 "WHERE rarity_sets.claimed_by IS NOT NULL " +
-                "ORDER BY sort_index, setID, waifus.id", function (rerr, rresult) {
-                if (rerr) throw rerr;
-                res.writeHead(200, {'Content-Type': 'text/html'});
-                res.write(sethead);
-                res.write(claimedhead);
-                let sets = [];
-                let lastsortindex = null;
-                let maxSetID = 0;
-                let maxSortIndex = 0;
-                for (let row of result) {
-                    if (row.setID > maxSetID) {
-                        maxSetID = row.setID;
-                    }
-                    if (row.sort_index > maxSortIndex) {
-                        maxSortIndex = row.sort_index;
-                    }
-                }
-                for (let row of rresult) {
-                    row.setID += maxSetID;
-                    row.sort_index += maxSortIndex;
-                    result.push(row);
-                }
-                for (let row of result) {
-                    if (sets.indexOf(row.setID) < 0) {
-                        if (lastsortindex === null) {
-                            lastsortindex = row.sort_index;
+                "ORDER BY sort_index, setID, waifus.id",
+                function (rerr, rresult) {
+                    if (rerr) throw rerr;
+                    res.writeHead(200, {
+                        'Content-Type': 'text/html'
+                    });
+                    res.write(sethead);
+                    res.write(claimedhead);
+                    let sets = [];
+                    let lastsortindex = null;
+                    let maxSetID = 0;
+                    let maxSortIndex = 0;
+                    for (let row of result) {
+                        if (row.setID > maxSetID) {
+                            maxSetID = row.setID;
                         }
-                        if (row.sort_index !== lastsortindex) {
-                            res.write("<br/><br/>");
-                            lastsortindex = row.sort_index;
+                        if (row.sort_index > maxSortIndex) {
+                            maxSortIndex = row.sort_index;
                         }
-                        sets.push(row.setID);
-                        res.write(setbuttonpreids);
-                        res.write(row.setID + "");
-                        res.write(setbuttonbetweenids);
-                        res.write(row.setID + "");
-                        res.write(setbuttonbetweenidsandname);
-                        res.write(row.setNam);
-                        res.write(setbuttonend);
                     }
-                }
-                res.write(setbetween);
-                let lastset = null;
-                for (let row of result) {
-                    if (lastset !== row.setID) {
-                        if (lastset !== null) {
-                            res.write(setsetfoot);
-                        }
-                        lastset = row.setID;
-                        res.write(setsethead);
-                        res.write(row.setID + "");
-                        res.write(setsetbetween);
-                        if (row.setReward > 0) {
-                            res.write("Reward: " + row.setReward + " points");
-                        } else {
-                            res.write("Reward: " + row.setRewardPudding + " pudding");
-                        }
-                        res.write(" - Claimed by: " + row.userName + "<br/>");
+                    for (let row of rresult) {
+                        row.setID += maxSetID;
+                        row.sort_index += maxSortIndex;
+                        result.push(row);
                     }
-                    res.write(setimagehead);
-                    res.write(white);
-                    res.write(setimagebetween);
-                    res.write(row.image);
-                    res.write(setimageafterlink);
-                    res.write("[" + row.waifuID + "][" + getRarityName(row.waifuRarity) + "] " + row.waifuName + " from " + row.waifuSeries);
-                    res.write(setimagefoot);
-                }
-                res.write(setsetfoot);
-                res.write(setfoot);
-                res.end();
-            })
+                    for (let row of result) {
+                        if (sets.indexOf(row.setID) < 0) {
+                            if (lastsortindex === null) {
+                                lastsortindex = row.sort_index;
+                            }
+                            if (row.sort_index !== lastsortindex) {
+                                res.write("<br/><br/>");
+                                lastsortindex = row.sort_index;
+                            }
+                            sets.push(row.setID);
+                            res.write(setbuttonpreids);
+                            res.write(row.setID + "");
+                            res.write(setbuttonbetweenids);
+                            res.write(row.setID + "");
+                            res.write(setbuttonbetweenidsandname);
+                            res.write(row.setNam);
+                            res.write(setbuttonend);
+                        }
+                    }
+                    res.write(setbetween);
+                    let lastset = null;
+                    for (let row of result) {
+                        if (lastset !== row.setID) {
+                            if (lastset !== null) {
+                                res.write(setsetfoot);
+                            }
+                            lastset = row.setID;
+                            res.write(setsethead);
+                            res.write(row.setID + "");
+                            res.write(setsetbetween);
+                            if (row.setReward > 0) {
+                                res.write("Reward: " + row.setReward + " points");
+                            } else {
+                                res.write("Reward: " + row.setRewardPudding + " pudding");
+                            }
+                            res.write(" - Claimed by: " + row.userName + "<br/>");
+                        }
+                        res.write(setimagehead);
+                        res.write(white);
+                        res.write(setimagebetween);
+                        res.write(row.image);
+                        res.write(setimageafterlink);
+                        res.write("[" + row.waifuID + "][" + getRarityName(row.waifuRarity) + "] " + row.waifuName + " from " + row.waifuSeries);
+                        res.write(setimagefoot);
+                    }
+                    res.write(setsetfoot);
+                    res.write(setfoot);
+                    res.end();
+                })
 
         })
 }
@@ -456,83 +475,106 @@ function bootstraphand(req, res, query) {
     }
 
     con.query("SELECT waifus.*, rarity, amount, custom_image FROM waifus JOIN has_waifu ON waifus.id = has_waifu.waifuid JOIN users ON " +
-        "has_waifu.userid = users.id WHERE users.name = ? ORDER BY (has_waifu.rarity < 8) DESC, waifus.id ASC, has_waifu.rarity ASC", query.user, function (err, result) {
-        if (err) throw err;
-        let wantJSON = false;
-        if ("accept" in req.headers && req.headers["accept"] === "application/json") {
-            wantJSON = true;
-        }
-        if (result.length === 0) {
-            if (wantJSON) {
-                res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
-                res.write(JSON.stringify({"error": {"status": 404, "explanation": "User not found"}}))
-            } else {
-                res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                res.write(bootstraphandtpl.replace(/{CARDS}/g, "404 - This user doesn't exist.").replace(/{NAME}/g, escapeHtml(query.user)));
-
+        "has_waifu.userid = users.id WHERE users.name = ? ORDER BY (has_waifu.rarity < 8) DESC, waifus.id ASC, has_waifu.rarity ASC", query.user,
+        function (err, result) {
+            if (err) throw err;
+            let wantJSON = false;
+            if ("accept" in req.headers && req.headers["accept"] === "application/json") {
+                wantJSON = true;
             }
-            res.end();
-            return;
-        }
-        con.query("SELECT eventTokens FROM users WHERE users.name = ?", query.user, function (err, resultTokens) {
-            if (resultTokens.length === 0) {
+            if (result.length === 0) {
                 if (wantJSON) {
-                    res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
-                    res.write(JSON.stringify({"error": {"status": 404, "explanation": "User not found"}}))
+                    res.writeHead(404, "Not Found", {
+                        'Content-Type': 'application/json; charset=utf-8'
+                    });
+                    res.write(JSON.stringify({
+                        "error": {
+                            "status": 404,
+                            "explanation": "User not found"
+                        }
+                    }))
                 } else {
-                    res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
+                    res.writeHead(404, "Not Found", {
+                        'Content-Type': 'text/html'
+                    });
                     res.write(bootstraphandtpl.replace(/{CARDS}/g, "404 - This user doesn't exist.").replace(/{NAME}/g, escapeHtml(query.user)));
 
                 }
                 res.end();
                 return;
             }
-            if (wantJSON) {
-                let sanitizedResult = [];
-                for (let row of result) {
-                    let obj = {
-                        "id": row.id,
-                        "Name": row.Name,
-                        "series": row.series,
-                        "image": row.custom_image || row.image,
-                        "base_rarity": row.base_rarity,
-                        "rarity": row.rarity,
-                        "amount": row.amount
-                    };
-                    sanitizedResult.push(obj);
+            con.query("SELECT eventTokens FROM users WHERE users.name = ?", query.user, function (err, resultTokens) {
+                if (resultTokens.length === 0) {
+                    if (wantJSON) {
+                        res.writeHead(404, "Not Found", {
+                            'Content-Type': 'application/json; charset=utf-8'
+                        });
+                        res.write(JSON.stringify({
+                            "error": {
+                                "status": 404,
+                                "explanation": "User not found"
+                            }
+                        }))
+                    } else {
+                        res.writeHead(404, "Not Found", {
+                            'Content-Type': 'text/html'
+                        });
+                        res.write(bootstraphandtpl.replace(/{CARDS}/g, "404 - This user doesn't exist.").replace(/{NAME}/g, escapeHtml(query.user)));
+
+                    }
+                    res.end();
+                    return;
                 }
-                res.writeHead(200, {'Content-Type': 'application/json'});
-                res.write(JSON.stringify({
-                    'user': query.user,
-                    "cards": sanitizedResult,
-                    "eventTokens": resultTokens[0].eventTokens
-                }))
-            } else {
-                res.writeHead(200, {'Content-Type': 'text/html'});
-                let cards = '';
-                for (let row of result) {
-                    let card = bootstraphandcard;
-                    card = getCardHtml(card, row);
-                    cards += card;
-                }
-                if (resultTokens[0].eventTokens > 0) {
-                    let card = bootstraphandeventtoken;
-                    card = getCardHtml(card, {
-                        "id": "",
-                        "Name": config.eventTokenName,
-                        "series": "",
-                        "image": config.eventTokenImage,
-                        "base_rarity": 9,
-                        "rarity": 9,
-                        "amount": resultTokens[0].eventTokens
+                if (wantJSON) {
+                    let sanitizedResult = [];
+                    for (let row of result) {
+                        let obj = {
+                            "id": row.id,
+                            "Name": row.Name,
+                            "series": row.series,
+                            "image": row.custom_image || row.image,
+                            "base_rarity": row.base_rarity,
+                            "rarity": row.rarity,
+                            "amount": row.amount
+                        };
+                        sanitizedResult.push(obj);
+                    }
+                    res.writeHead(200, {
+                        'Content-Type': 'application/json'
                     });
-                    cards += card;
+                    res.write(JSON.stringify({
+                        'user': query.user,
+                        "cards": sanitizedResult,
+                        "eventTokens": resultTokens[0].eventTokens
+                    }))
+                } else {
+                    res.writeHead(200, {
+                        'Content-Type': 'text/html'
+                    });
+                    let cards = '';
+                    for (let row of result) {
+                        let card = bootstraphandcard;
+                        card = getCardHtml(card, row);
+                        cards += card;
+                    }
+                    if (resultTokens[0].eventTokens > 0) {
+                        let card = bootstraphandeventtoken;
+                        card = getCardHtml(card, {
+                            "id": "",
+                            "Name": config.eventTokenName,
+                            "series": "",
+                            "image": config.eventTokenImage,
+                            "base_rarity": 9,
+                            "rarity": 9,
+                            "amount": resultTokens[0].eventTokens
+                        });
+                        cards += card;
+                    }
+                    res.write(bootstraphandtpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user));
                 }
-                res.write(bootstraphandtpl.replace(/{CARDS}/g, cards).replace(/{NAME}/g, query.user));
-            }
-            res.end();
+                res.end();
+            });
         });
-    });
 }
 
 function bootstrapbooster(req, res, query) {
@@ -550,7 +592,9 @@ function bootstrapbooster(req, res, query) {
         }
         if (result.length === 0) {
             if (wantJSON) {
-                res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
+                res.writeHead(404, "Not Found", {
+                    'Content-Type': 'application/json; charset=utf-8'
+                });
                 res.write(JSON.stringify({
                     "error": {
                         "status": 404,
@@ -558,7 +602,9 @@ function bootstrapbooster(req, res, query) {
                     }
                 }))
             } else {
-                res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
+                res.writeHead(404, "Not Found", {
+                    'Content-Type': 'text/html'
+                });
                 res.write(bootstrapboostertpl.replace(/{CARDS}/g, "404 - This user doesn't exist or has no open booster.").replace(/{NAME}/g, escapeHtml(query.user)));
 
             }
@@ -568,7 +614,9 @@ function bootstrapbooster(req, res, query) {
         con.query("SELECT boosters_opened.eventTokens FROM boosters_opened JOIN users ON boosters_opened.userid = users.id WHERE users.name = ? AND boosters_opened.status = 'open'", query.user, function (err, resultTokens) {
             if (resultTokens.length === 0) {
                 if (wantJSON) {
-                    res.writeHead(404, "Not Found", {'Content-Type': 'application/json; charset=utf-8'});
+                    res.writeHead(404, "Not Found", {
+                        'Content-Type': 'application/json; charset=utf-8'
+                    });
                     res.write(JSON.stringify({
                         "error": {
                             "status": 404,
@@ -576,7 +624,9 @@ function bootstrapbooster(req, res, query) {
                         }
                     }))
                 } else {
-                    res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
+                    res.writeHead(404, "Not Found", {
+                        'Content-Type': 'text/html'
+                    });
                     res.write(bootstrapboostertpl.replace(/{CARDS}/g, "404 - This user doesn't exist or has no open booster.").replace(/{NAME}/g, escapeHtml(query.user)));
 
                 }
@@ -584,7 +634,9 @@ function bootstrapbooster(req, res, query) {
                 return;
             }
             if (wantJSON) {
-                res.writeHead(200, {'Content-Type': 'application/json'});
+                res.writeHead(200, {
+                    'Content-Type': 'application/json'
+                });
                 let sanitizedResult = [];
                 for (let row of result) {
                     let obj = {};
@@ -601,7 +653,9 @@ function bootstrapbooster(req, res, query) {
                     "eventTokens": resultTokens[0].eventTokens
                 }));
             } else {
-                res.writeHead(200, {'Content-Type': 'text/html'});
+                res.writeHead(200, {
+                    'Content-Type': 'text/html'
+                });
                 let cards = '';
                 for (let row of result) {
                     let card = bootstrapboostercard;
@@ -633,61 +687,66 @@ function bootstrapbooster(req, res, query) {
 function pullfeed(req, res, query) {
 
     con.query("SELECT drops.rarity, drops.source, drops.channel, drops.timestamp, waifus.id AS waifuID, waifus.Name as waifuName, waifus.series AS waifuSeries, waifus.image AS waifuImage, users.name AS username " +
-        "FROM drops JOIN waifus ON drops.waifuid = waifus.id JOIN users ON drops.userid = users.id WHERE drops.rarity >= 4 ORDER BY drops.id DESC LIMIT 100", function (err, result) {
-        if (err) throw err;
-        let wantJSON = false;
-        let jsonresp = [];
-        if ("accept" in req.headers && req.headers["accept"] === "application/json") {
-            wantJSON = true;
-            res.writeHead(200, {'Content-Type': 'application/json; charset=utf-8'});
-        } else {
-            res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
-            res.write(pfhead);
-        }
-        for (let row of result) {
-            let obj = {};
-            if (wantJSON) {
-                obj["timestamp"] = row.timestamp;
-                obj["user"] = row.username;
-                obj["waifu"] = {
-                    "name": row.waifuName,
-                    "id": row.waifuID,
-                    "series": row.waifuSeries,
-                    "image": row.waifuImage,
-                    "rarity": row.rarity
-                };
-                obj["source"] = row.source;
-                obj["channel"] = row.channel;
-                jsonresp.push(obj);
+        "FROM drops JOIN waifus ON drops.waifuid = waifus.id JOIN users ON drops.userid = users.id WHERE drops.rarity >= 4 ORDER BY drops.id DESC LIMIT 100",
+        function (err, result) {
+            if (err) throw err;
+            let wantJSON = false;
+            let jsonresp = [];
+            if ("accept" in req.headers && req.headers["accept"] === "application/json") {
+                wantJSON = true;
+                res.writeHead(200, {
+                    'Content-Type': 'application/json; charset=utf-8'
+                });
             } else {
-                res.write("[" + new Date(row.timestamp).toISOString() + "] ");
-                res.write(row.username + " pulled <code>[" + row.waifuID + "][" + getRarityName(row.rarity) + "] " + row.waifuName + " from " + row.waifuSeries + "</code>");
-                if (row.source === 'freewaifu') {
-                    res.write(" as a free waifu");
-                } else if (row.source === 'buy') {
-                    res.write(" using <code>!buy</code>");
-                } else if (row.source.toString().startsWith("boosters.")) {
-                    res.write(" from a " + row.source.substring(9) + " booster");
-                } else {
-                    res.write(" from a mysterious unknown source");
-                }
-
-                if (row.channel === '$$whisper$$') {
-                    res.write(" via whisper.");
-                } else {
-                    res.write(" in " + row.channel.substring(1) + "&#39;s channel.");
-                }
-                res.write("<br />");
+                res.writeHead(200, {
+                    'Content-Type': 'text/html; charset=utf-8'
+                });
+                res.write(pfhead);
             }
+            for (let row of result) {
+                let obj = {};
+                if (wantJSON) {
+                    obj["timestamp"] = row.timestamp;
+                    obj["user"] = row.username;
+                    obj["waifu"] = {
+                        "name": row.waifuName,
+                        "id": row.waifuID,
+                        "series": row.waifuSeries,
+                        "image": row.waifuImage,
+                        "rarity": row.rarity
+                    };
+                    obj["source"] = row.source;
+                    obj["channel"] = row.channel;
+                    jsonresp.push(obj);
+                } else {
+                    res.write("[" + new Date(row.timestamp).toISOString() + "] ");
+                    res.write(row.username + " pulled <code>[" + row.waifuID + "][" + getRarityName(row.rarity) + "] " + row.waifuName + " from " + row.waifuSeries + "</code>");
+                    if (row.source === 'freewaifu') {
+                        res.write(" as a free waifu");
+                    } else if (row.source === 'buy') {
+                        res.write(" using <code>!buy</code>");
+                    } else if (row.source.toString().startsWith("boosters.")) {
+                        res.write(" from a " + row.source.substring(9) + " booster");
+                    } else {
+                        res.write(" from a mysterious unknown source");
+                    }
 
-        }
-        if (wantJSON) {
-            res.write(JSON.stringify(jsonresp));
-        } else {
-            res.write(pffoot);
-        }
-        res.end();
-    });
+                    if (row.channel === '$$whisper$$') {
+                        res.write(" via whisper.");
+                    } else {
+                        res.write(" in " + row.channel.substring(1) + "&#39;s channel.");
+                    }
+                    res.write("<br />");
+                }
+
+            }
+            if (wantJSON) {
+                res.write(JSON.stringify(jsonresp));
+            } else {
+                res.write(pffoot);
+            }
+            res.end();
+        });
 
 }
 
@@ -746,21 +805,27 @@ function api(req, res, query) {
                         "lastVoter": row.lastVoter
                     })
                 }
-                res.writeHead(200, {'Content-Type': 'text/json'});
+                res.writeHead(200, {
+                    'Content-Type': 'text/json'
+                });
                 res.write(JSON.stringify(wars));
                 res.end();
             });
         } else if (query.type === 'incentives') {
             con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result) {
                 if (err) throw err;
-                res.writeHead(200, {'Content-Type': 'text/json'});
+                res.writeHead(200, {
+                    'Content-Type': 'text/json'
+                });
                 res.write(JSON.stringify(result));
                 res.end();
             });
         } else if (query.type === 'emotewar') {
             con.query("SELECT * FROM emoteWar ORDER BY count DESC", function (err, result) {
                 if (err) throw err;
-                res.writeHead(200, {'Content-Type': 'text/json'});
+                res.writeHead(200, {
+                    'Content-Type': 'text/json'
+                });
                 res.write(JSON.stringify(result));
                 res.end();
             });
@@ -800,8 +865,14 @@ function api(req, res, query) {
                     if (err) throw err;
                     con.query("SELECT * FROM emoteWar ORDER BY count DESC", function (err, result3) {
                         if (err) throw err;
-                        res.writeHead(200, {'Content-Type': 'text/json'});
-                        res.write(JSON.stringify({"wars": wars, "incentives": result2, "emotewar": result3}));
+                        res.writeHead(200, {
+                            'Content-Type': 'text/json'
+                        });
+                        res.write(JSON.stringify({
+                            "wars": wars,
+                            "incentives": result2,
+                            "emotewar": result3
+                        }));
                         res.end();
                     });
                 });
@@ -823,7 +894,9 @@ function profile(req, res, query) {
     con.query("SELECT profileDescription, favourite, id FROM users WHERE users.name = ?", query.user, function (err, resultOuter) {
         if (err) throw err;
         if (resultOuter.length === 0) {
-            res.writeHead(404, "User Not Found", {'Content-Type': 'text/html'});
+            res.writeHead(404, "User Not Found", {
+                'Content-Type': 'text/html'
+            });
             res.write(profiletpl.replace(/{NAME}/g, escapeHtml(query.user)).replace(/{BADGES}/g, "404 - User not found.").replace(/{DESCRIPTION}/g, "404 - User not found.").replace(/{FAVOURITE}/g, "404 - User not found.").replace(/{CURRENTSPENDINGS}/g, "0").replace(/{NEXTSPENDINGS}/g, "0"));
 
             res.end();
@@ -831,59 +904,62 @@ function profile(req, res, query) {
         }
         let userID = resultOuter[0].id;
         con.query("SELECT badges.name, badges.description, badges.image FROM has_badges JOIN badges ON has_badges.badgeID =" +
-            " badges.id JOIN users ON has_badges.userID = users.id WHERE users.id = ?", userID, function (err, result) {
-            if (err) throw err;
-            res.writeHead(200, {'Content-Type': 'text/html'});
-            let badges = '';
-            for (let row of result) {
-                let badge = badgetemplate;
-                badge = badge.replace(/{DESCRIPTION}/g, row.description);
-                badge = badge.replace(/{IMAGE}/g, row.image);
-                badge = badge.replace(/{CARDNAME}/g, row.name);
-                badges += badge;
-            }
-            con.query("SELECT waifus.id, waifus.Name, waifus.image, waifus.base_rarity, waifus.series, has_waifu.rarity, has_waifu.custom_image FROM waifus LEFT JOIN has_waifu ON (has_waifu.waifuid = waifus.id AND has_waifu.userid = ?) WHERE id = ? ORDER BY has_waifu.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
+            " badges.id JOIN users ON has_badges.userID = users.id WHERE users.id = ?", userID,
+            function (err, result) {
                 if (err) throw err;
-
-                let row = resultInner[0];
-
-                row.amount = 1;
-                row.rarity = (row.rarity && row.rarity > row.base_rarity) ? row.rarity : row.base_rarity;
-
-                let card = bootstraphandcard;
-
-                card = getCardHtml(card, row);
-
-                con.query("SELECT spending FROM users WHERE id = ?", userID, function (err, resultInnermost) {
+                res.writeHead(200, {
+                    'Content-Type': 'text/html'
+                });
+                let badges = '';
+                for (let row of result) {
+                    let badge = badgetemplate;
+                    badge = badge.replace(/{DESCRIPTION}/g, row.description);
+                    badge = badge.replace(/{IMAGE}/g, row.image);
+                    badge = badge.replace(/{CARDNAME}/g, row.name);
+                    badges += badge;
+                }
+                con.query("SELECT waifus.id, waifus.Name, waifus.image, waifus.base_rarity, waifus.series, has_waifu.rarity, has_waifu.custom_image FROM waifus LEFT JOIN has_waifu ON (has_waifu.waifuid = waifus.id AND has_waifu.userid = ?) WHERE id = ? ORDER BY has_waifu.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
                     if (err) throw err;
-                    let spending = 0;
-                    spending = resultInnermost[0].spending;
-                    con.query("SELECT slot, spendings, (SELECT paidHandUpgrades FROM users WHERE id = ?) as paidSlots FROM handupgrades", userID, function (err, huLUTresult) {
+
+                    let row = resultInner[0];
+
+                    row.amount = 1;
+                    row.rarity = (row.rarity && row.rarity > row.base_rarity) ? row.rarity : row.base_rarity;
+
+                    let card = bootstraphandcard;
+
+                    card = getCardHtml(card, row);
+
+                    con.query("SELECT spending FROM users WHERE id = ?", userID, function (err, resultInnermost) {
                         if (err) throw err;
+                        let spending = 0;
+                        spending = resultInnermost[0].spending;
+                        con.query("SELECT slot, spendings, (SELECT paidHandUpgrades FROM users WHERE id = ?) as paidSlots FROM handupgrades", userID, function (err, huLUTresult) {
+                            if (err) throw err;
 
-                        let nextspendings = 0;
-                        let lastspendings = 0;
+                            let nextspendings = 0;
+                            let lastspendings = 0;
 
-                        let paidSlots = huLUTresult[0].paidSlots;
+                            let paidSlots = huLUTresult[0].paidSlots;
 
-                        if (paidSlots + 1 < huLUTresult.length) {
-                            nextspendings = huLUTresult[paidSlots + 1].spendings;
-                            lastspendings = huLUTresult[paidSlots].spendings;
-                        } else {
-                            nextspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1) + 1));
-                            lastspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1)));
-                        }
+                            if (paidSlots + 1 < huLUTresult.length) {
+                                nextspendings = huLUTresult[paidSlots + 1].spendings;
+                                lastspendings = huLUTresult[paidSlots].spendings;
+                            } else {
+                                nextspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1) + 1));
+                                lastspendings = huLUTresult[huLUTresult.length - 1].spendings + (1000000 * (paidSlots - (huLUTresult.length - 1)));
+                            }
 
-                        let percentspendings = Math.max(((spending - lastspendings) / (nextspendings - lastspendings)) * 100, 0);
-                        res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{NAME}/g, escapeHtml(query.user)).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
-                        res.end();
+                            let percentspendings = Math.max(((spending - lastspendings) / (nextspendings - lastspendings)) * 100, 0);
+                            res.write(profiletpl.replace(/{BADGES}/g, badges).replace(/{NAME}/g, escapeHtml(query.user)).replace(/{DESCRIPTION}/g, escapeHtml(resultOuter[0].profileDescription)).replace(/{FAVOURITE}/g, card).replace(/{LASTSPENDINGS}/g, "" + lastspendings).replace(/{CURRENTSPENDINGS}/g, "" + spending).replace(/{NEXTSPENDINGS}/g, "" + nextspendings).replace(/{PERCENTSPENDINGS}/g, "" + percentspendings));
+                            res.end();
 
+                        })
                     })
-                })
+
+                });
 
             });
-
-        });
     });
 
 }
@@ -1001,8 +1077,7 @@ function tracker(req, res, query) {
                     }
 
                 }
-            }
-            else {
+            } else {
                 warOutput += "Sorry, no bid wars logged in the system currently.";
             }
 
@@ -1070,23 +1145,31 @@ function bootServer(callback) {
                     break;
                 }
                 case "help": {
-                    res.writeHead(302, {'Location': 'http://t.fuelr.at/heq'});
+                    res.writeHead(302, {
+                        'Location': 'http://t.fuelr.at/heq'
+                    });
                     res.end();
                     break;
                 }
                 case "fixes": {
-                    res.writeHead(302, {'Location': 'https://goo.gl/forms/ymaZWjM6ZyGl2DXj2'});
+                    res.writeHead(302, {
+                        'Location': 'https://goo.gl/forms/ymaZWjM6ZyGl2DXj2'
+                    });
                     res.end();
                     break;
                 }
                 case "waifus-bootstrap.css": {
-                    res.writeHead(200, {'Content-Type': 'text/css'});
+                    res.writeHead(200, {
+                        'Content-Type': 'text/css'
+                    });
                     res.write(bootstrapwaifucss);
                     res.end();
                     break;
                 }
                 case "discord": {
-                    res.writeHead(302, {'Location': 'https://discord.gg/4KVy32j'});
+                    res.writeHead(302, {
+                        'Location': 'https://discord.gg/4KVy32j'
+                    });
                     res.end();
                     break;
                 }
@@ -1112,17 +1195,21 @@ function bootServer(callback) {
                     break;
                 }
                 // case "tracker": {
-                    // tracker(req, res, q.query);
-                    // break;
+                // tracker(req, res, q.query);
+                // break;
                 // }
                 default: {
-                    res.writeHead(404, {'Content-Type': 'text/html'});
+                    res.writeHead(404, {
+                        'Content-Type': 'text/html'
+                    });
                     res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
                     res.end();
                 }
             }
         } catch (err) {
-            res.writeHead(500, "Internal Server Error", {"Content-Type": "text/html"});
+            res.writeHead(500, "Internal Server Error", {
+                "Content-Type": "text/html"
+            });
             res.write("Something went wrong. Sorry. Blame Marenthyu! Tell him this: " + err.toString());
             res.end();
             console.log(err.toString());
