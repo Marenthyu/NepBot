@@ -2987,7 +2987,7 @@ class NepBot(NepBotClass):
 
                     if len(args) < 3:
                         self.message(channel,
-                                     "Usage: !trade <accept/decline> <user> OR !trade <user> <have> <want>",
+                                     "Usage: !trade <check/accept/decline/cancel> <user> OR !trade <user> <have> <want> OR !trade list",
                                      isWhisper=isWhisper)
                         return
 
