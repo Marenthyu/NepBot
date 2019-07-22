@@ -331,7 +331,7 @@ def getHand(twitchid):
         logger.error("Got non-integer id for getHand. Aborting.")
         return []
     with db.cursor(pymysql.cursors.DictCursor) as cur:
-        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity, cards.tradeableAt FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid IS NULL ORDER BY COALESCE(cards.sortValue, 32768) ASC, (rarity < %s) DESC, waifus.id ASC",
+        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity, cards.tradeableAt FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid IS NULL ORDER BY COALESCE(cards.sortValue, 32000) ASC, (rarity < %s) DESC, waifus.id ASC",
         [tID, int(config["numNormalRarities"])])
         return cur.fetchall()
              
