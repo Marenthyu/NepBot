@@ -412,7 +412,7 @@ function profile(req, res, query) {
             " badges.id JOIN users ON has_badges.userID = users.id WHERE users.id = ?", userID, function (err, result) {
             if (err) throw err;
             res.writeHead(200, {'Content-Type': 'text/html'});
-            con.query("SELECT waifus.id, waifus.name, waifus.image, waifus.base_rarity, waifus.series, cards.rarity, cards.customImage FROM waifus LEFT JOIN cards ON (cards.waifuid = waifus.id AND cards.userid = ? AND cards.boosterid IS NULL) WHERE waifus.id = ? ORDER BY cards.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
+            con.query("SELECT waifus.id, waifus.name, waifus.image, waifus.base_rarity, waifus.series, c1.rarity, c1.customImage, IF(c1.rarity = 7 AND NOT EXISTS(SELECT id FROM cards c2 WHERE c2.rarity = 7 AND c2.waifuid = c1.waifuid AND (c2.created < c1.created OR (c2.created=c1.created AND c2.id < c1.id))), 1, 0) AS firstGod FROM waifus LEFT JOIN cards c1 ON (c1.waifuid = waifus.id AND c1.userid = ? AND c1.boosterid IS NULL) WHERE waifus.id = ? ORDER BY c1.rarity DESC LIMIT 1", [userID, resultOuter[0].favourite], function (err, resultInner) {
                 if (err) throw err;
 
                 let row = resultInner[0];
