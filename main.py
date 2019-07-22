@@ -1214,7 +1214,7 @@ class CantAffordBoosterException(Exception):
 def getPackStats(userid):
     with db.cursor() as cur:
         cur.execute(
-            "SELECT bo.boostername, COUNT(*) FROM (SELECT * FROM boosters_opened WHERE userid = %s UNION SELECT * FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON (bo.boostername IN(boosters.name, CONCAT('mega', boosters.name))) WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC",
+            "SELECT bo.boostername, COUNT(*) FROM (SELECT id, boostername FROM boosters_opened WHERE userid = %s UNION SELECT id, boostername FROM archive_boosters_opened WHERE userid = %s) AS bo JOIN boosters ON (bo.boostername IN(boosters.name, CONCAT('mega', boosters.name))) WHERE boosters.cost > 0 GROUP BY bo.boostername ORDER BY COUNT(*) DESC",
             [userid] * 2)
         packstats = cur.fetchall()
         return packstats
