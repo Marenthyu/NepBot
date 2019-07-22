@@ -301,17 +301,6 @@ nav {
 
 .card-bg-image {
     display: none;
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    bottom: 10px;
-    background-position: center center;
-    background-repeat: no-repeat;
-    -webkit-background-size: cover;
-    background-size: cover;
-    filter: blur(8px);
-    -webkit-filter: blur(8px);
 }
 
 #cards-grid .card.card-tcg,
@@ -323,7 +312,7 @@ nav {
 
     #cards-grid {
         display: grid;
-        grid-template-columns: 50% 50%;
+        /*grid-template-columns: 50% 50%;*/
     }
 
     #cards-grid .card .card-image {
@@ -344,5 +333,19 @@ nav {
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+
+    .card-bg-image {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        background-position: center center;
+        background-repeat: no-repeat;
+        -webkit-background-size: cover;
+        background-size: cover;
+        filter: blur(8px);
+        -webkit-filter: blur(8px);
     }
 }
