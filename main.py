@@ -2565,11 +2565,11 @@ class NepBot(NepBotClass):
                     if row['rarity'] == godRarity:
                         # check image change
                         with db.cursor() as cur:
-                            cur.execute("UPDATE godimage_requests SET state='cancelled' WHERE requesterid = %s AND waifuid = %s AND state = 'pending'", [tags['user-id'], row['id']])
+                            cur.execute("UPDATE godimage_requests SET state='cancelled' WHERE requesterid = %s AND cardid = %s AND state = 'pending'", [tags['user-id'], row['cardid']])
                             if cur.rowcount > 0:
                                 # request was cancelled
-                                waifuData = getWaifuById(row['id'])
-                                self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you disenchanted it." % (row['id'], waifuData['name']), True)
+                                waifuData = getWaifuById(row['waifuid'])
+                                self.message("#%s" % sender, "Your image change request for [%d] %s was cancelled since you disenchanted it." % (row['waifuid'], waifuData['name']), True)
                 
                 attemptPromotions(*checkPromos)
                 addPoints(tags['user-id'], pointsGain)
