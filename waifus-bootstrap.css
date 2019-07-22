@@ -343,7 +343,6 @@ nav {
 	#cards-grid,
 	.set-cards {
 		display: grid;
-		/*grid-template-columns: 50% 50%;*/
 	}
 
 	#cards-grid .card .card-image,
