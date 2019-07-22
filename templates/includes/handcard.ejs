@@ -14,7 +14,7 @@
         <div class="id-holder rarity-<%= rarity %>"><%= card.id %></div>
         <div class="invisible-space-holder">&nbsp;</div>
         <div class="rarity-holder rarity-<%= rarity %>"><% if(card.firstGod) { %><span style="text-transform:none;font-weight:700">α&thinsp;</span><% } %><%= displayRarity %></div>
-        <% if(card.rarity > card.base_rarity) { %>
+        <% if(card.rarity > card.base_rarity && card.rarity < 8) { %>
             <div class="promotion-holder rarity-<%= rarity %>">
                 <%= "★".repeat(card.rarity - card.base_rarity) %>
             </div>
