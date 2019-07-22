@@ -1724,19 +1724,19 @@ class NepBot(NepBotClass):
                                     [current_milli_time(), pack[0]])
 
                     # inactivity timeout
-                    cur.execute("SELECT DISTINCT users.id, users.name FROM cards JOIN users ON cards.userid = users.id WHERE cards.rarity < %s AND users.inactivityImmunity = 0 AND (users.lastActiveTimestamp IS NULL OR users.lastActiveTimestamp < %s)", [config["numNormalRarities"], current_milli_time() - int(config["inactivityTimeoutDays"])*86400000])
-                    inactiveUsers = cur.fetchall()
-                    expireCount = len(inactiveUsers)
-                    expireCardCount = 0
+                    # cur.execute("SELECT DISTINCT users.id, users.name FROM cards JOIN users ON cards.userid = users.id WHERE cards.rarity < %s AND users.inactivityImmunity = 0 AND (users.lastActiveTimestamp IS NULL OR users.lastActiveTimestamp < %s)", [config["numNormalRarities"], current_milli_time() - int(config["inactivityTimeoutDays"])*86400000])
+                    # inactiveUsers = cur.fetchall()
+                    # expireCount = len(inactiveUsers)
+                    # expireCardCount = 0
 
-                    while len(inactiveUsers) > 0:
-                        inactiveSlice = inactiveUsers[:100]
-                        inactiveUsers = inactiveUsers[100:]
-                        logger.debug("Expiring users: "+(", ".join(row[1] for row in inactiveSlice)))
-                        expireCardCount += cur.execute("UPDATE cards SET userid = NULL, boosterid = NULL WHERE rarity < %s AND userid IN("+(",".join(["%s"] * len(inactiveSlice)))+")", [config["numNormalRarities"]] + [row[0] for row in inactiveSlice])
+                    # while len(inactiveUsers) > 0:
+                    #     inactiveSlice = inactiveUsers[:100]
+                    #     inactiveUsers = inactiveUsers[100:]
+                    #     logger.debug("Expiring users: "+(", ".join(row[1] for row in inactiveSlice)))
+                    #     expireCardCount += cur.execute("UPDATE cards SET userid = NULL, boosterid = NULL WHERE rarity < %s AND userid IN("+(",".join(["%s"] * len(inactiveSlice)))+")", [config["numNormalRarities"]] + [row[0] for row in inactiveSlice])
                     
-                    if expireCardCount > 0:
-                        logger.debug("Expired %d cards from %d users" % (expireCardCount, expireCount))
+                    # if expireCardCount > 0:
+                    #     logger.debug("Expired %d cards from %d users" % (expireCardCount, expireCount))
 
 
                     # increase weightings
