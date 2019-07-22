@@ -363,7 +363,16 @@ nav {
 	}
 
 	.navbar form {
-		display: none;
+		display: flex;
+		flex-direction: row;
+	}
+
+	.navbar-expand .navbar-collapse {
+		flex-direction: column;
+	}
+
+	.navbar form input {
+		width: unset;
 	}
 
 	#cards-grid .card-body,
