@@ -151,6 +151,7 @@ function hand(req, res, query) {
                         "rarity": row.rarity,
                         "amount": 1,
                         "cardid": row.cardid,
+                        "firstGod": row.firstGod,
                     };
                     sanitizedResult.push(obj);
                 }

@@ -1427,7 +1427,7 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                     [":".join(str(round(n)) for n in scalingData), totalTokensDropped, userid])
 
         # insert opened booster
-        boosterid = addBooster(userid, logPackName, cost if buying else 0, 'open', totalTokensDropped, channel, isWhisper)
+        boosterid = addBooster(userid, logPackName, cost*iterations if buying else 0, 'open', totalTokensDropped, channel, isWhisper)
         for card in cards:
             addCard(userid, card, 'booster', boosterid)
 
