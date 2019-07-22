@@ -2439,7 +2439,7 @@ class NepBot(NepBotClass):
                         
                         boosterid = None
                         if not spaceInHand:
-                            boosterid = addBooster(tags['user-id'], 'freebie', 0, 0, channel, isWhisper)
+                            boosterid = addBooster(tags['user-id'], 'freebie', 0, 'open', 0, channel, isWhisper)
                         addCard(tags['user-id'], row['id'], 'freebie', boosterid)
                         if spaceInHand:
                             attemptPromotions(row['id'])
