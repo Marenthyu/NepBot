@@ -1896,6 +1896,7 @@ class NepBot(NepBotClass):
                         cur.close()
 
                 # now deal with user names that aren't already in the DB
+                newUsers = list(newUsers)
                 if len(newUsers) > 10000:
                     logger.warning(
                         "DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
