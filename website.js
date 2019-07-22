@@ -109,7 +109,7 @@ function hand(req, res, query) {
     }
 
     con.query("SELECT waifus.*, c1.rarity, c1.customImage, c1.id as cardid, c1.tradeableAt, c1.created, " +
-        "IF(c1.rarity = 7 AND NOT EXISTS(SELECT id FROM cards c2 WHERE c2.rarity = 7 AND c2.waifuid = c1.waifuid AND c2.created < c1.created), 1, 0) AS firstGod FROM waifus JOIN cards c1 ON waifus.id = c1.waifuid JOIN users ON " +
+        "IF(c1.rarity = 7 AND NOT EXISTS(SELECT id FROM cards c2 WHERE c2.rarity = 7 AND c2.waifuid = c1.waifuid AND (c2.created < c1.created OR (c2.created=c1.created AND c2.id < c1.id))), 1, 0) AS firstGod FROM waifus JOIN cards c1 ON waifus.id = c1.waifuid JOIN users ON " +
         "c1.userid = users.id WHERE users.name = ? AND c1.boosterid IS NULL ORDER BY COALESCE(c1.sortValue, 32768) ASC, (c1.rarity < 8) DESC, waifus.id ASC, c1.rarity ASC", query.user, function (err, result) {
         if (err) throw err;
         let wantJSON = false;
