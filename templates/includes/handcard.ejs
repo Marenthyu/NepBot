@@ -35,7 +35,7 @@
                         Tradeable
                     <% } %><br />
                     <% if(parseInt(card.created) <= parseInt(config.legacyCardCreationCutoff)) { %>
-                        Legacy (pre-July 2019 update)
+                        <span title="Created before July 2019 update">Legacy</span>
                     <% } else { %>
                         Created <%= moment(new Date(card.created)).utc().format('MMMM Do YYYY, h:mm:ss a') %>
                     <% } %>
