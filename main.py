@@ -5883,7 +5883,7 @@ class NepBot(NepBotClass):
                         addPoints(transfer["toid"], transfer["sent"])
 
                         if int(transfer["sent"]) >= int(config["pointsTransferMinWhisperAmount"]):
-                            self.message("#%s" % transfer["toName"], "%s sent you %d points with the reason: %s" % [tags["display-name"], transfer["sent"], transfer["reason"]])
+                            self.message("#%s" % transfer["toName"], "%s sent you %d points with the reason: %s" % (tags["display-name"], transfer["sent"], transfer["reason"]), True)
                         
                         cur.execute("UPDATE points_transfers SET status='confirmed', confirmed=%s WHERE id = %s", [current_milli_time(), transfer["id"]])
 
