@@ -56,7 +56,7 @@ nav {
 }
 
 .rarity-common {
-    background-color: #BBBBBB;
+    background-color: #bbbbbb;
     color: black;
 }
 
@@ -71,22 +71,22 @@ nav {
 }
 
 .rarity-super {
-    background-color: #E6E600;
+    background-color: #e6e600;
     color: black;
 }
 
 .rarity-ultra {
-    background-color: #820DFF;
+    background-color: #820dff;
     color: white;
 }
 
 .rarity-legendary {
-    background-color: #FF831E;
+    background-color: #ff831e;
     color: black;
 }
 
 .rarity-mythical {
-    background-color: #0C96B4;
+    background-color: #0c96b4;
     color: white;
 }
 
@@ -102,8 +102,22 @@ nav {
 }
 
 .rarity-firstgod {
-    background: radial-gradient(ellipse farthest-corner at right bottom, #FEDB37 0%, #FDB931 8%, #9f7928 30%, #8A6E2F 40%, transparent 80%),
-        radial-gradient(ellipse farthest-corner at left top, #FEDB37 0%, #FDB931 8%, #D1B464 25%, #5d4a1f 62.5%, #5d4a1f 100%);
+    background: radial-gradient(
+            ellipse farthest-corner at right bottom,
+            #fedb37 0%,
+            #fdb931 8%,
+            #9f7928 30%,
+            #8a6e2f 40%,
+            transparent 80%
+        ),
+        radial-gradient(
+            ellipse farthest-corner at left top,
+            #fedb37 0%,
+            #fdb931 8%,
+            #d1b464 25%,
+            #5d4a1f 62.5%,
+            #5d4a1f 100%
+        );
     color: white;
 }
 
@@ -114,16 +128,34 @@ nav {
 .card-firstgod {
     border: none;
     font-weight: 600;
-    box-shadow: 0 0 1.2rem #D1B464;
+    box-shadow: 0 0 1.2rem #d1b464;
 }
 
 .rarity-special {
-    background: linear-gradient(to right, rgba(255, 0, 0, 0.8), rgba(255, 165, 0, 0.8), rgba(0, 128, 0, 0.8), rgba(0, 0, 255, 0.8), rgba(75, 0, 162, 0.8), rgba(238, 162, 238, 0.8)), black;
+    background: linear-gradient(
+            to right,
+            rgba(255, 0, 0, 0.8),
+            rgba(255, 165, 0, 0.8),
+            rgba(0, 128, 0, 0.8),
+            rgba(0, 0, 255, 0.8),
+            rgba(75, 0, 162, 0.8),
+            rgba(238, 162, 238, 0.8)
+        ),
+        black;
     color: white;
 }
 
 .rarity-promo {
-    background: linear-gradient(to left, rgba(255, 0, 0, 0.8), rgba(255, 165, 0, 0.8), rgba(0, 128, 0, 0.8), rgba(0, 0, 255, 0.8), rgba(75, 0, 162, 0.8), rgba(238, 162, 238, 0.8)), black;
+    background: linear-gradient(
+            to left,
+            rgba(255, 0, 0, 0.8),
+            rgba(255, 165, 0, 0.8),
+            rgba(0, 128, 0, 0.8),
+            rgba(0, 0, 255, 0.8),
+            rgba(75, 0, 162, 0.8),
+            rgba(238, 162, 238, 0.8)
+        ),
+        black;
     color: white;
 }
 
@@ -207,8 +239,8 @@ nav {
     margin: 0.5rem;
     display: inline-block;
     width: 170px;
-    border: 1px solid rgba(0, 0, 0, .125);
-    border-radius: .25rem;
+    border: 1px solid rgba(0, 0, 0, 0.125);
+    border-radius: 0.25rem;
 }
 
 .badge-inf {
@@ -236,7 +268,6 @@ nav {
 }
 
 .progress-bar span {
-
     position: absolute;
     z-index: 2;
     color: black;
@@ -258,7 +289,7 @@ nav {
 }
 
 .set-header .col {
-    width: calc(100%/3);
+    width: calc(100% / 3);
 }
 
 .set-header .image-title {
@@ -309,15 +340,21 @@ nav {
 }
 
 @media (max-width: 576px) {
-
-    #cards-grid {
+    #cards-grid,
+    .set-cards {
         display: grid;
-        /*grid-template-columns: 50% 50%;*/
     }
 
-    #cards-grid .card .card-image {
+    #cards-grid .card .card-image,
+    .set-cards .card .card-image {
         max-width: 100%;
         object-fit: scale-down;
+        max-height: 50vh;
+        height: unset;
+    }
+
+    .col-favourite .card-tcg {
+        display: flex;
     }
 
     .navbar-brand {
@@ -325,17 +362,32 @@ nav {
     }
 
     .navbar form {
-        display: none;
+        display: flex;
+        flex-direction: row;
     }
 
+    .navbar-expand .navbar-collapse {
+        flex-direction: column;
+    }
 
-    #cards-grid .card-body {
+    .navbar form input {
+        width: unset;
+    }
+
+    #cards-grid .card-body,
+    .set-cards .card-body,
+    .col-favourite .card-body {
         display: flex;
         align-items: center;
         justify-content: center;
     }
 
+    .set-cards .card-tcg {
+        display: flex;
+    }
+
     .card-bg-image {
+        display: block;
         position: absolute;
         top: 10px;
         left: 10px;
@@ -347,5 +399,32 @@ nav {
         background-size: cover;
         filter: blur(8px);
         -webkit-filter: blur(8px);
+    }
+
+    .set-header {
+        display: unset;
+    }
+
+    .set-header .set-id {
+        display: block;
+    }
+
+    .set-header .col {
+        width: unset;
+    }
+
+    .sets-holder .nav-tabs {
+        border-bottom: unset;
+        margin-bottom: 5px;
+    }
+
+    .sets-holder .nav-tabs .nav-link.active {
+        border-color: #dee2e6 #dee2e6 #dee2e6;
+        border-radius: 0.25rem;
+    }
+
+    .col-favourite .card .card-image {
+        height: unset;
+        max-width: 80vw;
     }
 }

@@ -58,6 +58,7 @@ function populateSets(destination, data, emptyString, type) {
             let cardRow = $("#card-template").clone();
             cardRow.attr("id", "card"+row.id+"-"+set.id+"-"+uniqid);
             let rarityClass = "rarity-"+row.rarity;
+            cardRow.find(".card-bg-image").css("background-image", `url(${row.image})`);
             cardRow.find(".card-image").attr("data-src", row.image).attr("alt", row.name).attr("title", row.name).addClass("lazyload");
             cardRow.find(".id-holder").addClass(rarityClass).text(row.id.toString());
             cardRow.find(".rarity-holder").addClass(rarityClass).text(row.rarity);
