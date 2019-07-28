@@ -37,7 +37,7 @@
                     <% if(parseInt(card.created) <= parseInt(config.legacyCardCreationCutoff)) { %>
                         <span title="Created before July 2019 update">Legacy</span>
                     <% } else { %>
-                        Created <%= moment(new Date(card.created)).utc().format('MMMM Do YYYY, h:mm:ss a') %>
+                        Created <span title="<%= moment(new Date(card.created)).toISOString() %>" data-timestamp="<%= card.created %>" class="creation-date"><%= moment(new Date(card.created)).utc().format('MMMM Do YYYY, h:mm:ss a') %> UTC</span>
                     <% } %>
                 </div>
             <% } %>
