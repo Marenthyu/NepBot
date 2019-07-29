@@ -6015,6 +6015,12 @@ class NepBot(NepBotClass):
                             # ok, make the purchase
                             cur.execute("UPDATE users SET eventTokens = eventTokens - %s, annivSpecialBought = 1 WHERE id = %s", [specialCost, tags['user-id']])
                             self.message(channel, "%s, you bought a special card for %d tokens! Please contact any admin on the !nepcord with the name, image and series of the special you want made and note that usual godimage image rules apply." % (tags['display-name'], specialCost), isWhisper)
+
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "%s just bought a Special from the token shop." % tags['display-name']
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
                         elif target == "handupgrade":
                             if purchaseData[2]:
                                 self.message(channel, "%s, you've already bought a hand upgrade! Pick another reward." % tags['display-name'], isWhisper)
