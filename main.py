@@ -5982,6 +5982,106 @@ class NepBot(NepBotClass):
                         cur.executemany("UPDATE cards SET sortValue = %s WHERE id = %s", updatePairs)
                         self.message(channel, "Updated sort values for %d cards in %s's hand." % (len(updatePairs), tags['display-name']), isWhisper)
                     return
+            if command == "tokenshop":
+                if not booleanConfig("annivShopOpen"):
+                    return
+
+                promoCost = int(config["annivPromoBaseCost"])
+                maxPromos = int(config["annivMaxPromos"])
+                specialCost = int(config["annivSpecialCost"])
+                huCost = int(config["annivHandUpgradeCost"])
+                
+                with db.cursor() as cur:
+                    cur.execute("SELECT annivPromosBought, annivSpecialBought, annivHandUpgradeBought, eventTokens FROM users WHERE id = %s", [tags['user-id']])
+                    purchaseData = cur.fetchone()
+                    subcmd = "" if not len(args) else args[0].lower()
+                    if subcmd == "buy":
+                        if len(args) < 2:
+                            self.message(channel, "Usage: !tokenshop buy special | !tokenshop buy handupgrade | !tokenshop buy <promo waifu id>", isWhisper)
+                            return
+                        
+                        target = args[1].lower()
+
+                        if target == "special":
+                            if purchaseData[1]:
+                                self.message(channel, "%s, you've already bought a special card! Pick another reward." % tags['display-name'], isWhisper)
+                                return
+                            
+                            if purchaseData[3] < specialCost:
+                                msgArgs = (tags['display-name'], specialCost, purchaseData[3])
+                                self.message(channel, "%s, you can't afford a special card! They cost %d tokens and you only have %d." % msgArgs, isWhisper)
+                                return
+                            
+                            # ok, make the purchase
+                            cur.execute("UPDATE users SET eventTokens = eventTokens - %s, annivSpecialBought = 1 WHERE id = %s", [specialCost, tags['user-id']])
+                            self.message(channel, "%s, you bought a special card for %d tokens! Please contact any admin on the !nepcord with the name, image and series of the special you want made and note that usual godimage image rules apply." % (tags['display-name'], specialCost), isWhisper)
+                        elif target == "handupgrade":
+                            if purchaseData[2]:
+                                self.message(channel, "%s, you've already bought a hand upgrade! Pick another reward." % tags['display-name'], isWhisper)
+                                return
+                            
+                            if purchaseData[3] < huCost:
+                                msgArgs = (tags['display-name'], huCost, purchaseData[3])
+                                self.message(channel, "%s, you can't afford a hand upgrade! They cost %d tokens and you only have %d." % msgArgs, isWhisper)
+                                return
+                            
+                            # ok, make the purchase
+                            cur.execute("UPDATE users SET eventTokens = eventTokens - %s, annivHandUpgradeBought = 1, freeUpgrades = freeUpgrades + 1 WHERE id = %s", [huCost, tags['user-id']])
+                            self.message(channel, "%s, you bought a hand upgrade for %d tokens! You can begin using it immediately." % (tags['display-name'], huCost), isWhisper)
+                        else:
+                            # promo
+                            if purchaseData[0] >= maxPromos:
+                                self.message(channel, "%s, you have already bought the maximum of %d promos. Pick another reward." % (tags['display-name'], maxPromos), isWhisper)
+                                return
+                            
+                            promoPrice = promoCost * (purchaseData[0] + 1)
+
+                            if purchaseData[3] < promoPrice:
+                                msgArgs = (tags['display-name'], promoPrice, purchaseData[3])
+                                self.message(channel, "%s, you can't afford a promo! Your current cost for one is %d tokens and you only have %d." % msgArgs, isWhisper)
+                                return
+
+                            promoCard = getWaifuById(target)
+
+                            if promoCard is None:
+                                self.message(channel, "%s, you entered an invalid waifu ID." % tags['display-name'], isWhisper)
+                                return
+                            
+                            if not promoCard["can_purchase"]:
+                                self.message(channel, "%s, that waifu cannot be bought. !tokenshop listpromos to get a list of buyable promos." % tags['display-name'], isWhisper)
+                                return
+                            
+                            addCard(tags['user-id'], promoCard['id'], 'other', None, int(config["numNormalRarities"]) + int(config["numSpecialRarities"]) - 1)
+                            cur.execute("UPDATE users SET eventTokens = eventTokens - %s, annivPromosBought = annivPromosBought + 1 WHERE id = %s", [promoPrice, tags['user-id']])
+                            if purchaseData[0] + 1 < maxPromos:
+                                msgArgs = (tags['display-name'], promoCard['id'], promoCard['name'], promoPrice, purchaseData[0] + 1, promoPrice + promoCost)
+                                self.message(channel, "%s, you bought a copy of [%d] %s for %d tokens. You have now bought %d promos so your next one will cost %d tokens." % msgArgs, isWhisper)
+                            else:
+                                msgArgs = (tags['display-name'], promoCard['id'], promoCard['name'], promoPrice, purchaseData[0] + 1)
+                                self.message(channel, "%s, you bought a copy of [%d] %s for %d tokens. You have now bought %d promos so you cannot buy any more." % msgArgs, isWhisper)
+                    elif subcmd == "listpromos":
+                        self.message(channel, "%s, you can view the list of promos buyable with tokens here - %s" % (tags['display-name'], config["tokenPromoList"]), isWhisper)
+                    else:
+                        # list items
+                        purchasable = []
+
+                        if purchaseData[0] < maxPromos:
+                            promoPrice = promoCost * (purchaseData[0] + 1)
+                            purchasable.append("Promo card - current cost %d tokens (%d already bought, %d max) - !tokenshop buy <waifu id> (!tokenshop listpromos for a list)" % (promoPrice, purchaseData[0], maxPromos))
+                        
+                        if not purchaseData[1]:
+                            purchasable.append("Special card - cost %d tokens - !tokenshop buy special" % specialCost)
+                        
+                        if not purchaseData[2]:
+                            purchasable.append("Hand upgrade - cost %d tokens - !tokenshop buy handupgrade" % huCost)
+
+                        if len(purchasable):
+                            self.message(channel, "%s, you have %d Anniversary Tokens. Items currently available to you: %s" % (tags['display-name'], purchaseData[3], " / ".join(purchasable)), isWhisper)
+                        else:
+                            self.message(channel, "%s, you've bought out the whole anniversary token shop! Please wait for the token gacha to launch." % tags['display-name'], isWhisper)
+                return
+
+
 
                             
 
