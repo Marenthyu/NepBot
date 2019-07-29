@@ -2416,6 +2416,8 @@ class NepBot(NepBotClass):
                         
                     # can they take the reward at the current time?
                     if (rewardInfo[1] is not None or rewardInfo[2] is not None) and hasPack and not spaceInHand:
+                        # save seed in progress so it doesn't reset if this happens at the end of one
+                        cur.execute("UPDATE users SET rewardSeqSeed = %s, rewardSeqIndex = %s WHERE id = %s", [seed, index, tags['user-id']])
                         self.message(channel, "%s, your hand is full and you have a booster open!" % tags['display-name'], isWhisper)
                         return
                         
