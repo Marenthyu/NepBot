@@ -11,6 +11,9 @@ _%>
     <% } else if(error) { %>
         <%= error %>
     <% } %>
+    <% if(eventTokens > 0) { %>
+        <% include includes/handEventToken %>
+    <% } %>
 </div>
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.11/moment-timezone-with-data.js"></script>

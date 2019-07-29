@@ -11,6 +11,9 @@ _%>
     <% } else if(error) { %>
         <%= error %>
     <% } %>
+    <% if(eventTokens > 0) { %>
+        <% include includes/boosterEventToken %>
+    <% } %>
 </div>
 <div id="output">
     <input id="textField" onClick="this.select();document.execCommand('copy');" readonly

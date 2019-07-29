@@ -123,7 +123,7 @@ function hand(req, res, query) {
                 res.end();
             } else {
                 res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                renderTemplateAndEnd("templates/hand.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist."}, res);
+                renderTemplateAndEnd("templates/hand.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist.", eventTokens: 0}, res);
             }
             return;
         }
@@ -135,7 +135,7 @@ function hand(req, res, query) {
                     res.end();
                 } else {
                     res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                    renderTemplateAndEnd("templates/hand.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist."}, res);
+                    renderTemplateAndEnd("templates/hand.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist.", eventTokens: 0}, res);
                 }
                 return;
             }
@@ -163,9 +163,8 @@ function hand(req, res, query) {
                 }));
                 res.end();
             } else {
-                // @TODO event tokens
                 res.writeHead(200, {'Content-Type': 'text/html'});
-                renderTemplateAndEnd("templates/hand.ejs", {user: query.user, cards: result, error: ""}, res);
+                renderTemplateAndEnd("templates/hand.ejs", {user: query.user, cards: result, error: "", eventTokens: resultTokens[0].eventTokens}, res);
             }
         });
     });
@@ -195,7 +194,7 @@ function booster(req, res, query) {
                 res.end();
             } else {
                 res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                renderTemplateAndEnd("templates/booster.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist or has no open booster."}, res);
+                renderTemplateAndEnd("templates/booster.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist or has no open booster.", eventTokens: 0}, res);
             }            
             return;
         }
@@ -212,7 +211,7 @@ function booster(req, res, query) {
                     res.end();
                 } else {
                     res.writeHead(404, "Not Found", {'Content-Type': 'text/html'});
-                    renderTemplateAndEnd("templates/booster.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist or has no open booster."}, res);
+                    renderTemplateAndEnd("templates/booster.ejs", {user: query.user, cards: [], error: "404 - This user doesn't exist or has no open booster.", eventTokens: 0}, res);
                 }            
                 return;
             }
@@ -236,8 +235,7 @@ function booster(req, res, query) {
                 res.end();
             } else {
                 res.writeHead(200, {'Content-Type': 'text/html'});
-                // @TODO event tokens
-                renderTemplateAndEnd("templates/booster.ejs", {user: query.user, cards: result, error: ""}, res);
+                renderTemplateAndEnd("templates/booster.ejs", {user: query.user, cards: result, error: "", eventTokens: resultTokens[0].eventTokens}, res);
             }
         });
     });
