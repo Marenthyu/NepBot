@@ -6013,8 +6013,10 @@ class NepBot(NepBotClass):
                                 return
                             
                             # ok, make the purchase
+
                             cur.execute("UPDATE users SET eventTokens = eventTokens - %s, annivSpecialBought = 1 WHERE id = %s", [specialCost, tags['user-id']])
-                            self.message(channel, "%s, you bought a special card for %d tokens! Please contact any admin on the !nepcord with the name, image and series of the special you want made and note that usual godimage image rules apply." % (tags['display-name'], specialCost), isWhisper)
+                            cur.execute("INSERT INTO special_requests (requesterid, state, created) VALUES(%s, 'notsent', %s)", [tags['user-id'], current_milli_time()])
+                            self.message(channel, "%s, you bought a special card for %d tokens! You now have access to !tokenshop special which you can use to set the name/series/image of your special before submitting it for review." % (tags['display-name'], specialCost), isWhisper)
 
                             discordbody = {
                                 "username": "WTCG Admin", 
@@ -6067,6 +6069,153 @@ class NepBot(NepBotClass):
                                 self.message(channel, "%s, you bought a copy of [%d] %s for %d tokens. You have now bought %d promos so you cannot buy any more." % msgArgs, isWhisper)
                     elif subcmd == "listpromos":
                         self.message(channel, "%s, you can view the list of promos buyable with tokens here - %s" % (tags['display-name'], config["tokenPromoList"]), isWhisper)
+                    elif subcmd == "specialadmin" and sender in superadmins:
+                        spclcmd = "" if len(args) < 2 else args[1].lower()
+                        if spclcmd in ["check", "accept", "reject"]:
+                            if len(args) < 3:
+                                self.message(channel, "Usage: !tokenshop specialadmin check/accept/reject <username>")
+                                return
+                            cur.execute("SELECT sr.requesterid, sr.name, sr.series, sr.image FROM special_requests sr JOIN users ON sr.requesterid=users.id WHERE users.name = %s AND sr.state = 'pending'", [args[2]])
+                            requestInfo = cur.fetchone()
+
+                            if requestInfo is None:
+                                self.message(channel, "That user doesn't have a pending Special card request.", isWhisper)
+                                return
+                            
+                            if spclcmd == "check":
+                                msgArgs = (args[2], requestInfo[1], requestInfo[2], requestInfo[3], args[2], args[2])
+                                self.message(channel, "%s requested a Special card of %s from %s with image %s . Accept it with !tokenshop specialadmin accept %s or reject it with !tokenshop specialadmin reject %s <reason>." % msgArgs, isWhisper)
+                            elif spclcmd == "accept":
+                                # create waifu
+                                try:
+                                    hostedURL = processWaifuURL(requestInfo[3])
+                                except Exception as ex:
+                                    self.message(channel, "Could not process image. %s. Check the URL yourself and if it is invalid reject their request." % str(ex), isWhisper)
+                                    return
+                                queryArgs = [requestInfo[1], hostedURL, int(config["numNormalRarities"]), requestInfo[2]]
+                                cur.execute("INSERT INTO waifus (name, image, base_rarity, series) VALUES(%s, %s, %s, %s)", queryArgs)
+                                waifuid = cur.lastrowid
+
+                                addCard(requestInfo[0], waifuid, 'other')
+                                cur.execute("UPDATE special_requests SET state = 'accepted', moderatorid = %s, updated = %s WHERE requesterid = %s", [tags['user-id'], current_milli_time(), requestInfo[0]])
+                                self.message(channel, "Request accepted. Created Special card ID %d and gave it to %s." % (waifuid, args[2]), isWhisper)
+                                self.message('#%s' % args[2].lower(), "Your Special card request for %s from %s was accepted." % (requestInfo[1], requestInfo[2]), True)
+                            else:
+                                # reject
+                                if len(args) < 4:
+                                    self.message(channel, "Rejection reason is required.", isWhisper)
+                                    return
+                                
+                                rejectionReason = " ".join(args[3:])
+                                cur.execute("UPDATE special_requests SET state = 'rejected', moderatorid = %s, updated = %s, rejection_reason = %s, changed_since_rejection = 0 WHERE requesterid = %s", [tags['user-id'], current_milli_time(), rejectionReason, requestInfo[0]])
+                                self.message('#%s' % args[2].lower(), "Your Special card request for %s from %s was rejected for the following reason: %s. Please adjust it with !tokenshop special and then resubmit." % (requestInfo[1], requestInfo[2], rejectionReason), True)
+                                self.message(channel, "Request rejected and user notified.", isWhisper)
+                        else:
+                            # list pending
+                            cur.execute("SELECT users.name FROM special_requests sr JOIN users ON sr.requesterid=users.id WHERE sr.state='pending' ORDER BY sr.updated ASC")
+                            results = cur.fetchall()
+
+                            if not results:
+                                self.message(channel, "There are no pending Special card requests right now.", isWhisper)
+                            else:
+                                self.message(channel, "Special card requests have been received from: %s. Use !tokenshop specialadmin check <username> for details." % (", ".join([row[0] for row in results])), isWhisper)
+                    elif subcmd == "special":
+                        if not purchaseData[1]:
+                            self.message(channel, "%s, you haven't bought a Special card with tokens yet!" % tags['display-name'], isWhisper)
+                            return
+                        
+                        spclcmd = "" if len(args) < 2 else args[1].lower()
+
+                        cur.execute("SELECT name, series, image, state, updated, rejection_reason, changed_since_rejection FROM special_requests WHERE requesterid = %s", [tags['user-id']])
+                        specialData = cur.fetchone()
+
+                        if specialData is None:
+                            cur.execute("INSERT INTO special_requests (requesterid, state, created) VALUES(%s, 'notsent', %s)", [tags['user-id'], current_milli_time()])
+                            specialData = [None, None, None, 'notsent', None, None, 0]
+                        
+                        if spclcmd in ["name", "series", "image", "submit", "confirm"] and specialData[3] not in["notsent", "rejected"]:
+                            if specialData[3] == "pending":
+                                self.message(channel, "%s, you have already sent in your Special card request! Please wait for a response." % tags['display-name'], isWhisper)
+                            else:
+                                self.message(channel, "%s, your Special card request has already been accepted!" % tags['display-name'], isWhisper)
+                            return
+                        
+                        if spclcmd in ["submit", "confirm"] and specialData[3] == "rejected" and not specialData[6]:
+                            self.message(channel, "%s, you haven't changed your request at all since its rejection! Please review the rejection reason (%s) and make adjustments before resubmitting." % (tags['display-name'], specialData[5]), isWhisper)
+                            return
+
+                        if spclcmd in ["submit", "confirm"] and (specialData[0] is None or specialData[1] is None or specialData[2] is None):
+                            self.message(channel, "%s, you haven't finished filling in the info for your Special card request yet! Please specify all 3 of name/series/image before continuing." % tags['display-name'], isWhisper)
+                            return
+
+                        if spclcmd in ["name", "series", "image"] and len(args) < 3:
+                            self.message(channel, "Usage: !tokenshop special name <name> / series <series> / image <image URL> / submit")
+                            return
+                        
+                        if spclcmd == "name":
+                            name = (" ".join(args[2:])).strip()
+                            if not len(name) or len(name) > 50:
+                                self.message(channel, "Please enter a waifu name of between 1 and 50 characters.", isWhisper)
+                                return
+                            
+                            queryArgs = [name, current_milli_time(), tags['user-id']]
+                            cur.execute("UPDATE special_requests SET name = %s, changed_since_rejection = 1, updated = %s WHERE requesterid = %s", queryArgs)
+                            self.message(channel, "%s -> Set the name for your Special card request to %s." % (tags['display-name'], name), isWhisper)
+                        elif spclcmd == "series":
+                            series = (" ".join(args[2:])).strip()
+                            if not len(series) or len(series) > 50:
+                                self.message(channel, "Please enter a waifu series of between 1 and 50 characters.", isWhisper)
+                                return
+                            
+                            queryArgs = [series, current_milli_time(), tags['user-id']]
+                            cur.execute("UPDATE special_requests SET series = %s, changed_since_rejection = 1, updated = %s WHERE requesterid = %s", queryArgs)
+                            self.message(channel, "%s -> Set the series for your Special card request to %s." % (tags['display-name'], series), isWhisper)
+                        elif spclcmd == "image":
+                            try:
+                                validateWaifuURL(args[2])
+                            except ValueError as ex:
+                                self.message(channel, "Invalid image link specified. %s" % str(ex), isWhisper)
+                                return
+                            except Exception:
+                                self.message(channel, "There was an unknown problem with the image link you specified. Please try again later.", isWhisper)
+                                return
+                            
+                            queryArgs = [args[2], current_milli_time(), tags['user-id']]
+                            cur.execute("UPDATE special_requests SET image = %s, changed_since_rejection = 1, updated = %s WHERE requesterid = %s", queryArgs)
+                            self.message(channel, "%s -> Set the image for your Special card request to %s" % (tags['display-name'], args[2]), isWhisper)
+                        elif spclcmd == "submit":
+                            self.message(channel, "%s, please confirm that you want a Special card of %s from %s with image %s by entering !tokenshop special confirm. You cannot change your submission after it is confirmed so please be careful." % (tags['display-name'], specialData[0], specialData[1], specialData[2]))
+                        elif spclcmd == "confirm":
+                            # TODO submit to admin discordhook
+                            discordargs = (tags['display-name'], specialData[0], specialData[1], specialData[2], sender)
+                            discordbody = {
+                                "username": "WTCG Admin", 
+                                "content" : "%s submitted their request for a Special Card:\nName: %s\nSeries: %s\nImage: %s\nUse `!tokenshop specialadmin check %s` in any chat to check it." % discordargs
+                            }
+                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+                            cur.execute("UPDATE special_requests SET state = 'pending' WHERE requesterid = %s", [tags['user-id']])
+                            self.message(channel, "%s, your Special card request has been submitted for approval. Keep an eye on your whispers to see if it is accepted or rejected. If it is rejected you'll be able to resubmit after you fix the problems." % tags['display-name'], isWhisper)
+                        else:
+                            # show status
+                            if specialData[3] == "accepted":
+                                self.message(channel, "%s, your Special card request of %s from %s was accepted." % (tags['display-name'], specialData[0], specialData[1]), isWhisper)
+                            elif specialData[3] == "rejected":
+                                if specialData[6]:
+                                    self.message(channel, "%s, your previous submission was rejected for the following reason: %s. Your current submission is %s from %s with image %s . !tokenshop special name/image/series to change details or !tokenshop special submit to submit it for approval." % (tags['display-name'], specialData[5], specialData[0], specialData[1], specialData[2]), isWhisper)
+                                else:
+                                    self.message(channel, "%s, your submission of %s from %s with image %s was rejected for the following reason: %s. Please use !tokenshop special name/image/series to change details to solve the problems and then !tokenshop special submit to resubmit it for approval." % (tags['display-name'], specialData[0], specialData[1], specialData[2], specialData[5]), isWhisper)
+                            elif specialData[3] == "pending":
+                                self.message(channel, "%s, your Special card request of %s from %s is still pending approval. Please wait patiently." % (tags['display-name'], specialData[0], specialData[1]), isWhisper)
+                            else:
+                                name = specialData[0] or "<no name yet>"
+                                series = specialData[1] or "<no series yet>"
+                                image = specialData[2] or "<no image yet>"
+                                if specialData[0] and specialData[1] and specialData[2]:
+                                    self.message(channel, "%s, your current Special request is %s from %s with image %s . Use !tokenshop special name/image/series to change details or !tokenshop special submit to submit it for approval." % (tags['display-name'], name, series, image), isWhisper)
+                                elif specialData[0] or specialData[1] or specialData[2]:
+                                    self.message(channel, "%s, your current Special request is %s from %s with image %s . Use !tokenshop special name/image/series to add the missing details and then !tokenshop special submit to submit it for approval." % (tags['display-name'], name, series, image), isWhisper)
+                                else:
+                                    self.message(channel, "%s, you haven't started on your Special request yet. Use !tokenshop special name/image/series to add the required details and then !tokenshop special submit to submit it for approval." % tags['display-name'], isWhisper)
                     else:
                         # list items
                         purchasable = []
