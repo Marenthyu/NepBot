@@ -29,17 +29,27 @@
     <div class="collapse navbar-collapse" id="navbarSupportedContent">
         <ul class="navbar-nav mr-auto">
             <li class="nav-item <% if(currentPage === 'hand') { %>active<% } %>">
-                <a class="nav-link" href="/hand?user=<%= user %>">Hand</a>
+                <a class="nav-link user-required" href="/hand?user=<%= user %>">Hand</a>
             </li>
             <li class="nav-item <% if(currentPage === 'profile') { %>active<% } %>">
-                <a class="nav-link" href="/profile?user=<%= user %>">Profile</a>
+                <a class="nav-link user-required" href="/profile?user=<%= user %>">Profile</a>
             </li>
             <li class="nav-item <% if(currentPage === 'booster') { %>active<% } %>">
-                <a class="nav-link" href="/booster?user=<%= user %>">Booster</a>
+                <a class="nav-link user-required" href="/booster?user=<%= user %>">Booster</a>
             </li>
             <li class="nav-item <% if(currentPage === 'sets') { %>active<% } %>">
                 <a class="nav-link" href="/sets?user=<%= user %>">Sets</a>
             </li>
+            <% if(booleanConfig("marathonTrackerEnabled")) { %>
+                <li class="nav-item <% if(currentPage === 'tracker') { %>active<% } %>">
+                    <a class="nav-link" href="/tracker?user=<%= user %>">Marathon Tracker</a>
+                </li>
+            <% } %>
+            <% if(booleanConfig("packTrackerEnabled")) { %>
+                <li class="nav-item <% if(currentPage === 'packs') { %>active<% } %>">
+                    <a class="nav-link" href="/packs?user=<%= user %>"><%= config.packTrackerNavTitle %></a>
+                </li>
+            <% } %>
             <li class="nav-item">
                 <a class="nav-link disabled">Super Secret Admin-Panel</a>
             </li>

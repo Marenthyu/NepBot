@@ -63,9 +63,14 @@ jsfiles.forEach(function(filename) {
     jsdata[filename] = fs.readFileSync('js/'+filename, 'utf8');
 });
 
+function booleanConfig(key) {
+    return config[key] && config[key] !== 'off' && config[key] !== 'no' && config[key] !== 'false';
+}
+
 function renderTemplateAndEnd(filename, vars, res) {
     vars["moment"] = moment;
     vars["config"] = config;
+    vars["booleanConfig"] = booleanConfig;
     ejs.renderFile(filename, vars, {}, function(err, str) {
         if(err) { throw err; }
         res.write(str);
@@ -659,6 +664,86 @@ function setsdata(req, res, query) {
     });
 }
 
+function packTracker(req, res, query) {
+    let user = "";
+    if ('user' in query) {
+        user = query.user;
+    }
+
+    con.query("SELECT (SELECT COUNT(*) FROM boosters_opened WHERE boostername = ?)+(SELECT COUNT(*) FROM boosters_opened WHERE boostername = ?)*5 AS cnt", [config.packTrackerPack, "mega" + config.packTrackerPack], function (err, result) {
+        if (err) throw err;
+        let goals = JSON.parse(config.packTrackerGoals);
+        let packCount = result[0].cnt;
+        let highestGoal = goals[goals.length - 1];
+        let vars = {
+            user: user,
+            goals: goals,
+            packCount: packCount,
+            highestGoal: highestGoal,
+            currentAmountCapped: Math.min(highestGoal, packCount),
+            currentWidth: 100 * Math.min(highestGoal, packCount) / highestGoal
+        };
+        res.writeHead(200, {'Content-Type': 'text/html'});
+        renderTemplateAndEnd("templates/packtracker.ejs", vars, res);
+    });
+}
+
+function tracker(req, res, query) {
+    let user = "";
+    if ('user' in query) {
+        user = query.user;
+    }
+    con.query("SELECT * FROM bidWars LEFT JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
+        if (err) throw err;
+        let wars = [];
+        let lastwarid = '';
+        let lastwar = null;
+        for (let row of result) {
+            if (row.id !== lastwarid) {
+                lastwarid = row.id;
+                lastwar = {
+                    "id": row.id,
+                    "title": row.title,
+                    "status": row.status,
+                    "openEntry": row.openEntry !== 0,
+                    "openEntryMinimum": row.openEntryMinimum,
+                    "openEntryMaxLength": row.openEntryMaxLength,
+                    "choices": []
+                };
+                wars.push(lastwar);
+            }
+            if (row.choice !== null) {
+                lastwar.choices.push({
+                    "choice": row.choice,
+                    "amount": row.amount,
+                    "created": row.created,
+                    "creator": row.creator,
+                    "lastVote": row.lastVote,
+                    "lastVoter": row.lastVoter
+                })
+            }
+        }
+        for (let war of wars) {
+            let warTotal = 0;
+            for (let choice of war['choices']) {
+                warTotal += choice['amount'];
+            }
+            war.total = warTotal;
+        }
+        con.query("SELECT * FROM incentives ORDER BY incentives.id ASC", function (err, result2) {
+            let incentives = result2;
+            if (err) {
+                res.writeHead(500, 'Internal Server Error');
+                res.end("Something went wrong. Blame maren.");
+                throw err;
+            }
+
+            res.writeHead(200, {'Content-Type': 'text/html'});
+            renderTemplateAndEnd("templates/tracker.ejs", {user: user, wars: wars, incentives: incentives}, res);
+        });
+    });
+}
+
 function readConfig(callback) {
     config = {};
     con.query("SELECT * FROM config", function (err, result) {
@@ -697,7 +782,7 @@ function bootServer(callback) {
                     break;
                 }
                 case "help": {
-                    res.writeHead(302, {'Location': 'http://t.fuelr.at/heq'});
+                    res.writeHead(302, {'Location': config.helpDocURL});
                     res.end();
                     break;
                 }
@@ -732,6 +817,28 @@ function bootServer(callback) {
                 case "pullfeed": {
                     pullfeed(req, res, q.query);
                     break;
+                }
+                case "tracker": {
+                    if (booleanConfig("marathonTrackerEnabled")) {
+                        tracker(req, res, q.query);
+                        break;
+                    }
+                    else {
+                        res.writeHead(404, {'Content-Type': 'text/html'});
+                        res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
+                        res.end();
+                    }
+                }
+                case "packs": {
+                    if (booleanConfig("packTrackerEnabled")) {
+                        packTracker(req, res, q.query);
+                        break;
+                    }
+                    else {
+                        res.writeHead(404, {'Content-Type': 'text/html'});
+                        res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
+                        res.end();
+                    }
                 }
                 default: {
                     res.writeHead(404, {'Content-Type': 'text/html'});

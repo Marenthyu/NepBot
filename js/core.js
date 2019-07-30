@@ -1,6 +1,6 @@
 if (user === "") {
     $("#navbartitle").html("Waifu TCG");
-    $("#main-nav .nav-link").addClass("disabled").attr('href', '').css('cursor', 'default');
+    $("#main-nav .nav-link.user-required").addClass("disabled").attr('href', '').css('cursor', 'default');
     $("#inputname").val("");
 }
 

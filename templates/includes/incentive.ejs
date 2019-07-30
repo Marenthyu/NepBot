@@ -1,0 +1,21 @@
+<%
+    let state_class = "";
+    let state_string = "";
+    if(incentive.amount >= incentive.required) {
+        state_class = " bg-success";
+        state_string = " (MET!)";
+    }
+    else if(incentive.status === 'closed') {
+        state_class = " bg-danger";
+        state_string = " (FAILED!)";
+    }
+%>
+<h3><%= incentive.id %></h3>
+<p><%= incentive.title %></p>
+<div class="progress" style="height: 2rem; font-size: 1rem;">
+    <div class="progress-bar progress-bar-striped<%= state_class %>"
+     style="width: <%= 100 * incentive.amount / incentive.required %>%;" aria-valuenow="<%= incentive.amount %>" aria-valuemin="0" aria-valuemax="<%= incentive.required %>">
+        <span><%= incentive.amount %>/<%= incentive.required %><%= state_string %></span>
+    </div>
+</div>
+<br />

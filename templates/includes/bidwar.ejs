@@ -1,0 +1,17 @@
+<h3><%= war.id %></h3>
+<p><%= war.title %>, <%= war.status %></p>
+<h4>Choices:</h4>
+<% if(war.choices.length) { %>
+    <% war.choices.forEach(function(choice) { %>
+        <%= choice.choice %>
+        <div class="progress" style="height: 2rem; font-size: 1rem;">
+            <div class="progress-bar progress-bar-striped" style="width: <%= 100 * choice.amount / war.total %>%;"
+             aria-valuenow="<%= choice.amount %>" aria-valuemin="0" aria-valuemax="<%= war.total %>">
+                <span><%= choice.amount %></span>
+            </div>
+        </div>
+        <br />
+    <% }); %>
+<% } else { %>
+    No choices defined yet :(
+<% } %>

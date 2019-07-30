@@ -1,0 +1,27 @@
+<%
+    title = "Marathon Tracker";
+    currentPage = "tracker";
+_%>
+<% include includes/header %>
+<h1>Marathon Tracker</h1>
+<p>Incentives and bidwars available during the marathon will be displayed here. Use the !vote and !war commands to spend points and/or pudding towards them!</p>
+
+<h2>Incentives</h2>
+<% if(incentives.length) { %>
+    <% incentives.forEach(function(incentive) { %>
+        <% include includes/incentive %>
+    <% }); %>
+<% } else { %>
+    Sorry, there are currently no incentives. Check back later. (Or during a marathon!)
+<% } %>
+
+<h2>Bid Wars</h2>
+<% if(wars.length) { %>
+    <% wars.forEach(function(war) { %>
+        <% include includes/bidwar %>
+    <% }); %>
+<% } else { %>
+    Sorry, no bid wars logged in the system currently.
+<% } %>
+
+<% include includes/footer _%>

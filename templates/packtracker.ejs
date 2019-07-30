@@ -1,0 +1,30 @@
+<%
+    title = config.packTrackerTitle;
+    currentPage = "packs";
+_%>
+<% include includes/header %>
+<h1><%= config.packTrackerTitle %></h1>
+<p><%= config.packTrackerDescription %></p>
+
+<h2>Total Packs Opened</h2>
+<div class="progress" style="height: 4rem; font-size: 2rem;">
+    <div class="progress-bar progress-bar-striped" role="progressbar" style="width: <%= currentWidth %>%;" aria-valuenow="<%= currentAmountCapped %>" aria-valuemin="0" aria-valuemax="<%= highestGoal %>">
+        <span><%= packCount %></span>
+    </div>
+</div>
+
+<hr />
+
+<h2>Incentives (community rewards unlocked once met!)</h2>
+<% for(let i = 0; i < goals.length; i++) { %>
+    <h3>Goal <%= (i + 1) %></h3>
+    <div class="progress" style="height: 2rem; font-size: 1rem;">
+        <div class="progress-bar progress-bar-striped<%= packCount >= goals[i] ? ' bg-success' : '' %>"
+         style="width: <%= 100 * Math.min(goals[i], packCount) / goals[i] %>%;" aria-valuenow="<%= Math.min(goals[i], packCount) %>"
+         aria-valuemin="0" aria-valuemax="<%= goals[i] %>">
+            <span><%= Math.min(goals[i], packCount) %>/<%= goals[i] %><%= packCount >= goals[i] ? " (MET!)" : "" %></span>
+        </div>
+    </div>
+<% } %>
+
+<% include includes/footer _%>
