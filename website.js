@@ -64,7 +64,7 @@ jsfiles.forEach(function(filename) {
 });
 
 function booleanConfig(key) {
-    return config[key] && config[key] !== 'off' && config[key] !== 'no' && config[key] !== 'false';
+    return key in config && !["off", "no", "false"].includes(config[key].trim().toLowerCase());
 }
 
 function renderTemplateAndEnd(filename, vars, res) {
