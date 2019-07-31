@@ -1,5 +1,31 @@
 <i>All images (c) to their original Artists. No Copyright claimed from the owner of this Website.</i>
 </div>
+<div class="modal" tabindex="-1" role="dialog" id="darkmode-modal">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Set dark mode preference</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p>You can choose whether to show the Waifu TCG site in light mode or dark mode here.</p>
+        <p id="darkmode-preference"></p>
+        <p><i>Note: Your preference will be stored in client-side local storage, not cookies. Your preference is never sent to the Waifu TCG server.</i></p>
+        <label><input type="radio" name="dark-mode" value="no" id="darkmode-no" />
+        Light mode</label>
+        <br />
+        <label><input type="radio" name="dark-mode" value="yes" id="darkmode-yes" />
+        Dark mode</label>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="darkmode-save-button">Save changes</button>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 <script type="text/javascript" src="/js/core.js"></script>
 </body>
 </html>

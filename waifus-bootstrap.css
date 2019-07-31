@@ -428,3 +428,56 @@ nav {
         max-width: 80vw;
     }
 }
+
+.darkmode-toggle-container {
+    margin-left: auto;
+    margin-right: 10px;
+    display: flex;
+    align-items: center;
+}
+
+#darkmode-toggle {
+    display: block;
+    cursor: pointer;
+    color: #d6d6d6;
+}
+
+html.dark-mode input[type=text] {
+    border-color: rgba(0,0,0,0.8);
+    background-color: #1d1d1d;
+    color: #d6d6d6;
+}
+
+html.dark-mode body {
+    background-color: #121212;
+    color: #d6d6d6;
+}
+
+html.dark-mode nav {
+    background-color: #2d2d2d !important;
+}
+
+html.dark-mode .card {
+    border-color: rgba(0,0,0,0.8);
+}
+
+html.dark-mode .card-body {
+    background-color: #282828;
+}
+
+html.dark-mode .card-footer {
+    background-color: #1d1d1d;
+}
+
+html.dark-mode .badge-inf {
+    background-color: #1d1d1d;
+    color: #d6d6d6;
+}
+
+html.dark-mode #darkmode-modal .modal-content {
+    background-color: #1d1d1d;
+}
+
+html.dark-mode #darkmode-modal button.close {
+    color: #d6d6d6;
+}
