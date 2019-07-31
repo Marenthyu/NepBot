@@ -13,22 +13,30 @@ $(".cardExtraInfo").on('hide.bs.collapse', function() {
 });
 
 let settingStored = false;
+if (typeof(Storage) !== "undefined") {
+    // enable storing the setting
+    if('darkMode' in window.localStorage) {
+        settingStored = true;
+        if(window.localStorage.darkMode === 'yes') {
+            $("html").addClass("dark-mode");
+        }
+    }
+    else {
+        // check if they want dark mode explicitly, else set light mode for now
+        if(window.matchMedia("(prefers-color-scheme: dark)").matches) {
+            $("html").addClass("dark-mode");
+        }
+    }
+} else {
+    // query preference and only set dark mode if yes.
+    if(window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        $("html").addClass("dark-mode");
+    }
+}
+
 $(document).ready( function() {
     if (typeof(Storage) !== "undefined") {
         // enable toggle
-        if('darkMode' in window.localStorage) {
-            settingStored = true;
-            if(window.localStorage.darkMode === 'yes') {
-                $("html").addClass("dark-mode");
-            }
-        }
-        else {
-            // check if they want dark mode explicitly, else set light mode for now
-            if(window.matchMedia("(prefers-color-scheme: dark)").matches) {
-                $("html").addClass("dark-mode");
-            }
-        }
-
         $("#darkmode-toggle").click(function() {
             if(settingStored) {
                 if(window.localStorage.darkMode === 'yes') {
@@ -71,11 +79,7 @@ $(document).ready( function() {
             $("#darkmode-modal").modal('hide');
         });
     } else {
-        // query preference and only set dark mode if yes. and make the toggle just an actual toggle that doesn't save anything
-        if(window.matchMedia("(prefers-color-scheme: dark)").matches) {
-            $("html").addClass("dark-mode");
-        }
-
+        // make the toggle just an actual toggle that doesn't save anything
         $("#darkmode-toggle").click(function() {
             $("html").toggleClass("dark-mode");
         });
