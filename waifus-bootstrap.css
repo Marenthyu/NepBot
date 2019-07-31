@@ -474,6 +474,11 @@ html.dark-mode .badge-inf {
     color: #d6d6d6;
 }
 
+html.dark-mode .nav-tabs .nav-link.active {
+    color: #d6d6d6;
+    background-color: #1d1d1d;
+}
+
 html.dark-mode #darkmode-modal .modal-content {
     background-color: #1d1d1d;
 }
