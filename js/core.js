@@ -1,17 +1,3 @@
-if (user === "") {
-    $("#navbartitle").html("Waifu TCG");
-    $("#main-nav .nav-link.user-required").addClass("disabled").attr('href', '').css('cursor', 'default');
-    $("#inputname").val("");
-}
-
-$(".cardExtraInfo").on('show.bs.collapse', function() {
-    $("#card"+($(this).attr("data-cardid"))+"Toggler").text("expand_less");
-});
-
-$(".cardExtraInfo").on('hide.bs.collapse', function() {
-    $("#card"+($(this).attr("data-cardid"))+"Toggler").text("expand_more");
-});
-
 let settingStored = false;
 if (typeof(Storage) !== "undefined") {
     // enable storing the setting
@@ -35,6 +21,20 @@ if (typeof(Storage) !== "undefined") {
 }
 
 $(document).ready( function() {
+    if (user === "") {
+        $("#navbartitle").html("Waifu TCG");
+        $("#main-nav .nav-link.user-required").addClass("disabled").attr('href', '').css('cursor', 'default');
+        $("#inputname").val("");
+    }
+    
+    $(".cardExtraInfo").on('show.bs.collapse', function() {
+        $("#card"+($(this).attr("data-cardid"))+"Toggler").text("expand_less");
+    });
+    
+    $(".cardExtraInfo").on('hide.bs.collapse', function() {
+        $("#card"+($(this).attr("data-cardid"))+"Toggler").text("expand_more");
+    });
+
     if (typeof(Storage) !== "undefined") {
         // enable toggle
         $("#darkmode-toggle").click(function() {
