@@ -2356,8 +2356,7 @@ class NepBot(NepBotClass):
                     res = cur.fetchone()
                     nextFree = 79200000 + int(res[0])
                     if nextFree > current_milli_time():
-                        a = datetime.timedelta(milliseconds=int(nextFree - current_milli_time()), microseconds=0)
-                        datestring = "{0}".format(a).split(".")[0]
+                        datestring = formatTimeDelta(nextFree - current_milli_time())
                         self.message(channel,
                                      str(tags[
                                              'display-name']) + ", you need to wait {0} for your next free drop!".format(
@@ -4282,8 +4281,7 @@ class NepBot(NepBotClass):
                                     frData = cur.fetchone()
                                     if frData[0] >= int(config["betForceResetLimit"]):
                                         nextUse = int(frData[1]) + int(config["betForceResetPeriod"]) - invocation
-                                        a = datetime.timedelta(milliseconds=nextUse, microseconds=0)
-                                        datestring = "{0}".format(a).split(".")[0]
+                                        datestring = formatTimeDelta(nextUse)
                                         self.message(channel, "You are currently out of self forceresets. Your next one will be available in %s." % datestring)
                                         return
                                     cur.execute("INSERT INTO forceresets (channel, user, `timestamp`) VALUES(%s, %s, %s)", [channel, tags['user-id'], invocation])
@@ -4378,8 +4376,7 @@ class NepBot(NepBotClass):
                         lastPayout = cur.fetchone()[0]
                         currTime = current_milli_time()
                         if lastPayout > currTime - 79200000 and not isMarathonChannel:
-                            a = datetime.timedelta(milliseconds=int(lastPayout + 79200000 - currTime), microseconds=0)
-                            datestring = "{0}".format(a).split(".")[0]
+                            datestring = formatTimeDelta(lastPayout + 79200000 - currTime)
                             self.message(channel, "Bet payout may be used again in this channel in %s." % datestring,
                                          isWhisper)
                             cur.close()
@@ -4560,8 +4557,7 @@ class NepBot(NepBotClass):
                                 cooldown = row["lastClaimTime"] + int(config["setCooldownDays"])*86400000 - current_milli_time()
                                 if cooldown > 0:
                                     # on cooldown
-                                    a = datetime.timedelta(milliseconds=cooldown, microseconds=0)
-                                    datestring = "{0}".format(a).split(".")[0]
+                                    datestring = formatTimeDelta(cooldown)
                                     self.message(channel, "Could not claim the set %s as it is on cooldown, try again in %s" % (row["name"], datestring), isWhisper)
                                     continue
                             
@@ -4676,8 +4672,7 @@ class NepBot(NepBotClass):
                             cooldown = lastRequest + int(config["imageChangeCooldownDays"])*86400000 - current_milli_time()
 
                             if cooldown > 0:
-                                a = datetime.timedelta(milliseconds=cooldown, microseconds=0)
-                                datestring = "{0}".format(a).split(".")[0]
+                                datestring = formatTimeDelta(cooldown)
                                 self.message(channel, "Sorry, that set has had its badge changed too recently. Please try again in %s" % datestring, isWhisper)
                                 return
                             
@@ -5710,8 +5705,7 @@ class NepBot(NepBotClass):
                             cooldown = lastRequest + int(config["imageChangeCooldownDays"])*86400000 - current_milli_time()
 
                             if cooldown > 0:
-                                a = datetime.timedelta(milliseconds=cooldown, microseconds=0)
-                                datestring = "{0}".format(a).split(".")[0]
+                                datestring = formatTimeDelta(cooldown)
                                 self.message(channel, "Sorry, that card has had its image changed too recently. Please try again in %s" % datestring, isWhisper)
                                 return
                             
