@@ -1127,9 +1127,10 @@ def formatRank(rankNum):
 memes = ["🤔", "🏆", "✌", "🌲", "🍀", "🖐", "👌", "🤑", "🤣", "🎄"]
 
 
-def formatTimeDelta(ms):
-    baseRepr = str(datetime.timedelta(milliseconds=int(ms), microseconds=0))
-    output = baseRepr[:-3] if "." in baseRepr else baseRepr
+def formatTimeDelta(ms, showMS=True):
+    output = str(datetime.timedelta(milliseconds=int(ms), microseconds=0))
+    if "." in output:
+        output = output[:-3] if showMS else output[:-7]
     if "memeMode" in config and config["memeMode"] == "meme":
         for i in range(10):
             output = output.replace(str(i), memes[i])
@@ -1463,7 +1464,7 @@ def infoCommandAvailable(userid, username, displayName, bot, channel, isWhisper)
         if limitData[0] < limit:
             return True
         else:
-            timeDiff = formatTimeDelta(timeUntilReset)
+            timeDiff = formatTimeDelta(timeUntilReset, False)
             if private:
                 bot.message(channel,
                             "%s, you have hit the rate limit for info commands. Please wait %s to use more." % (
@@ -2356,7 +2357,7 @@ class NepBot(NepBotClass):
                     res = cur.fetchone()
                     nextFree = 79200000 + int(res[0])
                     if nextFree > current_milli_time():
-                        datestring = formatTimeDelta(nextFree - current_milli_time())
+                        datestring = formatTimeDelta(nextFree - current_milli_time(), False)
                         self.message(channel,
                                      str(tags[
                                              'display-name']) + ", you need to wait {0} for your next free drop!".format(
@@ -4281,7 +4282,7 @@ class NepBot(NepBotClass):
                                     frData = cur.fetchone()
                                     if frData[0] >= int(config["betForceResetLimit"]):
                                         nextUse = int(frData[1]) + int(config["betForceResetPeriod"]) - invocation
-                                        datestring = formatTimeDelta(nextUse)
+                                        datestring = formatTimeDelta(nextUse, False)
                                         self.message(channel, "You are currently out of self forceresets. Your next one will be available in %s." % datestring)
                                         return
                                     cur.execute("INSERT INTO forceresets (channel, user, `timestamp`) VALUES(%s, %s, %s)", [channel, tags['user-id'], invocation])
@@ -4376,7 +4377,7 @@ class NepBot(NepBotClass):
                         lastPayout = cur.fetchone()[0]
                         currTime = current_milli_time()
                         if lastPayout > currTime - 79200000 and not isMarathonChannel:
-                            datestring = formatTimeDelta(lastPayout + 79200000 - currTime)
+                            datestring = formatTimeDelta(lastPayout + 79200000 - currTime, False)
                             self.message(channel, "Bet payout may be used again in this channel in %s." % datestring,
                                          isWhisper)
                             cur.close()
@@ -4557,7 +4558,7 @@ class NepBot(NepBotClass):
                                 cooldown = row["lastClaimTime"] + int(config["setCooldownDays"])*86400000 - current_milli_time()
                                 if cooldown > 0:
                                     # on cooldown
-                                    datestring = formatTimeDelta(cooldown)
+                                    datestring = formatTimeDelta(cooldown, False)
                                     self.message(channel, "Could not claim the set %s as it is on cooldown, try again in %s" % (row["name"], datestring), isWhisper)
                                     continue
                             
@@ -4672,7 +4673,7 @@ class NepBot(NepBotClass):
                             cooldown = lastRequest + int(config["imageChangeCooldownDays"])*86400000 - current_milli_time()
 
                             if cooldown > 0:
-                                datestring = formatTimeDelta(cooldown)
+                                datestring = formatTimeDelta(cooldown, False)
                                 self.message(channel, "Sorry, that set has had its badge changed too recently. Please try again in %s" % datestring, isWhisper)
                                 return
                             
@@ -5705,7 +5706,7 @@ class NepBot(NepBotClass):
                             cooldown = lastRequest + int(config["imageChangeCooldownDays"])*86400000 - current_milli_time()
 
                             if cooldown > 0:
-                                datestring = formatTimeDelta(cooldown)
+                                datestring = formatTimeDelta(cooldown, False)
                                 self.message(channel, "Sorry, that card has had its image changed too recently. Please try again in %s" % datestring, isWhisper)
                                 return
                             
@@ -6178,7 +6179,7 @@ class NepBot(NepBotClass):
                             cur.execute("UPDATE special_requests SET image = %s, changed_since_rejection = 1, updated = %s WHERE requesterid = %s", queryArgs)
                             self.message(channel, "%s -> Set the image for your Special card request to %s" % (tags['display-name'], args[2]), isWhisper)
                         elif spclcmd == "submit":
-                            self.message(channel, "%s, please confirm that you want a Special card of %s from %s with image %s by entering !tokenshop special confirm. You cannot change your submission after it is confirmed so please be careful." % (tags['display-name'], specialData[0], specialData[1], specialData[2]))
+                            self.message(channel, "%s, please confirm that you want a Special card of %s from %s with image %s by entering !tokenshop special confirm. You cannot change your submission after it is confirmed so please be careful." % (tags['display-name'], specialData[0], specialData[1], specialData[2]), isWhisper)
                         elif spclcmd == "confirm":
                             # TODO submit to admin discordhook
                             discordargs = (tags['display-name'], specialData[0], specialData[1], specialData[2], sender)
