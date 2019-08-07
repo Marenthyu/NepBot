@@ -902,9 +902,10 @@ def getWaifuById(id):
 def getWaifuOwners(id, rarity):
     with db.cursor() as cur:
         baseRarityName = config["rarity%dName" % rarity]
+        godRarity = int(config["numNormalRarities"]) - 1
         cur.execute(
-            "SELECT users.name, cards.rarity, COUNT(*) AS amount, IF(cards.boosterid IS NOT NULL, 1, 0) FROM cards JOIN users ON cards.userid = users.id WHERE cards.waifuid = %s AND cards.userid IS NOT NULL GROUP BY cards.userid, cards.rarity, IF(cards.boosterid IS NOT NULL, 1, 0) ORDER BY cards.rarity DESC, amount DESC, MIN(cards.created) ASC, users.name ASC",
-            [id])
+            "SELECT users.name, c1.rarity, IF(c1.boosterid IS NOT NULL, 1, 0), IF(c1.rarity = %s AND NOT EXISTS(SELECT id FROM cards c2 WHERE c2.rarity = %s AND c2.waifuid = c1.waifuid AND (c2.created < c1.created OR (c2.created=c1.created AND c2.id < c1.id))), 1, 0) AS firstGod FROM cards c1 JOIN users ON c1.userid = users.id WHERE c1.waifuid = %s AND c1.userid IS NOT NULL ORDER BY firstGod DESC, c1.rarity DESC, c1.created ASC, users.name ASC",
+            [godRarity, godRarity, id])
         allOwners = cur.fetchall()
 
     # compile per-owner data grouped into not in booster / in booster
@@ -913,19 +914,21 @@ def getWaifuOwners(id, rarity):
         ownerData = OrderedDict()
         ownedByOwner = {}
         for row in allOwners:
-            if row[3] != i:
+            if row[2] != i:
                 continue
             if row[0] not in ownerData:
-                ownerData[row[0]] = []
+                ownerData[row[0]] = OrderedDict()
                 ownedByOwner[row[0]] = 0
-            rarityName = config["rarity%dName" % row[1]]
-            ownerData[row[0]].append(rarityName if row[2] == 1 else "%d %s" % (row[2], rarityName))
-            ownedByOwner[row[0]] += row[2]
+            rarityName = ("α" if row[3] else "") + config["rarity%dName" % row[1]]
+            if rarityName not in ownerData[row[0]]:
+                ownerData[row[0]][rarityName] = 0
+            ownerData[row[0]][rarityName] += 1
+            ownedByOwner[row[0]] += 1
 
         for owner in ownerData:
             if len(ownerData[owner]) != 1 or baseRarityName not in ownerData[owner] or ownedByOwner[owner] > 1:
                 # verbose
-                ownerDescriptions[i].append(owner + " (" + ", ".join(ownerData[owner]) + ")")
+                ownerDescriptions[i].append(owner + " (" + ", ".join([("%d %s" % (ownerData[owner][k], k) if ownerData[owner][k] > 1 else k) for k in ownerData[owner]]) + ")")
             else:
                 ownerDescriptions[i].append(owner)
             
