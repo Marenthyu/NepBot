@@ -1755,6 +1755,8 @@ class NepBot(NepBotClass):
                         config["last_weighting_update"] = str(current_milli_time())
                         cur.execute("UPDATE config SET value = %s WHERE name = 'last_weighting_update'",
                                     [config["last_weighting_update"]])
+                        # rounding edge case
+                        cur.execute("UPDATE waifus SET normal_weighting=1 WHERE normal_weighting BETWEEN 0.999 AND 1")
 
                     # pudding expiry?
                     now = datetime.datetime.now()
