@@ -119,6 +119,7 @@ revrarity = {}
 visiblepacks = ""
 validalertconfigvalues = []
 discordhooks = []
+cpuVoters = []
 
 busyLock = threading.Lock()
 discordLock = threading.Lock()
@@ -1775,6 +1776,10 @@ class NepBot(NepBotClass):
                         elif now.day == 8:
                             # actually expire pudding from 2 months ago
                             cur.execute("UPDATE users SET puddingExpiring = 0")
+
+                    if booleanConfig("cpuWarActive") and now.minute < 5:
+                        cpuVoters.clear()
+                        self.message(config["marathonChannel"], "**You can now cast your votes for a CPU again!**", False)
             logger.debug("Checking live status of channels...")
             checkAndRenewAppAccessToken()
 
@@ -2204,6 +2209,27 @@ class NepBot(NepBotClass):
             if command == config["marathonHelpCommand"] and isMarathonChannel:
                 self.message(channel, config["marathonHelpCommandText"], isWhisper)
                 return
+            if command == "cpu" and isMarathonChannel and booleanConfig("cpuWarActive"):
+                cpu = "" if len(args) < 1 else args[0].lower()
+                if cpu.startswith("hdn"):
+                    cpu = cpu[3:]
+                if cpu in ["neptune", "noire", "blanc", "vert"]:
+                    if tags['user-id'] in cpuVoters:
+                        self.message(channel, "%s, you've already voted this hour!" % tags['display-name'], isWhisper)
+                        return
+                    with db.cursor() as cur:
+                        cur.execute("UPDATE cpuwar SET votes = votes + 1 WHERE cpu = %s", [cpu])
+                    formattedCpu = "HDN" + cpu[0].upper() + cpu[1:]
+                    self.message(channel, "Registered %s's vote for %s" % (tags['display-name'], formattedCpu))
+                    cpuVoters.append(tags['user-id'])
+                elif cpu != "":
+                    self.message(channel, "Invalid choice. Valid votes are Neptune, Noire, Blanc or Vert.", isWhisper)
+                else:
+                    with db.cursor() as cur:
+                        cur.execute("SELECT cpu, votes FROM cpuwar ORDER BY votes DESC, cpu ASC")
+                        currentVotes = cur.fetchall()
+                    warStrings = ["%s - %d votes" % ("HDN" + row[0][0].upper() + row[0][1:], row[1]) for row in currentVotes]
+                    self.message(channel, "Current results: %s" % ", ".join(warStrings), isWhisper)
             if command == "quit" and sender in superadmins:
                 logger.info("Quitting from admin command.")
                 pool.disconnect(client=self, expected=True)

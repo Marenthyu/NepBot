@@ -381,10 +381,10 @@ function api(req, res, query) {
                 }
                 con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result2) {
                     if (err) throw err;
-                    con.query("SELECT * FROM emoteWar ORDER BY count DESC", function (err, result3) {
+                    con.query("SELECT * FROM cpuwar ORDER BY votes DESC", function (err, result3) {
                         if (err) throw err;
                         res.writeHead(200, {'Content-Type': 'text/json'});
-                        res.write(JSON.stringify({"wars": wars, "incentives": result2, "emotewar": result3}));
+                        res.write(JSON.stringify({"wars": wars, "incentives": result2, "cpuwar": result3}));
                         res.end();
                     });
                 });
