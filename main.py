@@ -2011,8 +2011,8 @@ class NepBot(NepBotClass):
                         wasNone = True
                     current = current["data"]
                     game = current[0]
-                    category = current[1]
-                    runners = [getRawRunner(runner) for runner in current[2:6] if runner is not None]
+                    category = current[2]
+                    runners = [getRawRunner(runner) for runner in current[3:7] if runner is not None]
                     args = {"game": game}
                     args["category"] = " (%s)" % category if category is not None else ""
                     args["comingup"] = "COMING UP: " if wasNone else ""
@@ -2021,7 +2021,7 @@ class NepBot(NepBotClass):
                     args["command"] = config["marathonHelpCommand"]
                     title = "{comingup}{title} - {game}{category}{runners} - !{command} in chat".format(**args)
                     twitchGame = game
-                    if len(current) >= 10 and current[-1] is not None:
+                    if data["schedule"]["columns"][-1] == "TwitchGame" and current[-1] is not None:
                         twitchGame = current[-1]
 
                     updateBoth(twitchGame, title=title)
