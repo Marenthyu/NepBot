@@ -905,7 +905,7 @@ def getWaifuOwners(id, rarity):
         baseRarityName = config["rarity%dName" % rarity]
         godRarity = int(config["numNormalRarities"]) - 1
         cur.execute(
-            "SELECT users.name, c1.rarity, IF(c1.boosterid IS NOT NULL, 1, 0), IF(c1.rarity = %s AND NOT EXISTS(SELECT id FROM cards c2 WHERE (c2.boosterid IS NOT NULL OR c2.userid IS NOT NULL) AND c2.rarity = %s AND c2.waifuid = c1.waifuid AND (c2.created < c1.created OR (c2.created=c1.created AND c2.id < c1.id))), 1, 0) AS firstGod FROM cards c1 JOIN users ON c1.userid = users.id WHERE c1.waifuid = %s AND c1.userid IS NOT NULL ORDER BY firstGod DESC, c1.rarity DESC, c1.created ASC, users.name ASC",
+            "SELECT users.name, c1.rarity, IF(c1.boosterid IS NOT NULL, 1, 0), IF(c1.rarity = %s AND NOT EXISTS(SELECT id FROM cards c2 WHERE c2.userid IS NOT NULL AND c2.rarity = %s AND c2.waifuid = c1.waifuid AND (c2.created < c1.created OR (c2.created=c1.created AND c2.id < c1.id))), 1, 0) AS firstGod FROM cards c1 JOIN users ON c1.userid = users.id WHERE c1.waifuid = %s AND c1.userid IS NOT NULL ORDER BY firstGod DESC, c1.rarity DESC, c1.created ASC, users.name ASC",
             [godRarity, godRarity, id])
         allOwners = cur.fetchall()
 
