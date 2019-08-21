@@ -678,7 +678,8 @@ def sendDrawAlert(channel, waifu, user, discord=True):
             },
             {
                 "type": "rich",
-                "title": "{user} dropped [{wid}] {name}!".format(user=str(user), wid=str(waifu["id"]), name=str(waifu["name"])),
+                "title": "{user} dropped [{wid}] {name}!".format(user=str(user), wid=str(waifu["id"]),
+                                                         name=str(waifu["name"])),
                 "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
                 "footer": {
                     "text": "Waifu TCG by Marenthyu"
