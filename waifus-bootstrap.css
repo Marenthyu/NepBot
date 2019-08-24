@@ -343,6 +343,7 @@ nav {
 	margin-bottom: unset;
 }
 
+/* New element for copying waifu info */
 .copyTextLine {
 	margin-left: 5px;
 	font-size: 18px !important;

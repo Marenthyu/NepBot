@@ -108,6 +108,7 @@ $(document).ready(function() {
  * @param {String} imageUrl The image URL, to show the beauty of the waifu
  */
 function getTextLineFromCard(id, name, series, rarity, imageUrl) {
+	// We do this to not toggle the area again
 	event.preventDefault();
 	event.stopPropagation();
 
