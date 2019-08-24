@@ -341,6 +341,7 @@ nav {
 
 #cards-grid .card label {
     margin-bottom: unset;
+    display: contents;
 }
 
 /* New element for copying waifu info */
