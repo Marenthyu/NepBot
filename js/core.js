@@ -109,7 +109,6 @@ $(document).ready(function() {
  */
 function getTextLineFromCard(id, name, series, rarity, imageUrl) {
 	// We do this to not toggle the area again
-
 	event.preventDefault();
 	event.stopPropagation();
 
