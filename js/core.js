@@ -133,5 +133,7 @@ function getTextLineFromCard(id, name, series, rarity, imageUrl) {
 	document.body.appendChild(el);
 	el.select();
 	document.execCommand("copy");
-	document.body.removeChild(el);
+    document.body.removeChild(el);
+    
+    $('.toast').toast('show');
 }

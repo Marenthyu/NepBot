@@ -344,6 +344,19 @@ nav {
     display: contents;
 }
 
+.toast {
+    position: fixed;
+    bottom: 5px;
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 100px;
+    left: 5px; right: 5px;
+}
+
+.toast-header {
+    justify-content: center;
+}
+
 /* New element for copying waifu info */
 .copyTextLine {
     margin-left: 5px;
