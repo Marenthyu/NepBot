@@ -20,4 +20,8 @@ getRarityName = function (number) {
     }
 }
 
+stringToBase64 = function (string) {
+    return Buffer.from(string, 'binary').toString('base64');
+}
+
 _%>

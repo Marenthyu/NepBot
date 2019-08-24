@@ -1,488 +1,498 @@
 html {
-    font-size: 80%;
+	font-size: 80%;
 }
 
 body {
-    /* padding-top: 10px; */
-    padding-bottom: 30px;
+	/* padding-top: 10px; */
+	padding-bottom: 30px;
 }
 
 nav {
-    margin-bottom: 0.5rem;
+	margin-bottom: 0.5rem;
 }
 
 .id-holder {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    padding: 2px 5px 2px 5px;
-    border-radius: 0 8px 0 0;
-    font-size: 120%;
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	padding: 2px 5px 2px 5px;
+	border-radius: 0 8px 0 0;
+	font-size: 120%;
 }
 
 .rarity-holder {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    text-transform: uppercase;
-    padding: 2px 5px 2px 5px;
-    border-radius: 8px 0 0 0;
-    font-size: 120%;
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	text-transform: uppercase;
+	padding: 2px 5px 2px 5px;
+	border-radius: 8px 0 0 0;
+	font-size: 120%;
 }
 
 .amount-holder {
-    position: absolute;
-    top: 0;
-    left: 0;
-    padding: 2px 5px 2px 5px;
-    border-radius: 0 0 8px 0;
-    font-size: 150%;
+	position: absolute;
+	top: 0;
+	left: 0;
+	padding: 2px 5px 2px 5px;
+	border-radius: 0 0 8px 0;
+	font-size: 150%;
 }
 
 .promotion-holder {
-    position: absolute;
-    top: 0;
-    right: 0;
-    padding: 2px 5px 2px 5px;
-    border-radius: 0 0 0 8px;
-    font-size: 120%;
+	position: absolute;
+	top: 0;
+	right: 0;
+	padding: 2px 5px 2px 5px;
+	border-radius: 0 0 0 8px;
+	font-size: 120%;
 }
 
 .invisible-space-holder {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
 }
 
 .rarity-common {
-    background-color: #bbbbbb;
-    color: black;
+	background-color: #bbbbbb;
+	color: black;
 }
 
 .rarity-uncommon {
-    background-color: #666666;
-    color: white;
+	background-color: #666666;
+	color: white;
 }
 
 .rarity-rare {
-    background-color: black;
-    color: white;
+	background-color: black;
+	color: white;
 }
 
 .rarity-super {
-    background-color: #e6e600;
-    color: black;
+	background-color: #e6e600;
+	color: black;
 }
 
 .rarity-ultra {
-    background-color: #820dff;
-    color: white;
+	background-color: #820dff;
+	color: white;
 }
 
 .rarity-legendary {
-    background-color: #ff831e;
-    color: black;
+	background-color: #ff831e;
+	color: black;
 }
 
 .rarity-mythical {
-    background-color: #0c96b4;
-    color: white;
+	background-color: #0c96b4;
+	color: white;
 }
 
 .rarity-god {
-    background-color: #ff69b4;
-    color: white;
+	background-color: #ff69b4;
+	color: white;
 }
 
 .card-god {
-    border: none;
-    font-weight: 600;
-    box-shadow: 0 0 1.2rem #ff69b4;
+	border: none;
+	font-weight: 600;
+	box-shadow: 0 0 1.2rem #ff69b4;
 }
 
 .rarity-firstgod {
-    background: radial-gradient(
-            ellipse farthest-corner at right bottom,
-            #fedb37 0%,
-            #fdb931 8%,
-            #9f7928 30%,
-            #8a6e2f 40%,
-            transparent 80%
-        ),
-        radial-gradient(
-            ellipse farthest-corner at left top,
-            #fedb37 0%,
-            #fdb931 8%,
-            #d1b464 25%,
-            #5d4a1f 62.5%,
-            #5d4a1f 100%
-        );
-    color: white;
+	background: radial-gradient(
+			ellipse farthest-corner at right bottom,
+			#fedb37 0%,
+			#fdb931 8%,
+			#9f7928 30%,
+			#8a6e2f 40%,
+			transparent 80%
+		),
+		radial-gradient(
+			ellipse farthest-corner at left top,
+			#fedb37 0%,
+			#fdb931 8%,
+			#d1b464 25%,
+			#5d4a1f 62.5%,
+			#5d4a1f 100%
+		);
+	color: white;
 }
 
 .rarity-firstgod sup {
-    margin-left: 2px;
+	margin-left: 2px;
 }
 
 .card-firstgod {
-    border: none;
-    font-weight: 600;
-    box-shadow: 0 0 1.2rem #d1b464;
+	border: none;
+	font-weight: 600;
+	box-shadow: 0 0 1.2rem #d1b464;
 }
 
 .rarity-special {
-    background: linear-gradient(
-            to right,
-            rgba(255, 0, 0, 0.8),
-            rgba(255, 165, 0, 0.8),
-            rgba(0, 128, 0, 0.8),
-            rgba(0, 0, 255, 0.8),
-            rgba(75, 0, 162, 0.8),
-            rgba(238, 162, 238, 0.8)
-        ),
-        black;
-    color: white;
+	background: linear-gradient(
+			to right,
+			rgba(255, 0, 0, 0.8),
+			rgba(255, 165, 0, 0.8),
+			rgba(0, 128, 0, 0.8),
+			rgba(0, 0, 255, 0.8),
+			rgba(75, 0, 162, 0.8),
+			rgba(238, 162, 238, 0.8)
+		),
+		black;
+	color: white;
 }
 
 .rarity-promo {
-    background: linear-gradient(
-            to left,
-            rgba(255, 0, 0, 0.8),
-            rgba(255, 165, 0, 0.8),
-            rgba(0, 128, 0, 0.8),
-            rgba(0, 0, 255, 0.8),
-            rgba(75, 0, 162, 0.8),
-            rgba(238, 162, 238, 0.8)
-        ),
-        black;
-    color: white;
+	background: linear-gradient(
+			to left,
+			rgba(255, 0, 0, 0.8),
+			rgba(255, 165, 0, 0.8),
+			rgba(0, 128, 0, 0.8),
+			rgba(0, 0, 255, 0.8),
+			rgba(75, 0, 162, 0.8),
+			rgba(238, 162, 238, 0.8)
+		),
+		black;
+	color: white;
 }
 
 .card-body-tcg {
-    padding: 0;
-    position: relative;
-    text-align: center;
+	padding: 0;
+	position: relative;
+	text-align: center;
 }
 
 .card-tcg {
-    margin: 0.5rem;
-    display: inline-block;
-    min-width: 170px;
+	margin: 0.5rem;
+	display: inline-block;
+	min-width: 170px;
 }
 
 .card-image {
-    height: 250px;
+	height: 250px;
 }
 
 .card-footer {
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    z-index: 2;
-    background-color: rgb(245, 245, 245);
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	z-index: 2;
+	background-color: rgb(245, 245, 245);
 }
 
 .card-footer .card-info {
-    overflow: hidden;
-    flex-grow: 1;
+	overflow: hidden;
+	flex-grow: 1;
 }
 
 .card-footer .owned-icon {
-    float: left;
-    margin-right: 10px;
-    font-size: 300%;
+	float: left;
+	margin-right: 10px;
+	font-size: 300%;
 }
 
 .card-footer .keep-box {
-    float: left;
-    margin-right: 10px;
+	float: left;
+	margin-right: 10px;
 }
 
 .card-footer .expand-box {
-    float: right;
-    margin-left: 10px;
-    width: 20px;
+	float: right;
+	margin-left: 10px;
+	width: 20px;
 }
 
 .card-footer .card-info {
-    overflow: hidden;
+	overflow: hidden;
 }
 
 .card-footer .collapse-toggler {
-    cursor: pointer;
+	cursor: pointer;
 }
 
 .owned {
-    background-color: #96ff95;
+	background-color: #96ff95;
 }
 
 .not-owned {
-    background-color: #ffabb2;
+	background-color: #ffabb2;
 }
 
 .sets-holder {
-    padding-top: 20px;
-    padding-bottom: 20px;
+	padding-top: 20px;
+	padding-bottom: 20px;
 }
 
 .btn-set {
-    margin-bottom: 10px;
+	margin-bottom: 10px;
 }
 
 .badge-img {
-    height: 50px;
-    width: 50px;
+	height: 50px;
+	width: 50px;
 }
 
 .badge {
-    margin: 0.5rem;
-    display: inline-block;
-    width: 170px;
-    border: 1px solid rgba(0, 0, 0, 0.125);
-    border-radius: 0.25rem;
+	margin: 0.5rem;
+	display: inline-block;
+	width: 170px;
+	border: 1px solid rgba(0, 0, 0, 0.125);
+	border-radius: 0.25rem;
 }
 
 .badge-inf {
-    margin-top: 3px;
-    background: rgb(237, 237, 237);
-    white-space: pre-wrap;
+	margin-top: 3px;
+	background: rgb(237, 237, 237);
+	white-space: pre-wrap;
 }
 
 .row {
-    padding-left: 2rem;
-    padding-right: 2rem;
+	padding-left: 2rem;
+	padding-right: 2rem;
 }
 
 .col-favourite {
-    min-width: 24%;
+	min-width: 24%;
 }
 
 .outerprogress {
-    margin: 0 auto;
-    width: 75%;
+	margin: 0 auto;
+	width: 75%;
 }
 
 .progress {
-    width: 100%;
+	width: 100%;
 }
 
 .progress-bar span {
-    position: absolute;
-    z-index: 2;
-    color: black;
-    margin: 0 auto;
+	position: absolute;
+	z-index: 2;
+	color: black;
+	margin: 0 auto;
 }
 
 #card-template {
-    display: none;
+	display: none;
 }
 
 #set-template {
-    display: none;
+	display: none;
 }
 
 .set-header {
-    width: 100%;
-    display: flex;
-    align-items: center;
+	width: 100%;
+	display: flex;
+	align-items: center;
 }
 
 .set-header .col {
-    width: calc(100% / 3);
+	width: calc(100% / 3);
 }
 
 .set-header .image-title {
-    display: flex;
-    align-items: center;
+	display: flex;
+	align-items: center;
 }
 
 .set-header .set-title {
-    font-size: 200%;
-    font-weight: bold;
-    margin-right: 20px;
+	font-size: 200%;
+	font-weight: bold;
+	margin-right: 20px;
 }
 
 .set-header .set-id {
-    font-style: italic;
+	font-style: italic;
 }
 
 .set-header .set-image {
-    height: 50px;
-    width: 50px;
-    padding: 0;
-    margin-right: 20px;
+	height: 50px;
+	width: 50px;
+	padding: 0;
+	margin-right: 20px;
 }
 
 .set-header .set-image img {
-    height: 50px;
-    width: 50px;
+	height: 50px;
+	width: 50px;
 }
 
 .info-row {
-    display: inline-flex;
-    align-items: center;
+	display: inline-flex;
+	align-items: center;
 }
 
 .info-row span {
-    margin-right: 10px;
+	margin-right: 10px;
 }
 
 /* Mobile friendly CSS */
 
 .card-bg-image {
-    display: none;
+	display: none;
 }
 
 #cards-grid .card.card-tcg,
 #cards-grid .card-label {
-    display: inline-flex;
+	display: inline-flex;
+}
+
+#cards-grid .card label {
+	margin-bottom: unset;
+}
+
+.copyTextLine {
+	margin-left: 5px;
+	font-size: 18px !important;
+	cursor: pointer;
 }
 
 @media (max-width: 576px) {
-    #cards-grid,
-    .set-cards {
-        display: grid;
-    }
+	#cards-grid,
+	.set-cards {
+		display: grid;
+	}
 
-    #cards-grid .card .card-image,
-    .set-cards .card .card-image {
-        max-width: 100%;
-        object-fit: scale-down;
-        max-height: 50vh;
-        height: unset;
-    }
+	#cards-grid .card .card-image,
+	.set-cards .card .card-image {
+		max-width: 100%;
+		object-fit: scale-down;
+		max-height: 50vh;
+		height: unset;
+	}
 
-    .col-favourite .card-tcg {
-        display: flex;
-    }
+	.col-favourite .card-tcg {
+		display: flex;
+	}
 
-    .navbar-brand {
-        display: none;
-    }
+	.navbar-brand {
+		display: none;
+	}
 
-    .navbar form {
-        display: flex;
-        flex-direction: row;
-    }
+	.navbar form {
+		display: flex;
+		flex-direction: row;
+	}
 
-    .navbar-expand .navbar-collapse {
-        flex-direction: column;
-    }
+	.navbar-expand .navbar-collapse {
+		flex-direction: column;
+	}
 
-    .navbar form input {
-        width: unset;
-    }
+	.navbar form input {
+		width: unset;
+	}
 
-    #cards-grid .card-body,
-    .set-cards .card-body,
-    .col-favourite .card-body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+	#cards-grid .card-body,
+	.set-cards .card-body,
+	.col-favourite .card-body {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
 
-    .set-cards .card-tcg {
-        display: flex;
-    }
+	.set-cards .card-tcg {
+		display: flex;
+	}
 
-    .card-bg-image {
-        display: block;
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        right: 10px;
-        bottom: 10px;
-        background-position: center center;
-        background-repeat: no-repeat;
-        -webkit-background-size: cover;
-        background-size: cover;
-        filter: blur(8px);
-        -webkit-filter: blur(8px);
-    }
+	.card-bg-image {
+		display: block;
+		position: absolute;
+		top: 10px;
+		left: 10px;
+		right: 10px;
+		bottom: 10px;
+		background-position: center center;
+		background-repeat: no-repeat;
+		-webkit-background-size: cover;
+		background-size: cover;
+		filter: blur(8px);
+		-webkit-filter: blur(8px);
+	}
 
-    .set-header {
-        display: unset;
-    }
+	.set-header {
+		display: unset;
+	}
 
-    .set-header .set-id {
-        display: block;
-    }
+	.set-header .set-id {
+		display: block;
+	}
 
-    .set-header .col {
-        width: unset;
-    }
+	.set-header .col {
+		width: unset;
+	}
 
-    .sets-holder .nav-tabs {
-        border-bottom: unset;
-        margin-bottom: 5px;
-    }
+	.sets-holder .nav-tabs {
+		border-bottom: unset;
+		margin-bottom: 5px;
+	}
 
-    .sets-holder .nav-tabs .nav-link.active {
-        border-color: #dee2e6 #dee2e6 #dee2e6;
-        border-radius: 0.25rem;
-    }
+	.sets-holder .nav-tabs .nav-link.active {
+		border-color: #dee2e6 #dee2e6 #dee2e6;
+		border-radius: 0.25rem;
+	}
 
-    .col-favourite .card .card-image {
-        height: unset;
-        max-width: 80vw;
-    }
+	.col-favourite .card .card-image {
+		height: unset;
+		max-width: 80vw;
+	}
 }
 
 .darkmode-toggle-container {
-    margin-left: auto;
-    margin-right: 10px;
-    display: flex;
-    align-items: center;
+	margin-left: auto;
+	margin-right: 10px;
+	display: flex;
+	align-items: center;
 }
 
 #darkmode-toggle {
-    display: block;
-    cursor: pointer;
-    color: #d6d6d6;
+	display: block;
+	cursor: pointer;
+	color: #d6d6d6;
 }
 
-html.dark-mode input[type=text] {
-    border-color: rgba(0,0,0,0.8);
-    background-color: #1d1d1d;
-    color: #d6d6d6;
+html.dark-mode input[type="text"] {
+	border-color: rgba(0, 0, 0, 0.8);
+	background-color: #1d1d1d;
+	color: #d6d6d6;
 }
 
 html.dark-mode body {
-    background-color: #121212;
-    color: #d6d6d6;
+	background-color: #121212;
+	color: #d6d6d6;
 }
 
 html.dark-mode nav {
-    background-color: #2d2d2d !important;
+	background-color: #2d2d2d !important;
 }
 
 html.dark-mode .card {
-    border-color: rgba(0,0,0,0.8);
+	border-color: rgba(0, 0, 0, 0.8);
 }
 
 html.dark-mode .card-body {
-    background-color: #282828;
+	background-color: #282828;
 }
 
 html.dark-mode .card-footer {
-    background-color: #1d1d1d;
+	background-color: #1d1d1d;
 }
 
 html.dark-mode .badge-inf {
-    background-color: #1d1d1d;
-    color: #d6d6d6;
+	background-color: #1d1d1d;
+	color: #d6d6d6;
 }
 
 html.dark-mode .nav-tabs .nav-link.active {
-    color: #d6d6d6;
-    background-color: #1d1d1d;
+	color: #d6d6d6;
+	background-color: #1d1d1d;
 }
 
 html.dark-mode #darkmode-modal .modal-content {
-    background-color: #1d1d1d;
+	background-color: #1d1d1d;
 }
 
 html.dark-mode #darkmode-modal button.close {
-    color: #d6d6d6;
+	color: #d6d6d6;
 }
