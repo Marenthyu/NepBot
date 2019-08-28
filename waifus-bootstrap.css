@@ -339,6 +339,31 @@ nav {
     display: inline-flex;
 }
 
+#cards-grid .card label {
+    margin-bottom: unset;
+    display: contents;
+}
+
+.toast {
+    position: fixed;
+    bottom: 5px;
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 100px;
+    left: 5px; right: 5px;
+}
+
+.toast-header {
+    justify-content: center;
+}
+
+/* New element for copying waifu info */
+.copyTextLine {
+    margin-left: 5px;
+    font-size: 18px !important;
+    cursor: pointer;
+}
+
 @media (max-width: 576px) {
     #cards-grid,
     .set-cards {

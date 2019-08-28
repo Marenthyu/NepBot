@@ -9,7 +9,7 @@
 %>
 <div class="card card-tcg card-<%= rarity %>">
     <div class="card-bg-image" style="background-image: url(<%= card.customImage || card.image %>);"></div>
-    <div class="card-body card-body-tcg">
+    <div class="card-body card-body-tcg" data-toggle="collapse" data-target="#card<%= card.cardid %>ExtraInfo">
         <img src="<%= card.customImage || card.image %>" alt="<%= card.name %>" title="<%= card.name %>" class="card-image" />
         <div class="id-holder rarity-<%= rarity %>"><%= card.id %></div>
         <div class="invisible-space-holder">&nbsp;</div>
@@ -20,13 +20,15 @@
             </div>
         <% } %>
     </div>
-    <div class="card-footer text-center">
+    <div class="card-footer text-center" data-toggle="collapse" data-target="#card<%= card.cardid %>ExtraInfo">
         <div class="card-info">
             <%= card.name %><br />
             <%= card.series %>
             <% if(card.cardid) { %>
                 <div class="collapse cardExtraInfo" id="card<%= card.cardid %>ExtraInfo" data-cardid="<%= card.cardid %>">
-                    Card ID: <%= card.cardid %><br />
+                    Card ID: <%= card.cardid %>
+                    <i class="material-icons copyTextLine" title="Click me to get a text copy for Discord/IRC" onclick="getTextLineFromCard(<%= card.id %>, '<%= escape(card.name) %>', '<%= escape(card.series) %>', <%= card.base_rarity %>, '<%= escape(card.customImage || card.image) %>'); return false;">file_copy</i>
+                    <br />
                     <% if(card.rarity == 8) { %>
                         Non-tradeable
                     <% } else if(card.tradeableAt && card.tradeableAt > Date.now()) { %>

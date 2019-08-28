@@ -85,3 +85,55 @@ $(document).ready( function() {
         });
     }
 });
+
+/**
+ *
+ * @param {Number} id The specific Waifu ID for a single Waifu
+ * @param {String} name The name of the Waifu
+ * @param {String} series The name of the Series the Waifu is from
+ * @param {Number} rarity The rarity the current card has (base)
+ * @param {String} imageUrl The image URL, to show the beauty of the waifu
+ */
+function getTextLineFromCard(id, name, series, rarity, imageUrl) {
+	// We do this to not toggle the area again
+	event.preventDefault();
+	event.stopPropagation();
+
+	rarities = {
+		0: "common",
+		1: "uncommon",
+		2: "rare",
+		3: "super",
+		4: "ultra",
+		5: "legendary",
+		6: "mythical",
+		7: "god",
+		8: "special",
+		9: "promo"
+	};
+
+	let str =
+		"[" +
+		id +
+		"]" +
+		"[" +
+		rarities[rarity] +
+		"]" +
+		" " +
+		unescape(name) +
+		" from " +
+		unescape(series) +
+		" - " +
+		unescape(imageUrl);
+
+	var el = document.createElement("textarea");
+	el.value = str;
+	el.setAttribute("readonly", "");
+	el.style = { position: "absolute", left: "-9999px" };
+	document.body.appendChild(el);
+	el.select();
+	document.execCommand("copy");
+    document.body.removeChild(el);
+    
+    $('.toast').toast('show');
+}
