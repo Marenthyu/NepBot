@@ -710,7 +710,8 @@ def sendDrawAlert(channel, waifu, user, discord=True):
             },
             {
                 "type": "rich",
-                "title": "{user} dropped {name}!".format(user=str(user), name=str(waifu["name"])),
+                "title": "{user} dropped [{wid}] {name}!".format(user=str(user), wid=str(waifu["id"]),
+                                                         name=str(waifu["name"])),
                 "url": "https://twitch.tv/{name}".format(name=str(channel).replace("#", "").lower()),
                 "footer": {
                     "text": "Waifu TCG by Marenthyu"
@@ -740,7 +741,8 @@ def sendDisenchantAlert(channel, waifu, user):
         },
         {
             "type": "rich",
-            "title": "{name} has been disenchanted! Press F to pay respects.".format(name=str(waifu["name"])),
+            "title": "[{wid}] {name} has been disenchanted! Press F to pay respects.".format(name=str(waifu["name"]),
+                                                                                     wid=str(waifu["id"])),
             "footer": {
                 "text": "Waifu TCG by Marenthyu"
             },
@@ -790,7 +792,8 @@ def sendPromotionAlert(userid, waifuid, new_rarity):
         },
         {
             "type": "rich",
-            "title": "{user} promoted {name} to {rarity} rarity!".format(user=username, name=waifu["name"],
+            "title": "{user} promoted [{wid}] {name} to {rarity} rarity!".format(user=username, name=waifu["name"],
+                                                                         wid=str(waifu["id"]),
                                                                          rarity=config[
                                                                              "rarity%dName" % new_rarity]),
             "color": int(config["rarity%dEmbedColor" % new_rarity]),
