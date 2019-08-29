@@ -134,4 +134,6 @@ $(".copyTextLine").click(function(e) {
     document.body.removeChild(el);
     
     $('.toast').toast('show');
+
+    return false;
 });
