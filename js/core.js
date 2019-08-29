@@ -84,56 +84,56 @@ $(document).ready( function() {
             $("html").toggleClass("dark-mode");
         });
     }
-});
 
-$(".copyTextLine").click(function(e) {
-    e.preventDefault();
-    e.stopPropagation();
+    $(".copyTextLine").click(function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        let elm = $(this);
+        let id = elm.attr("data-id");
+        let series = elm.attr("data-name");
+        let name = elm.attr("data-series");
+        let rarity = elm.attr("data-rarity");
+        let imageUrl = elm.attr("data-image");
     
-    let elm = $(this);
-    let id = elm.attr("data-id");
-    let series = elm.attr("data-name");
-    let name = elm.attr("data-series");
-    let rarity = elm.attr("data-rarity");
-    let imageUrl = elm.attr("data-image");
-
-    rarities = {
-		0: "common",
-		1: "uncommon",
-		2: "rare",
-		3: "super",
-		4: "ultra",
-		5: "legendary",
-		6: "mythical",
-		7: "god",
-		8: "special",
-		9: "promo"
-	};
-
-	let str =
-		"[" +
-		id +
-		"]" +
-		"[" +
-		rarities[rarity] +
-		"]" +
-		" " +
-		unescape(name) +
-		" from " +
-		unescape(series) +
-		" - " +
-		unescape(imageUrl);
-
-	var el = document.createElement("textarea");
-	el.value = str;
-	el.setAttribute("readonly", "");
-	el.style = { position: "absolute", left: "-9999px" };
-	document.body.appendChild(el);
-	el.select();
-	document.execCommand("copy");
-    document.body.removeChild(el);
+        rarities = {
+            0: "common",
+            1: "uncommon",
+            2: "rare",
+            3: "super",
+            4: "ultra",
+            5: "legendary",
+            6: "mythical",
+            7: "god",
+            8: "special",
+            9: "promo"
+        };
     
-    $('.toast').toast('show');
-
-    return false;
+        let str =
+            "[" +
+            id +
+            "]" +
+            "[" +
+            rarities[rarity] +
+            "]" +
+            " " +
+            unescape(name) +
+            " from " +
+            unescape(series) +
+            " - " +
+            unescape(imageUrl);
+    
+        var el = document.createElement("textarea");
+        el.value = str;
+        el.setAttribute("readonly", "");
+        el.style = { position: "absolute", left: "-9999px" };
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+        
+        $('.toast').toast('show');
+    
+        return false;
+    });
 });
