@@ -17,7 +17,7 @@
             <div class="card-info">
                 <%= card.name %><br />
                 <%= card.series %>
-                <i class="material-icons copyTextLine" title="Click me to get a text copy for Discord/IRC" onclick="getTextLineFromCard(<%= card.id %>, '<%= escape(card.name) %>', '<%= escape(card.series) %>', <%= card.base_rarity %>, '<%= escape(card.image) %>'); return false;">file_copy</i>
+                <i class="material-icons copyTextLine" title="Click me to get a text copy for Discord/IRC" data-id="<%= card.id %>" data-name="<%= escape(card.name) %>" data-series="<%= escape(card.series) %>" data-rarity="<%= card.base_rarity %>" data-image="<%= escape(card.image) %>">file_copy</i>
             </div>
         </div>
     </label>

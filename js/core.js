@@ -86,20 +86,18 @@ $(document).ready( function() {
     }
 });
 
-/**
- *
- * @param {Number} id The specific Waifu ID for a single Waifu
- * @param {String} name The name of the Waifu
- * @param {String} series The name of the Series the Waifu is from
- * @param {Number} rarity The rarity the current card has (base)
- * @param {String} imageUrl The image URL, to show the beauty of the waifu
- */
-function getTextLineFromCard(id, name, series, rarity, imageUrl) {
-	// We do this to not toggle the area again
-	event.preventDefault();
-	event.stopPropagation();
+$(".copyTextLine").click(function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    let elm = $(this);
+    let id = elm.attr("data-id");
+    let series = elm.attr("data-name");
+    let name = elm.attr("data-series");
+    let rarity = elm.attr("data-rarity");
+    let imageUrl = elm.attr("data-image");
 
-	rarities = {
+    rarities = {
 		0: "common",
 		1: "uncommon",
 		2: "rare",
@@ -136,4 +134,4 @@ function getTextLineFromCard(id, name, series, rarity, imageUrl) {
     document.body.removeChild(el);
     
     $('.toast').toast('show');
-}
+});

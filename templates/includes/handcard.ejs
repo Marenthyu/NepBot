@@ -27,7 +27,7 @@
             <% if(card.cardid) { %>
                 <div class="collapse cardExtraInfo" id="card<%= card.cardid %>ExtraInfo" data-cardid="<%= card.cardid %>">
                     Card ID: <%= card.cardid %>
-                    <i class="material-icons copyTextLine" title="Click me to get a text copy for Discord/IRC" onclick="getTextLineFromCard(<%= card.id %>, '<%= escape(card.name) %>', '<%= escape(card.series) %>', <%= card.base_rarity %>, '<%= escape(card.customImage || card.image) %>'); return false;">file_copy</i>
+                    <i class="material-icons copyTextLine" title="Click me to get a text copy for Discord/IRC" data-id="<%= card.id %>" data-name="<%= escape(card.name) %>" data-series="<%= escape(card.series) %>" data-rarity="<%= card.base_rarity %>" data-image="<%= escape(card.customImage || card.image) %>">file_copy</i>
                     <br />
                     <% if(card.rarity == 8) { %>
                         Non-tradeable
