@@ -91,8 +91,8 @@ $(document).ready( function() {
         
         let elm = $(this);
         let id = elm.attr("data-id");
-        let series = elm.attr("data-name");
-        let name = elm.attr("data-series");
+        let name = elm.attr("data-name");
+        let series = elm.attr("data-series");
         let rarity = elm.attr("data-rarity");
         let imageUrl = elm.attr("data-image");
     
