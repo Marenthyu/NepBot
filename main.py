@@ -3280,6 +3280,8 @@ class NepBot(NepBotClass):
                 return
             if command == "help":
                 self.message(channel, config["siteHost"] + "/help", isWhisper=isWhisper)
+            if command == "nepdoc":
+                self.message(channel, config["nepdocURL"], isWhisper=isWhisper)
             if command == "alerts" or command == "alert":
                 if len(args) < 1:
                     self.message(channel,
