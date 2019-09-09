@@ -6030,6 +6030,9 @@ class NepBot(NepBotClass):
                     cur.execute("SELECT annivPromosBought, annivSpecialBought, annivHandUpgradeBought, eventTokens FROM users WHERE id = %s", [tags['user-id']])
                     purchaseData = cur.fetchone()
                     subcmd = "" if not len(args) else args[0].lower()
+                    if booleanConfig("annivShopSpecialOnly") and subcmd not in ["special", "specialadmin"]:
+                        self.message(channel, "Token Shop purchases are closed for this year, thanks for playing! If you've already purchased a Special and don't have it in your hand yet, you still have access to !tokenshop special commands.", isWhisper)
+                        return
                     if subcmd == "gacha":
                         tokenName = config["eventTokenName"]
                         if len(args) == 1 or args[1].lower() != "roll":
