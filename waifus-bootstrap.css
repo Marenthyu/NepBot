@@ -467,7 +467,29 @@ nav {
     color: #d6d6d6;
 }
 
-html.dark-mode input[type=text] {
+#sort-mode {
+    float: right;
+}
+
+#sorthand-info {
+    display: none;
+}
+
+.sorthand-output {
+    width: 75%;
+    display: none;
+}
+
+textarea.sorthand-output {
+    white-space: nowrap;
+    overflow: auto;
+}
+
+.card-placeholder {
+    height: 100px; /* 250px [card-image] + ~20px for card-footer */
+}
+
+html.dark-mode input[type=text], html.dark-mode textarea {
     border-color: rgba(0,0,0,0.8);
     background-color: #1d1d1d;
     color: #d6d6d6;
@@ -510,4 +532,8 @@ html.dark-mode #darkmode-modal .modal-content {
 
 html.dark-mode #darkmode-modal button.close {
     color: #d6d6d6;
+}
+
+html.dark-mode .jumbotron {
+    background-color: #2b2b2b;
 }

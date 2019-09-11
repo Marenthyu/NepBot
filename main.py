@@ -6017,6 +6017,50 @@ class NepBot(NepBotClass):
                         cur.executemany("UPDATE cards SET sortValue = %s WHERE id = %s", updatePairs)
                         self.message(channel, "Updated sort values for %d cards in %s's hand." % (len(updatePairs), tags['display-name']), isWhisper)
                     return
+            if command == "autogacha" and sender in superadmins:
+                tokenName = config["eventTokenName"]
+                with db.cursor() as cur:
+                    cur.execute("SELECT id, name, eventTokens FROM users WHERE eventTokens > 0 ORDER BY eventTokens DESC")
+                    holders = cur.fetchall()
+
+                    for holder in holders:
+                        fullPrizes = []
+                        userid = int(holder[0])
+                        for i in range(int(holder[2])):
+                            roll = tokenGachaRoll()
+                            prizes = []
+
+                            if "pack" in roll["prize"]:
+                                giveFreeBooster(userid, roll["prize"]["pack"], roll["prize"]["amount"])
+                                prizes.append("%dx %s pack (!freepacks open %s)" % (roll["prize"]["amount"], roll["prize"]["pack"], roll["prize"]["pack"]))
+
+                            if "points" in roll["prize"]:
+                                addPoints(userid, roll["prize"]["points"])
+                                prizes.append("%d points" % roll["prize"]["points"])
+                            
+                            if "pudding" in roll["prize"]:
+                                addPudding(userid, roll["prize"]["pudding"])
+                                prizes.append("%d pudding" % roll["prize"]["pudding"])
+
+                            fullPrizes.append("[%d◆] %s" % (roll["tier"], " and ".join(prizes)))
+
+                        messages = ["Your %d leftover %s(s) were fed into the Token Gacha and you got: " % (holder[2], tokenName)]
+                        first = True
+                        for prizeStr in fullPrizes:
+                            if len(messages[-1]) + len(prizeStr) > 398:
+                                messages.append(prizeStr)
+                            elif first:
+                                messages[-1] += prizeStr
+                            else:
+                                messages[-1] += ", " + prizeStr
+                            first = False
+
+                        for message in messages:
+                            self.message('#' + holder[1], message, True)
+
+                    cur.execute("UPDATE users SET eventTokens = 0")
+                    self.message(channel, "Done.", isWhisper)
+                    return
             if command == "tokenshop":
                 if not booleanConfig("annivShopOpen"):
                     return
