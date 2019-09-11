@@ -115,7 +115,8 @@ $(document).ready( function() {
 
     $("#sort-mode").click(function() {
         if(inSortMode) {
-            $('#cards-grid').sortable('disable');
+            $('#cards-grid').sortable('destroy');
+            $('#cards-grid').unbind();
             $('#cards-grid').enableSelection();
             $('.sorthand-output').hide();
             $(this).text("Sorthand command generator");
@@ -125,7 +126,7 @@ $(document).ready( function() {
             $('#cards-grid').sortable({
                 placeholder: 'card-placeholder card-tcg card',
                 update: updateOutput,
-                items: "> .hand-card",
+                items: "> .hand-card"
             });
             $('#cards-grid').disableSelection();
             updateOutput();
