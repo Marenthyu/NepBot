@@ -1,0 +1,15 @@
+<%
+    rarity = "promo";
+_%>
+<div class="card card-tcg card-promo">
+    <div class="card-bg-image" style="background-image: url(<%= config.eventTokenImage %>);"></div>
+    <div class="card-body card-body-tcg">
+        <img src="<%= config.eventTokenImage %>" alt="<%= config.eventTokenName %>" title="<%= config.eventTokenName %>" class="card-image" />
+        <div class="amount-holder rarity-<%= rarity %>">x<%= eventTokens %></div>
+    </div>
+    <div class="card-footer text-center">
+        <div class="card-info">
+            <b><%= config.eventTokenName %></b><br />
+        </div>
+    </div>
+</div>

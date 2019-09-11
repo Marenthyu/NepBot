@@ -3,7 +3,9 @@
   "version": "0.0.1",
   "dependencies": {
     "async": "^2.6.1",
+    "ejs": "^2.6.1",
+    "moment": "^2.24.0",
     "mysql": "^2.15.0",
-    "request": "^2.83.0"
+    "request": "^2.88.0"
   }
 }

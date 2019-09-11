@@ -1,0 +1,41 @@
+<%
+    title = user+"'s hand";
+    currentPage = "hand";
+_%>
+<% include includes/header %>
+<div class="jumbotron jumbotron-fluid" id="sorthand-info">
+    <div class="container">
+      <h1>Sorthand Helper Tool</h1>
+      <p class="lead">This is a tool to organize your hand.<br>
+      <b>Instructions</b>: Make sure you're looking at your own hand and not someone else&#39;s.
+      Drag your cards around with your mouse in the intended order.
+      Then paste the <kbd>!sorthand</kbd> command(s) from the text box at the bottom of the page
+      into <em>Nepnepbot whispers</em> (one at a time if you get multiple).
+      You must use whispers because otherwise Twitch will likely silently drop your message as spam.<br />
+      Code kindly provided by <b>xorhash</b> under the ISC license.</p>
+    </div>
+  </div>
+<div id='cards-grid'>
+    <% if(cards.length) { %>
+        <button id='sort-mode' class='btn btn-primary'>Sorthand command generator</button>
+        <% cards.forEach(function(card) { %>
+            <% include includes/handcard %>
+        <% }); %>
+    <% } else if(error) { %>
+        <%= error %>
+    <% } %>
+    <% if(eventTokens > 0) { %>
+        <% include includes/handEventToken %>
+    <% } %>
+</div>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.11/moment-timezone-with-data.js"></script>
+<script src="https://code.jquery.com/ui/1.12.0/jquery-ui.min.js"></script>
+<script type="text/javascript" src="/js/hand.js"></script>
+
+<input class="sorthand-output" id="sorthand-single" onClick="this.select();document.execCommand('copy');" readonly type="text">
+<textarea class="sorthand-output" id="sorthand-multiple"></textarea>
+<br />
+<i id="date-display-text">Card creation dates are displayed in UTC.</i><br />
+
+<% include includes/footer %>

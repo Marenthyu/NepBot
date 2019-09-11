@@ -1,0 +1,53 @@
+<%
+    title = user+"'s profile";
+    currentPage = "profile";
+_%>
+<% include includes/header %>
+<% if(error) { %>
+    <%= error %>
+<% } else { %>
+    <div class="row">
+        <div class="col">
+            <h3>Badges</h3>
+            <br/>
+            <% badges.forEach(function(badge){ %><% include includes/badge _%><% }); %>
+        </div>
+        <div class="col">
+            <h3>Description</h3>
+            <br/>
+            <%= description %>
+            <br/>
+            <small>Change with !profile description &lt;new description&gt;</small>
+            <br/><br/>
+
+        </div>
+        <div class="col-auto col-favourite">
+            <h3>Favourite</h3>
+            <br/>
+            <% if(favourite) { %>
+                <%- include('includes/handcard', {card: favourite}) %>
+            <% } else { %>
+                No favourite set.
+            <% } %>
+            <br/>
+            <small>Change with !profile favourite &lt;id&gt;</small>
+            <br/>
+        </div>
+    </div>
+    <hr>
+    <div class="row">
+        <div class="col">
+            <div class="outerprogress">
+                <h2>Progress to next hand upgrade:</h2>
+                <br>
+                <div class="progress">
+                    <div aria-valuemax="<%= nextspendings %>" aria-valuemin="<%= lastspendings %>" aria-valuenow="<%= currentspendings %>"
+                            class="progress-bar" role="progressbar"
+                            style="width: <%= percentspendings %>%"><span><%= currentspendings %> / <%= nextspendings %></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+<% } %>
+<% include includes/footer _%>
