@@ -828,17 +828,27 @@ function bootServer(callback) {
                         res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
                         res.end();
                     }
+                    break;
                 }
                 case "packs": {
                     if (booleanConfig("packTrackerEnabled")) {
                         packTracker(req, res, q.query);
-                        break;
                     }
                     else {
                         res.writeHead(404, {'Content-Type': 'text/html'});
                         res.write("The Specified content could not be found on this Server. If you want to know more about the Waifu TCG Bot, head over to https://waifus.de/help");
                         res.end();
                     }
+                    break;
+                }
+                case "rules": {
+                    if (!('user' in q.query)) {
+                        httpError(res, 400, "Missing Parameter");
+                    } else {
+                        res.writeHead(200, "OK", {'Content-Type': 'text/html'});
+                        renderTemplateAndEnd("templates/rules.ejs", {nepdoc: config['nepdocURL'], currentPage: "rules", user: q.query.user}, res);
+                    }
+                    break;
                 }
                 default: {
                     res.writeHead(404, {'Content-Type': 'text/html'});
@@ -854,7 +864,7 @@ function bootServer(callback) {
         }
 
 
-    }).listen(8088);
+    }).listen(1337);
 }
 
 async.series([readConfig, bootServer]);

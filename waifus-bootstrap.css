@@ -537,3 +537,20 @@ html.dark-mode #darkmode-modal button.close {
 html.dark-mode .jumbotron {
     background-color: #2b2b2b;
 }
+
+html.dark-mode .card-header {
+    background-color: #2b2b2b;
+}
+
+/* Rules */
+.rules-list {
+    font-size: large;
+}
+
+.rules-heading {
+    cursor: pointer;
+}
+
+.rules-list li {
+    margin: 0.2rem;
+}

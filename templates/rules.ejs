@@ -1,0 +1,448 @@
+<%
+title = "Da Rules";
+currentPage = "rules";
+_%>
+<% include includes/header %>
+<div class="container">
+    <h1>The Rules</h1>
+
+    <div id="accordion">
+        <div class="card">
+            <div class="card-header rules-heading" id="headingOne" data-toggle="collapse" data-target="#collapseOne"
+                 aria-expanded="true" aria-controls="collapseOne">
+                <h5 class="mb-0">
+                    <button class="btn btn-link" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true"
+                            aria-controls="collapseOne">
+                        The Basics
+                    </button>
+                </h5>
+            </div>
+
+            <div id="collapseOne" class="collapse" aria-labelledby="headingOne" data-parent="#accordion">
+                <div class="card-body">
+                    <ol class="rules-list" start="0">
+                        <li>
+                            <a target="_blank" href="<%= nepdoc %>">RTFM</a>
+                        </li>
+                        <li>
+                            Use your brain and have fun. These rules may not be 100% complete, but if you followed this
+                            rule, we
+                            wouldn’t need any, but :ThisIsWhyWeCantHaveNiceThings:
+                        </li>
+                        <li>
+                            No Botting / Automating or “Alts” of any kind, full stop. The TCG allows for a lot of
+                            “newcomer rewards” for
+                            people to collect and handspace is deliberately limited. If you are made aware of any bots
+                            or alts, please
+                            report it to a Moderator or the Admins. Bots and Alts will simply get banned from the TCG,
+                            but if they have
+                            been abused already, a ban or penalty may be issued as well.
+                            <ol type="a">
+                                <li>
+                                    Lurking in bot channels (using Twitch chat or IRC) is fine, any automation past that
+                                    is strictly
+                                    prohibited.
+                                </li>
+                                <li>
+                                    This rule is occasionally checked by using the Webserver Logs, which include
+                                    usernames and IP
+                                    Addresses. By playing the TCG and having read these rules, you consent to this
+                                    storage of
+                                    information for the period of at least 12 months.
+                                </li>
+                                <li>
+                                    If you are found using an alt or made aware of someone else using an alt, it is in
+                                    your
+                                    responsibility to disclose this information to an admin. If you do so in a timely
+                                    manner, your main
+                                    account will not be punished, unless major exploitation has been done. This is at
+                                    the Admin's
+                                    discretion.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            Just to make sure you have read this current iteration of the rules, tell Marenthyu on
+                            discord <code>The'se
+                                rules rule! I accept le rulez!</code> in DMs to get the appropriate Discord Role.
+                        </li>
+                        <li>
+                            “Holds”: If another person “holds” a card for you, they are in no way obligated to give it
+                            back. If you have
+                            a card in your hand, it is YOURS and you may do with it what you want. Staff will not get
+                            involved in
+                            enforcing any “hold”/”loan” deals whatsoever.
+                        </li>
+                        <li>
+                            “Cucking”: If you have a card and someone asks you to trade for it, consider the offer and
+                            at least respond
+                            with a yes or no to it. Deliberately keeping a card someone wants for the sole purpose of
+                            “not giving it to
+                            them” is not nice and may result in penalties.
+                            <ol type="a">
+                                <li>
+                                    Enforcement of this is dependent on explicit maliciousness in a public setting.
+                                    Staff is not going
+                                    to interrogate card owners on why they have a particular card for you, and you
+                                    shouldn’t be assuming
+                                    malicious intent without hard proof.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            Absolutely no Real Money Trading is allowed. This includes giving cards away in exchange for
+                            money or
+                            indirect sources of money such as Twitch subs or bits. On the system side, no
+                            Microtransactions that
+                            generate any advantage will ever be introduced. The Game will be free-to-play as long as it
+                            exists.
+                            <ol type="a">
+                                <li>
+                                    The only slight exception to this is sending Marenthyu a postcard to get a Special
+                                    Card. See #rules
+                                    in the official Discord for details.
+                                </li>
+                                <li>
+                                    If any advantageous microtransactions are ever introduced regardless, every user
+                                    will be credited
+                                    1000000 points.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            These rules are subject to change at any time. Announcements will be made using the Discord,
+                            Twitch chat
+                            announcement feature and/or the Website's announcement system to notify you of any major
+                            changes.
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header rules-heading" id="headingTwo" data-toggle="collapse" data-target="#collapseTwo"
+                 aria-expanded="true" aria-controls="collapseTwo">
+                <h5 class="mb-0">
+                    <button class="btn btn-link" data-toggle="collapse" data-target="#collapseTwo" aria-expanded="true"
+                            aria-controls="collapseTwo">
+                        Bet Rules
+                    </button>
+                </h5>
+            </div>
+
+            <div id="collapseTwo" class="collapse" aria-labelledby="headingTwo" data-parent="#accordion">
+                <div class="card-body rules-list">
+                    The Bot allows for Speedrun bets to be ran on any channel it is in and the system may be used for
+                    anything you want, but payouts will only be considered under the following conditions:
+                    <ol start="1">
+                        <li>
+                            The Run was done with a visible timer
+                        </li>
+                        <li>
+                            The Run was done in a single sitting
+                            <ol type="a">
+                                <li>
+                                    Stream drops (“picnics”) are fine as long as they are brief. You should try to keep
+                                    the timer going while the stream is down. If your computer BSODs or some other
+                                    circumstance happens through which you can’t preserve the timer, you may rely on the
+                                    bet timer but you must still get the stream back up ASAP and resume the timer using
+                                    a best guess or a readout from !bet status.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            The run must be something that could be considered a speedrun by conventional logic.
+                            <ol type="a">
+                                <li>
+                                    Generally this implies no payouts for competitive/PvP multiplayer game bets. The
+                                    only parties who influence the time of the bet should be yourself (plus any co-op
+                                    partners) and the game itself.
+                                </li>
+                                <li>
+                                    Also no payouts on “how long I survive” or anything that implies you are trying to
+                                    take time instead of go fast.
+                                </li>
+                                <li>
+                                    You are allowed to do bets on multiple repetitions of the same run or so-called
+                                    “gauntlets” of multiple runs back to back, as long as you explicitly lay out exactly
+                                    what you’re doing when advertising your bet and don’t change it partway through.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            If you advertise your bet as being for a particular game+category combination you must not
+                            change it to a different one, whether it be before the bet starts or during the bet.
+                            <ol type="a">
+                                <li>
+                                    Use !bet cancel if you no longer want to do a particular bet run.
+                                </li>
+                                <li>
+                                    Advertising your bet (via the Discord or other means) is optional but if you get
+                                    fewer than 5 participants you will not be eligible for payout under any
+                                    circumstances. The bot will warn you of this when you try to start the bet.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            The Run must be valid considering official rules for the specific category or run.
+                            <ol type="a">
+                                <li>
+                                    If no rules are defined, it is up to the admins
+                                </li>
+                                <li>
+                                    If you are varying from the official ruleset when one is present you must be
+                                    explicit about this via whatever means you advertise your bet, and variations must
+                                    be reasonable as judged by the admins.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>Co-op runs must only have one bet between all the participants. Participants who are not the
+                            one hosting the bet may enter the bet as long as they do not then “rig” the speedrun to make
+                            their bet win.
+                            <ol type="a">
+                                <li>
+                                    A system to allow multiple people to receive the broadcaster payout for a co-op run
+                                    may be introduced at a later date.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            For speedrun races involving multiple Waifu TCG streamers you may choose between the
+                            following two options:
+                            <ol>
+                                <li>
+                                    Each streamer does their own bet for their own completion time, and may enter each
+                                    others bets.
+                                </li>
+                                <li>
+                                    A single streamer does a bet based on the completion time of the last place
+                                    finisher, similar to the co-op system.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            If the timer is paused to take a break, the Bot does not stop its timer. In this case, the
+                            Bot’s time is the one to be taken for the payout.
+                        </li>
+                        <li>
+                            In general, no “rigging bets”. This includes (but is not limited to) waiting at the end of a
+                            bet before finishing so that a particular participant wins or loses.
+                        </li>
+                        <li>
+                            Inaccurate usage of !bet open and !bet close may yield in different payouts than what the
+                            onscreen timer says. If changing it to the actual time of the run does not change
+                            placements/payouts, the time will not be adjusted. If however a place switches, it will be
+                            changed.
+                            <ol type="a">
+                                <li>
+                                    A specific exception to this is when the time is almost correct but a bet was within
+                                    500ms of the time the bot timed. It will then be paid out without a change. (a gross
+                                    mistime of >5seconds will be changed to the onscreen time, though.)
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            Only one payout per 22 hour period. You can do two runs on the same day but you’ll need to
+                            wait for a payout of the first one before beginning the second.
+                        </li>
+                        <li>
+                            Bets should be “No Reset” Runs in general, but if something goes majorly wrong (like a power
+                            outage) you may use !bet forcereset 3 times per 7-day period in these cases, but the
+                            following applies:
+                            <ol type="a">
+                                <li>
+                                    No changing Categories. As mentioned above, if you want to run a different category,
+                                    cancel your current bet and open another one so people can adjust their bets
+                                    accordingly.
+                                </li>
+                                <li>
+                                    Do not reset close to the end of a run just to prevent “non-believers” from a payout
+                                    because you dont want that. Bad runs happen and if someone guessed that, they should
+                                    get the points for it!
+                                </li>
+                                <li>
+                                    Do not reset just because “I can’t PB anymore” - it’s meant for things out of your
+                                    control, not just having a bad run.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            Admins can “force-enter” users into bets if an admin is around and the streamer agrees. It
+                            is up to the streamer and admin if a force enter is done, but it shouldn’t be done past
+                            major run-deciding events, so usually not past the first few minutes, depending on total run
+                            time.
+                            <ol type="a">
+                                <li>
+                                    Force enters done before the run begins can be done without the streamer’s
+                                    permission. These are usually for cases where a particular person can’t practically
+                                    place a bet e.g. they are streaming themselves.
+                                </li>
+                                <li>
+                                    The bet time and the channel/bet/category it's for must have been explicitly stated
+                                    by the person who wants to be entered, in either a Twitch chat with the bot in it,
+                                    the official Waifu TCG Discord server (not any other server), or a DM to an admin.
+                                    This essentially means asking for a forceenter on someone’s behalf is not allowed.
+                                </li>
+                                <li>
+                                    Admins can refuse to do any forceenter for any reason, even if it otherwise meets
+                                    this criteria. This includes if they think the bet is too far in, even if the
+                                    streamer disagrees. Admins may also not be available in the first place. As with
+                                    other bet-related matters, no complaining or salt about this will be tolerated on
+                                    Discord.
+                                </li>
+                                <li>
+                                    Do not overly annoy any admins about getting in a forceenter.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            Do not use sub-only, emote-only, slow mode or R9K mode in your chat when doing bets.
+                            Follower-Only is okay while the stream is live if you are having constant issues with
+                            trolls, but should be avoided as much as possible to allow anyone to enter. (As of writing,
+                            no-one currently having the bot should be having these issues, but this has been written for
+                            future reference.)
+                        </li>
+                        <li>
+                            Doing short (~15min or less) bet runs over and over as your only bets is not allowed. You
+                            can do one or two of these per week as long as you also do longer bets (at least 2 longer
+                            bets per 1 short bet)
+                        </li>
+                        <li>
+                            Bet broadcaster payouts are capped at 720 pudding per individual run (the equivalent of 24
+                            hours) and 3000 pudding per calendar month (enforced based on the start time of the bet in
+                            CET/CEST timezone).
+                            <ol type="a">
+                                <li>
+                                    Doing more than 24 hours of runs in a single session across multiple bets to attempt
+                                    to bypass the single-bet cap is not allowed. To make this clear: you can still do
+                                    >24h bet runs provided you keep healthy, you're just not allowed to try to cheat the
+                                    pudding cap.
+                                </li>
+                                <li>
+                                    The monthly cap is on pudding received, not total hours. A 30 hour bet still only
+                                    counts as 720 pudding towards the monthly cap
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            Finally, payout is always a privilege and never a right. Similarly, there are no guarantees
+                            as to the timeliness with which an admin pays out your bet.
+                            <ul>
+                                <li>
+                                    If you have been waiting for a payout for 6 hours or longer with no communication
+                                    from admins, you may send a single message to ask for payout using the @TCG
+                                    Bet-Admin role ping in the #bet-requests channel in the <a
+                                            href="/discord">Discord</a>.
+                                </li>
+                            </ul>
+                        </li>
+
+                    </ol>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header rules-heading" id="headingTwo" data-toggle="collapse" data-target="#collapseThree"
+                 aria-expanded="true" aria-controls="collapseThree">
+                <h5 class="mb-0">
+                    <button class="btn btn-link" data-toggle="collapse" data-target="#collapseThree"
+                            aria-expanded="true"
+                            aria-controls="collapseThree">
+                        Streaming with NepNepBot
+                    </button>
+                </h5>
+            </div>
+
+            <div id="collapseThree" class="collapse" aria-labelledby="headingTwo" data-parent="#accordion">
+                <div class="card-body rules-list">
+                    <ol start="1">
+                        <li>
+                            When NepNepBot is in your chat, you are expected to be friendly to new people and not discriminate in any way, shape or form. We are an open community.
+                        </li>
+                        <li>
+                            You should stream about once a week or more often; If you are seen inactive, it is at the admin’s discretion to remove the bot from your channel. You may request to have it re-added when you are active again.
+                        </li>
+                        <li>
+                            You may receive global announcements every now and then through the bot, for example when our Community Marathon happens or event cards are available.
+                        </li>
+                        <li>
+                            zfreshpinoy may add additional commands to your channel with your consent; These are considered “meme commands” and may be changed at any time without notice, but are not tied to the TCG and are not required to have the TCG active in your chat.
+                            <ul>
+                                <li>
+                                    Having the “meme commands” added to your channel is entirely at zfresh’s discretion, they aren’t a guaranteed right just because you have the main bot. That said, you may request at any time to have them removed by DMing him, and he will do so when he has time.
+                                </li>
+                            </ul>
+                        </li>
+                        <li>
+                            Streamers may be granted ‘redeem codes’ to be given out to their stream viewers/participants, subject to the following rules:
+                            <ol type="a">
+                                <li>
+                                    In giveaways absolutely no benefit can be given to anyone based on monetary transactions such as subs, bits or donations. Follower only giveaways are allowed but discouraged.
+                                </li>
+                                <li>
+                                    Similarly, you cannot outright sell the codes or trade them in exchange for anything of value (including Waifu TCG cards or other redeem codes).
+                                    <ul>
+                                        <li>
+                                            If you are aware of a multiuse redeem code, you may share them freely.
+                                        </li>
+                                    </ul>
+                                </li>
+                                <li>
+                                    You may not redeem the codes yourself or just choose to arbitrarily give them to your friends/other streamers, especially in swap deals. There should be a clear “cause” for each code you give out that you can provide if asked.
+                                </li>
+                                <li>
+                                    As with bets, these codes are a privilege and not a right. A more standardized system may be developed for them in a future, but for now they are only given out manually by admins at their discretion.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                            Streamers may use the Bingo 99 Extension by Marenthyu to run additional giveaways.
+                            <ol type="a">
+                                <li>
+                                    The payout is up to admin's discretion, but a good example is a jumbo for a single Bingo when playing Tetris 99 and using the placements as the pulled bingo numbers
+                                </li>
+                                <li>
+                                    No payout is guaranteed and all payout is manually done.
+                                </li>
+                                <li>
+                                    A streamer may ping when streaming with Bingo 99 active and planning to get wins payout. Please contact an admin to confirm the purpose before pinging.
+                                </li>
+                            </ol>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header rules-heading" id="headingTwo" data-toggle="collapse" data-target="#collapseFour"
+                 aria-expanded="true" aria-controls="collapseFour">
+                <h5 class="mb-0">
+                    <button class="btn btn-link" data-toggle="collapse" data-target="#collapseFour"
+                            aria-expanded="true"
+                            aria-controls="collapseFour">
+                        Waifu TCG Twitch Team
+                    </button>
+                </h5>
+            </div>
+
+            <div id="collapseFour" class="collapse" aria-labelledby="headingTwo" data-parent="#accordion">
+                <div class="card-body rules-list">
+                    A Team for TCG Streamers exists on Twitch. It is meant for people to more easily find people streaming with the Bot. It is managed by zfreshpinoy and you may ask them to be added to it, if the following conditions are met:
+                    <ol start="1">
+                        <li>
+                            You had the bot for at least 2 weeks and plan on keeping it
+                        </li>
+                        <li>
+                            You are in the <a href="/discord">Waifu TCG Discord</a>
+                        </li>
+                        <li>
+                            You accept to be removed from the Team if you ban the Bot or otherwise stop supporting / wanting the TCG
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+<% include includes/footer %>
