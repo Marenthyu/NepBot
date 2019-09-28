@@ -864,7 +864,7 @@ function bootServer(callback) {
         }
 
 
-    }).listen(1337);
+    }).listen(8088);
 }
 
 async.series([readConfig, bootServer]);
