@@ -197,7 +197,7 @@ def checkAndRenewAppAccessToken():
     r = requests.get("https://api.twitch.tv/kraken", headers=krakenHeaders)
     resp = r.json()
 
-    if "token" not in resp or "valid" not in resp["token"] not resp["token"]["valid"]:
+    if "token" not in resp or "valid" not in resp["token"] or not resp["token"]["valid"]:
         # app access token has expired, get a new one
         logger.debug("Requesting new token")
         url = 'https://id.twitch.tv/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (
