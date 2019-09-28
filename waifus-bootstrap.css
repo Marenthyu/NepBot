@@ -5,6 +5,7 @@ html {
 body {
     /* padding-top: 10px; */
     padding-bottom: 30px;
+    min-height: 90%;
 }
 
 nav {
@@ -552,5 +553,5 @@ html.dark-mode .card-header {
 }
 
 .rules-list li {
-    margin: 0.2rem;
+    margin: 0.5rem;
 }
