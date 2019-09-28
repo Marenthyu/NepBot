@@ -193,11 +193,11 @@ def loadConfig():
 
 def checkAndRenewAppAccessToken():
     global config, headers
-    krakenHeaders = {"Authorization": "OAuth %s" % config["appAccessToken"]}
+    krakenHeaders = {"Authorization": "OAuth %s" % config["appAccessToken"], "Accept": "application/vnd.twitchtv.v5+json"}
     r = requests.get("https://api.twitch.tv/kraken", headers=krakenHeaders)
     resp = r.json()
 
-    if "identified" not in resp or not resp["identified"]:
+    if "token" not in resp or "valid" not in resp["token"] or not resp["token"]["valid"]:
         # app access token has expired, get a new one
         logger.debug("Requesting new token")
         url = 'https://id.twitch.tv/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (
@@ -1784,9 +1784,9 @@ class NepBot(NepBotClass):
                         cpuVoters.clear()
                         self.message(config["marathonChannel"], "**You can now cast your votes for a CPU again!**", False)
             logger.debug("Checking live status of channels...")
-            checkAndRenewAppAccessToken()
 
             with busyLock:
+                checkAndRenewAppAccessToken()
                 cur = db.cursor()
                 cur.execute("SELECT users.name, users.id FROM channels JOIN users ON channels.name = users.name")
                 rows = cur.fetchall()
