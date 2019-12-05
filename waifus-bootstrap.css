@@ -5,6 +5,7 @@ html {
 body {
     /* padding-top: 10px; */
     padding-bottom: 30px;
+    min-height: 90%;
 }
 
 nav {
@@ -537,3 +538,48 @@ html.dark-mode #darkmode-modal button.close {
 html.dark-mode .jumbotron {
     background-color: #2b2b2b;
 }
+
+html.dark-mode .card-header {
+    background-color: #2b2b2b;
+}
+
+/* Rules */
+.rules-list {
+    font-size: large;
+}
+
+.rules-heading {
+    cursor: pointer;
+}
+
+.rules-list li {
+    margin: 0.5rem;
+}
+
+.hash-link {
+    margin-left: -45px;
+    padding-right: 25px;
+    opacity: 0;
+    transition: opacity .3s;
+    -webkit-transition: opacity .3s;
+    line-height: 1;
+    text-decoration: none !important;
+  }
+
+  .hash-link:hover {
+    opacity: 1 !important;
+  }
+
+  .dark-mode .hash-link-icon {
+      fill: #999;
+  }
+
+  .hash-link .hash-link-icon {
+        vertical-align: middle;
+    }
+
+  .anchor {
+      position: relative;
+      top: -60px;
+      display: block;
+  }

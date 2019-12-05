@@ -48,6 +48,9 @@
                     <a class="nav-link" href="/packs?user=<%= user %>"><%= config.packTrackerNavTitle %></a>
                 </li>
             <% } %>
+            <li class="nav-item <% if(currentPage === 'rules') { %>active<% } %>">
+                <a class="nav-link user-required" href="/rules?user=<%= user %>">Rules</a>
+            </li>
             <li class="nav-item">
                 <a class="nav-link disabled">Super Secret Admin-Panel</a>
             </li>

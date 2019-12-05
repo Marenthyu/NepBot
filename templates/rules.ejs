@@ -1,0 +1,629 @@
+<%
+title = "Da Rules";
+currentPage = "rules";
+_%>
+<% include includes/header %>
+<% include includes/directlinkanchor %>
+<div class="container">
+    <h1>The Rules</h1>
+
+    <div id="accordion">
+        <div class="card">
+            <div class="card-header rules-heading" id="headingOne" data-toggle="collapse" data-target="#collapseOne"
+                 aria-expanded="true" aria-controls="collapseOne">
+                <h5 class="mb-0">
+                    <button class="btn btn-link" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true"
+                            aria-controls="collapseOne">
+                        <h2>The Basics</h2>
+                    </button>
+                </h5>
+            </div>
+
+            <div id="collapseOne" class="collapse" aria-labelledby="headingOne" data-parent="#accordion">
+                <div class="card-body">
+                    <ol class="rules-list" start="0">
+                        <li>
+                            <%- renderAnchorLink('collapseOne_rtfm') %>
+                            <a target="_blank" href="<%=nepdoc %>">RTFM</a>
+                        </li>
+                        <li>
+                            <%- renderAnchorLink('collapseOne_nice-things') %>
+                            Use your brain and
+                            <strong>have fun</strong>. These rules may not be 100% complete, but if you followed this
+                            rule, we wouldn’t need any, but :ThisIsWhyWeCantHaveNiceThings:
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseOne_no-botting-or-automation-or-alts') %>
+                            <strong>No Botting / Automating or “Alts”</strong>
+                            of any kind, full stop. The TCG allows for a lot of “newcomer rewards” for people to collect
+                            and handspace is deliberately limited. If you are made aware of any bots or alts, please
+                            <strong>report</strong> it to a Moderator or the Admins. Bots and Alts will simply get
+                            <strong>banned</strong> from the TCG, but if they have been abused already, a ban or penalty
+                            may be issued as well.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseOne_lurking') %>
+                                    <strong>Lurking</strong> in bot channels (using Twitch chat or IRC) is fine, any
+                                    automation past that is strictly prohibited.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseOne_anti-bots-and-alts') %>
+                                    This rule is occasionally checked by using the Webserver Logs, which include
+                                    usernames and IP Addresses.
+                                    <div class="alert alert-danger">By playing the TCG and having read these rules, you
+                                        consent to this storage of information for the period of at least 12 months.
+                                    </div>
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseOne_report-to-admins') %>
+                                    If you are found using an alt or made aware of someone else using an alt, it is in
+                                    your responsibility to disclose this information to an admin. If you do so in a
+                                    timely manner, your main account will not be punished, unless major exploitation has
+                                    been done. This is at the Admin's discretion.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseOne_its-a-secret-to-everyone') %>
+                            Just to make sure you have read this current iteration of the rules, tell Marenthyu on
+                            discord <code>The'se rules rule! I accept le rulez!</code> in DMs to get the appropriate
+                            Discord Role.
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseOne_holding-cards') %>
+                            <strong>Holds</strong>: If another person “holds” a card for you, they are in no way
+                            obligated to give it back. If you have a card in your hand, it is <em><strong>yours</strong></em>
+                            and you may do with it what you want. Staff will not get involved in enforcing any
+                            “hold”/”loan” deals whatsoever.
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseOne_cucking') %>
+                            <strong>Cucking</strong>: If you have a card and someone asks you to trade for it, consider
+                            the offer and at least respond with a <strong>yes</strong> or <strong>no</strong> to it.
+                            Deliberately keeping a card someone wants for the sole purpose of “not giving it to them” is
+                            not nice and may result in penalties.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseOne_cucking-proof') %>
+                                    Enforcement of this is dependent on <strong>explicit maliciousness in a public
+                                        setting.</strong> Staff is not going to interrogate card owners on why they have
+                                    a particular card for you, and you shouldn’t be assuming malicious intent without
+                                    hard proof.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseOne_sendpoints') %>
+                            <code>!sendpoints</code> may be used to facilitate <strong>Point Transfers</strong>.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseOne_sendpoints-tax') %>
+                                    Each transfer includes a <strong>50% tax</strong> of points sent to discourage the
+                                    exploitation of alternate accounts and promote trading of cards.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseOne_sendpoints-reason') %>
+                                    Each transfer must come with a <strong>reason</strong>. If an invalid reason is
+                                    provided, admins may roll the transaction back, including any benefits gained.
+                                    <br/>Valid reasons include, but are not limited to:
+                                    <ul>
+
+                                        <li>
+                                                <%- renderAnchorLink('collapseOne_sendpoints-reason-high-demand') %>
+                                            Paying above the disenchant price for a highly demanded card.
+                                        </li>
+                                        <li>
+                                                <%- renderAnchorLink('collapseOne_sendpoints-reason-unwanted') %>
+                                            Paying below the disenchant price for an unwanted card.
+                                        </li>
+                                        <li>
+                                                <%- renderAnchorLink('collapseOne_sendpoints-reason-temporary-loan') %>
+                                            <em>Temporary</em> loans (must have a period of no more than 3 months)
+                                        </li>
+                                        <li>
+                                                <%- renderAnchorLink('collapseOne_sendpoints-reason-renting') %>
+                                            Renting handspace (should be paid in close proximity to a trade/bounty, and
+                                            the usual policy that we consider the owner of a card to be the person who
+                                            has it in their hand still applies)
+                                        </li>
+                                    </ul>
+                                    <%- renderAnchorLink('collapseOne_sendpoints-invalid-reason') %>
+                                    <strong>Invalid</strong> reasons include, but are not limited to:
+                                    <ul>
+                                        <li>
+                                                <%- renderAnchorLink('collapseOne_sendpoints-invalid-reason-giveaways') %>
+                                            Giveaways, including when you quit the game.
+                                        </li>
+                                        <li>
+                                                <%- renderAnchorLink('collapseOne_sendpoints-invalid-reason-moving-to-alts') %>
+                                            Moving points off of alts (since alts themselves are obviously still banned)
+                                        </li>
+                                        <li>
+                                                <%- renderAnchorLink('collapseOne_sendpoints-invalid-reason-compensation-for-money') %>
+                                            Compensation for any event/transfer outside the game (See below for more on
+                                            Real Money Transactions)
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseOne_no-real-money-trading') %>
+                            Absolutely <strong>no Real Money Trading</strong> is allowed. This includes giving cards
+                            away in exchange for money or indirect sources of money such as Twitch subs or bits. On the
+                            system side, no Microtransactions that generate any advantage will ever be introduced. The
+                            Game will be free-to-play as long as it exists.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseOne_marens-postcard') %>
+                                    The only slight exception to this is sending Marenthyu a postcard to get a Special
+                                    Card. See #rules in the <a href="/discord">official Discord</a> for details.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseOne_if-microtransactions-becomes-a-thing') %>
+                                    If any advantageous microtransactions are ever introduced regardless, every user
+                                    will be credited 1000000 points.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseOne_we-can-change-the-rules') %>
+                            These rules are subject to change at any time. Announcements will be made using the Discord,
+                            Twitch chat announcement feature and/or the Website's announcement system to notify you of
+                            any major changes.
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header rules-heading" id="headingTwo" data-toggle="collapse" data-target="#collapseTwo"
+                 aria-expanded="true" aria-controls="collapseTwo">
+                <h5 class="mb-0">
+                    <button class="btn btn-link" data-toggle="collapse" data-target="#collapseTwo" aria-expanded="true"
+                            aria-controls="collapseTwo">
+                        <h2>Bet Rules</h2>
+                    </button>
+                </h5>
+            </div>
+
+            <div id="collapseTwo" class="collapse" aria-labelledby="headingTwo" data-parent="#accordion">
+                <div class="card-body rules-list">
+                        <%- renderAnchorLink('collapseTwo_betting') %>
+                    The Bot allows for Speedrun bets to be ran on any channel it is in and the system may be used for
+                    anything you want, but payouts will only be considered under the following conditions:
+                    <ol start="1">
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_visible-timer') %>
+                            The Run was done with a <strong>visible timer</strong>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_single-sitting') %>
+                            The Run was done in a <strong>single sitting</strong>
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_stream-drops') %>
+                                    <strong>Stream drops (“picnics”)</strong> are fine as long as they are brief. You
+                                    should try to keep
+                                    the timer going while the stream is down. If your computer BSODs or some other
+                                    circumstance happens through which you can’t preserve the timer, you may rely on the
+                                    bet timer but you must still get the stream back up <strong>ASAP</strong> and resume
+                                    the timer using
+                                    a best guess or a readout from !bet status.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_speedrun-by-logic') %>
+                            The run must be something that could be considered a <strong>speedrun</strong> by
+                            conventional logic.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_speedrun-not-competetive') %>
+                                    Generally this implies no payouts for <strong>competitive/PvP multiplayer
+                                        game</strong> bets. The
+                                    only parties who influence the time of the bet should be yourself (plus any co-op
+                                    partners) and the game itself.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_no-survival') %>
+                                    Also no payouts on “how long I survive” or anything that implies you are trying to
+                                    <strong>take time</strong> instead of go fast.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_gauntlets') %>
+                                    You are allowed to do bets on <strong>multiple repetitions</strong> of the same run
+                                    or so-called
+                                    “gauntlets” of multiple runs back to back, as long as you explicitly lay out
+                                    <strong>exactly</strong>
+                                    what you’re doing when advertising your bet and don’t change it partway through.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_advertise-no-change') %>
+                            If you <strong>advertise</strong> your bet as being for a particular game+category
+                            combination you must not
+                            change it to a different one, whether it be before the bet starts or during the bet.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-cancel') %>
+                                    Use <code>!bet cancel</code> if you no longer want to do a particular bet run.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_advertise-run') %>
+                                    Advertising your bet (via the Discord or other means) is optional but if you get
+                                    <strong>fewer than 5 participants</strong> you will not be eligible for payout under
+                                    any
+                                    circumstances. The bot will warn you of this when you try to start the bet.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_must-be-valid-by-official-rules') %>
+                            The Run must be <strong>valid</strong> considering <strong>official rules</strong> for the
+                            specific category or run.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_run-to-the-admins') %>
+                                    If no rules are defined, it is up to the admins
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_explicit-about-variation-from-ruleset') %>
+                                    If you are varying from the official ruleset when one is present you must be
+                                    <strong>explicit</strong> about this via whatever means you advertise your bet, and
+                                    variations must
+                                    be reasonable as judged by the admins.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_coop-runs') %>
+                            <strong>Co-op runs</strong> must only have one bet between all the participants.
+                            Participants who are not the
+                            one hosting the bet may enter the bet as long as they do not then “rig” the speedrun to make
+                            their bet win.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_coop-runs-2') %>
+                                    A system to allow multiple people to receive the broadcaster payout for a co-op run
+                                    <i>may</i> be introduced at a later date.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_speedrun-race') %>
+                            For speedrun races involving multiple Waifu TCG streamers you may choose between the
+                            following two options:
+                            <ol>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_speedrun-race-1') %>
+                                    <strong>Each streamer</strong> does their own bet for their own completion time, and
+                                    may enter each
+                                    others bets.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_speedrun-race-2') %>
+                                    <strong>A single streamer</strong> does a bet based on the completion time of the
+                                    last place
+                                    finisher, similar to the co-op system.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_speedrun-timer-paused') %>
+                            If the timer is <strong>paused</strong> to take a break, the Bot does <strong>not</strong>
+                            stop its timer. In this case, the
+                            Bot’s time is the one to be taken for the payout.
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_bets-no-rigging') %>
+                            In general, <strong>no “rigging bets”</strong>. This includes (but is not limited to)
+                            waiting at the end of a
+                            bet before finishing so that a particular participant wins or loses.
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_inaccurate-use-of-bet-commands') %>
+                            <strong>Inaccurate</strong> usage of <code>!bet open</code> and !bet close may yield in
+                            different payouts than what the
+                            onscreen timer says. If changing it to the actual time of the run does not change
+                            placements/payouts, the time will <strong>not</strong> be adjusted. If however a place
+                            switches, it will be
+                            changed.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-times') %>
+                                    A specific exception to this is when the time is almost correct but a bet was within
+                                    roughly 500ms of the time the bot timed. It will then be paid out without a change.
+                                    (a gross
+                                    mistime of >5seconds will be changed to the onscreen time, though.)
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_bet-payout-period') %>
+                            Only <strong>one payout per 22 hour period</strong>. You can do two runs on the same day but
+                            you’ll need to
+                            wait for a payout of the first one before beginning the second.
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_bet-no-resets') %>
+                            Bets should be <strong>“No Reset” Runs</strong> in general, but if something goes majorly
+                            wrong (like a power
+                            outage) you may use <code>!bet forcereset</code> <strong>3 times per 7-day period</strong>
+                            in these cases, but the
+                            following applies:
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-no-change-category') %>
+                                    <strong>No changing Categories</strong>. As mentioned above, if you want to run a
+                                    different category,
+                                    cancel your current bet and open another one so people can adjust their bets
+                                    accordingly.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-no-reset-to-end-runs') %>
+                                    <strong>Do not</strong> reset close to the end of a run just to prevent
+                                    “non-believers” from a payout
+                                    because you dont want that. Bad runs happen and if someone guessed that, they should
+                                    get the points for it!
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-dont-reset-because-of-missing-pb') %>
+                                    <strong>Do not</strong> reset just because “I can’t PB anymore” - it’s meant for
+                                    things out of your
+                                    control, not just having a bad run.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_admins-use-the-force') %>
+                            Admins can “<strong>force-enter</strong>” users into bets if an admin is around and the
+                            streamer agrees. It
+                            is up to the streamer and admin if a force enter is done, but it shouldn’t be done past
+                            major run-deciding events, so usually not past the first few minutes, depending on total run
+                            time.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-admin-force-enter') %>
+                                    Force enters done <strong>before</strong> the run begins can be done
+                                    <strong>without</strong> the streamer’s
+                                    permission. These are usually for cases where a particular person can’t practically
+                                    place a bet e.g. they are streaming themselves.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-correct-category-and-data') %>
+                                    The bet time and the channel/bet/category it's for must have been <strong>explicitly
+                                        stated</strong>
+                                    by the person who wants to be entered, in either a Twitch chat with the bot in it,
+                                    the official Waifu TCG Discord server (not any other server), or a DM to an admin.
+                                    This essentially means asking for a forceenter on <strong>someone’s behalf</strong>
+                                    is not allowed.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-admins-can-refuse') %>
+                                    Admins can <strong>refuse</strong> to do any forceenter for any reason, even if it
+                                    otherwise meets
+                                    this criteria. This includes if they think the bet is too far in, even if the
+                                    streamer disagrees. Admins may also not be available in the first place. As with
+                                    other bet-related matters, <strong>no complaining</strong> or salt about this will
+                                    be tolerated on
+                                    Discord.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-dont-bother-the-admins-about-forceenter') %>
+                                    Do not overly annoy any admins about getting in a forceenter.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_bet-no-sub-emote-slow-r9k-mode') %>
+                            Do not use <strong>sub-only, emote-only, slow mode or R9K mode</strong> in your chat when
+                            doing bets.
+                            Follower-Only is okay while the stream is live if you are having constant issues with
+                            trolls, but should be avoided as much as possible to allow anyone to enter. (As of writing,
+                            no-one currently having the bot should be having these issues, but this has been written for
+                            future reference.)
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_bet-not-only-lots-of-short-bets') %>
+                            Doing <strong>short</strong> (~15min or less) bet runs over and over as your only bets is
+                            not allowed. You
+                            can do one or two of these per week as long as you also do longer bets (at least 2 longer
+                            bets per 1 short bet)
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_bet-broadcaster-payout') %>
+                            Bet broadcaster payouts are capped at <strong>720 pudding per individual run</strong> (the
+                            equivalent of 24
+                            hours) and <strong>3000 pudding</strong> per calendar month (enforced based on the start
+                            time of the bet in
+                            CET/CEST timezone).
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-broadcaster-payout-1') %>
+                                    Doing more than <strong>24 hours</strong> of runs in a single session across
+                                    multiple bets to attempt
+                                    to bypass the single-bet cap is not allowed. To make this clear: you can still do
+                                    >24h bet runs provided you keep healthy, you're just not allowed to try to cheat the
+                                    pudding cap.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-broadcaster-payout-2') %>
+                                    The monthly cap is on pudding received, not total hours. A 30 hour bet still only
+                                    counts as 720 pudding towards the monthly cap
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseTwo_bet-payouts-are-a-privilege-not-a-right') %>
+                            Finally, payout is always a <strong>privilege</strong> and never a right. Similarly, there
+                            are no guarantees
+                            as to the timeliness with which an admin pays out your bet.
+                            <ul>
+                                <li>
+                                        <%- renderAnchorLink('collapseTwo_bet-where-is-my-payout') %>
+                                    If you have been waiting for a payout for <strong>6 hours or longer</strong> with no
+                                    communication
+                                    from admins, you may send a single message to ask for payout using the @TCG
+                                    Bet-Admin role ping in the #bet-requests channel in the <a
+                                            href="/discord">Discord</a>.
+                                </li>
+                            </ul>
+                        </li>
+
+                    </ol>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header rules-heading" id="headingTwo" data-toggle="collapse" data-target="#collapseThree"
+                 aria-expanded="true" aria-controls="collapseThree">
+                <h5 class="mb-0">
+                    <button class="btn btn-link" data-toggle="collapse" data-target="#collapseThree"
+                            aria-expanded="true"
+                            aria-controls="collapseThree">
+                        <h2>Streaming with NepNepBot</h2>
+                    </button>
+                </h5>
+            </div>
+
+            <div id="collapseThree" class="collapse" aria-labelledby="headingTwo" data-parent="#accordion">
+                <div class="card-body rules-list">
+                    <ol start="1">
+                        <li>
+                            <%- renderAnchorLink('collapseThree_nepnepbot-intro') %>
+                            When NepNepBot is in your chat, you are expected to be <strong>friendly</strong> to new
+                            people and not discriminate in any way, shape or form. We are an open community.
+                        </li>
+                        <li>
+                            <%- renderAnchorLink('collapseThree_nepnepbot-active') %>
+                            You should stream about <strong>once a week or more often</strong>; If you are seen
+                            inactive, it is at the admin’s discretion to remove the bot from your channel. You may
+                            request to have it re-added when you are active again.
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseThree_nepnepbot-global-announcement') %>
+                            You may receive <strong>global announcements</strong> every now and then through the bot,
+                            for example when our Community Marathon happens or event cards are available.
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseThree_nepnepbot-memecommands') %>
+                            zfreshpinoy may add additional commands to your channel with your consent; These are
+                            considered “<strong>meme commands</strong>” and may be changed at any time without notice,
+                            but are not tied to the TCG and are not required to have the TCG active in your chat.
+                            <ul>
+                                <li>
+                                        <%- renderAnchorLink('collapseThree_nepnepbot-meme-removal') %>
+                                    Having the “meme commands” added to your channel is entirely at <strong>zfresh’s
+                                        discretion</strong>,
+                                    they aren’t a guaranteed right just because you have the main bot. That said, you
+                                    may request at any time to have them removed by DMing him, and he will do so when he
+                                    has time.
+                                </li>
+                            </ul>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseThree_nepnepbot-redeem') %>
+                            Streamers may be granted "<strong>redeem codes</strong>" to be given out to their stream
+                            viewers/participants, subject to the following rules:
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseThree_nepnepbot-redeem-giveaway') %>
+                                    In giveaways <strong>absolutely no benefit</strong> can be given to anyone based on
+                                    monetary transactions such as subs, bits or donations. Follower only giveaways are
+                                    allowed but discouraged.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseThree_nepnepbot-no-selling-codes') %>
+                                    Similarly, you cannot outright sell the codes or trade them in exchange for <strong>anything
+                                        of value</strong> (including Waifu TCG cards or other redeem codes).
+                                    <ul>
+                                        <li>
+                                                <%- renderAnchorLink('collapseThree_nepnepbot-share-multiuse-codes') %>
+                                            If you are aware of a multiuse redeem code, you may share them freely.
+                                        </li>
+                                    </ul>
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseThree_nepnepbot-not-for-only-your-own-use') %>
+                                    You may <strong>not</strong> redeem the codes yourself or just choose to arbitrarily
+                                    give them to your friends/other streamers, especially in swap deals. There should be
+                                    a clear “cause” for each code you give out that you can provide if asked.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseThree_nepnepbot-redeem-is-a-privilege-not-a-right') %>
+                                    As with bets, these codes are a <strong>privilege</strong> and not a right. A more
+                                    standardized system may be developed for them in a future, but for now they are only
+                                    given out manually by admins at their discretion.
+                                </li>
+                            </ol>
+                        </li>
+                        <li>
+                                <%- renderAnchorLink('collapseThree_nepnepbot-bingo99-extension') %>
+                            Streamers may use the <strong><a target="_blank"
+                                                             href="https://www.twitch.tv/ext/dtql57sfyumycxpngrr7481zq09ybv">Bingo
+                                    99 Extension</a></strong> by Marenthyu to run additional giveaways.
+                            <ol type="a">
+                                <li>
+                                        <%- renderAnchorLink('collapseThree_nepnepbot-bingo99-payout-1') %>
+                                    The payout is up to <strong>admin's discretion</strong>, but a good example is a
+                                    jumbo for a single Bingo when playing Tetris 99 and using the placements as the
+                                    pulled bingo numbers
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseThree_nepnepbot-bingo99-payout-2') %>
+                                    No payout is guaranteed and all payout is <strong>manually</strong> done.
+                                </li>
+                                <li>
+                                        <%- renderAnchorLink('collapseThree_nepnepbot-bingo99-streamer-ping') %>
+                                    A streamer may <strong>ping</strong> when streaming with Bingo 99 active and
+                                    planning to get wins payout. Please contact an admin to confirm the purpose before
+                                    pinging.
+                                </li>
+                            </ol>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header rules-heading" id="headingTwo" data-toggle="collapse" data-target="#collapseFour"
+                 aria-expanded="true" aria-controls="collapseFour">
+                <h5 class="mb-0">
+                    <button class="btn btn-link" data-toggle="collapse" data-target="#collapseFour"
+                            aria-expanded="true"
+                            aria-controls="collapseFour">
+                        <h2>Waifu TCG Twitch Team</h2>
+                    </button>
+                </h5>
+            </div>
+
+            <div id="collapseFour" class="collapse" aria-labelledby="headingTwo" data-parent="#accordion">
+                <div class="card-body rules-list">
+                    A <strong><a href="https://www.twitch.tv/team/waifutcg" target="_blank">Twitch Team</a></strong> for
+                    TCG Streamers exists on Twitch. It is meant for people to more easily find people
+                    streaming with the Bot. It is managed by zfreshpinoy and you may ask them to be added to it, if the
+                    following conditions are met:
+                    <ol start="1">
+                        <li>
+                            <%- renderAnchorLink('collapseFour_twitch-team-2weeks') %>
+                            You had the bot for at least <strong>2 weeks</strong> and plan on keeping it
+                        </li>
+                        <li>
+                            <%- renderAnchorLink('collapseFour_twitch-team-discord') %>
+                            You are in the <a href="/discord">Waifu TCG Discord</a>
+                        </li>
+                        <li>
+                            <%- renderAnchorLink('collapseFour_twitch-team-terms') %>
+                            You accept to be removed from the Team if you ban the Bot or otherwise stop supporting /
+                            wanting the TCG
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+<script type="text/javascript" src="js/rules.js"></script>
+</div>
+<% include includes/footer %>
