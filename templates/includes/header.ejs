@@ -19,6 +19,35 @@
     <link rel="stylesheet" href="/waifus-bootstrap.css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons"
       rel="stylesheet">
+      <style type="text/css" rel="stylesheet">
+      .hash-link {
+        margin-left: -45px;
+        padding-right: 25px;
+        opacity: 0;
+        transition: opacity .3s;
+        -webkit-transition: opacity .3s;
+        line-height: 1;
+        text-decoration: none !important;
+      }
+
+      .hash-link:hover {
+        opacity: 1 !important;
+      }
+
+      .dark-mode .hash-link-icon {
+          fill: #999;
+      }
+
+      .hash-link .hash-link-icon {
+            vertical-align: middle;
+        }
+
+      .anchor {
+          position: relative;
+          top: -60px;
+          display: block;
+      }
+      </style>
 </head>
 <body>
 <nav class="navbar navbar-expand sticky-top navbar-dark bg-dark" id="main-nav">
