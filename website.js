@@ -854,12 +854,8 @@ function bootServer(callback) {
                     break;
                 }
                 case "rules": {
-                    if (!('user' in q.query)) {
-                        httpError(res, 400, "Missing Parameter");
-                    } else {
-                        res.writeHead(200, "OK", { 'Content-Type': 'text/html' });
-                        renderTemplateAndEnd("templates/rules.ejs", { nepdoc: config['nepdocURL'], currentPage: "rules", user: q.query.user }, res);
-                    }
+                    res.writeHead(200, "OK", { 'Content-Type': 'text/html' });
+                    renderTemplateAndEnd("templates/rules.ejs", { nepdoc: config['nepdocURL'], currentPage: "rules", user: q.query.user }, res);
                     break;
                 }
                 default: {
