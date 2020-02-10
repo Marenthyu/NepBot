@@ -2013,9 +2013,11 @@ class NepBot(NepBotClass):
                         current = ticker["next"]
                         wasNone = True
                     current = current["data"]
-                    game = current[0]
-                    category = current[2]
-                    runners = [getRawRunner(runner) for runner in current[3:7] if runner is not None]
+                    game = current[int(config["horaroGameColumn"])]
+                    category = current[int(config["horaroCategoryColumn"])]
+                    rStart = int(config["horaroFirstRunnerColumn"])
+                    rNum = int(config["horaroNumRunnerColumns"])
+                    runners = [getRawRunner(runner) for runner in current[rStart:rStart + rNum] if runner is not None]
                     args = {"game": game}
                     args["category"] = " (%s)" % category if category is not None else ""
                     args["comingup"] = "COMING UP: " if wasNone else ""
