@@ -2132,16 +2132,16 @@ class NepBot(NepBotClass):
                 with db.cursor() as cur:
                     cur.execute("SELECT id, banned FROM banned_users WHERE id = %s", [userid])
                     banrow = cur.fetchone()
-                    if banrow[1] > 0:
-                        # failsafe but shouldnt happen (blacklist updated in DB but not reloaded)
-                        if message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
-                            self.message(source, "Account banned from playing TCG. If you're seeing this without knowing why, contact TCG staff @ %s/discord" % config["siteHost"], isWhisper)
-                        return
-                    elif banrow is None:
+					if banrow is None:
                         cur.execute("INSERT INTO banned_users (id, banned) VALUES(%s, 1)", [userid])
                         blacklist.append(userid)
                         if message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
                             self.message(source, "This account appears to be a bot. If it is not, contact TCG staff @ %s/discord to have it unbanned." % config["siteHost"], isWhisper)
+                        return
+                    if banrow[1] > 0:
+                        # failsafe but shouldnt happen (blacklist updated in DB but not reloaded)
+                        if message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
+                            self.message(source, "Account banned from playing TCG. If you're seeing this without knowing why, contact TCG staff @ %s/discord" % config["siteHost"], isWhisper)
                         return
         
         activitymap[sender] = 0
