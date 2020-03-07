@@ -2132,7 +2132,7 @@ class NepBot(NepBotClass):
                 with db.cursor() as cur:
                     cur.execute("SELECT id, banned FROM banned_users WHERE id = %s", [userid])
                     banrow = cur.fetchone()
-					if banrow is None:
+                    if banrow is None:
                         cur.execute("INSERT INTO banned_users (id, banned) VALUES(%s, 1)", [userid])
                         blacklist.append(userid)
                         if message.startswith("!") and message.split()[0][1:].lower() in activeCommands:
