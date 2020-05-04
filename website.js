@@ -189,10 +189,8 @@ function booster(req, res, query) {
         return;
     }
     let start = Date.now();
-    //console.log("Starting booster query at " + start);
     con.query("SELECT waifus.* FROM boosters_opened JOIN users ON boosters_opened.userid = users.id LEFT JOIN cards ON boosters_opened.id = cards.boosterid LEFT JOIN waifus ON cards.waifuid = waifus.id WHERE users.name = ? AND boosters_opened.status = 'open' ORDER BY waifus.id ASC", query.user, function (err, result) {
         if (err) throw err;
-        //console.log("Query returned after " + (Date.now()-start));
         let wantJSON = false;
         if ("accept" in req.headers && req.headers["accept"] === "application/json") {
             wantJSON = true;
@@ -214,7 +212,6 @@ function booster(req, res, query) {
             return;
         }
         con.query("SELECT boosters_opened.eventTokens FROM boosters_opened JOIN users ON boosters_opened.userid = users.id WHERE users.name = ? AND boosters_opened.status = 'open'", query.user, function (err, resultTokens) {
-            // console.log("Second query returned after " + (Date.now()-start));
             if (resultTokens.length === 0) {
                 if (wantJSON) {
                     res.writeHead(404, "Not Found", { 'Content-Type': 'application/json; charset=utf-8' });
@@ -250,8 +247,7 @@ function booster(req, res, query) {
                 }));
                 res.end();
             } else {
-                if ((Date.now()-start)>1000) {console.log("WARNING: BOOSTER PAGE TOOK OVER A SECOND TO FINISH! CONSIDER ARCHIVING DATA! " + (Date.now()-start));}
-                //console.log("Total time for booster query: " + (Date.now()-start));
+                if ((Date.now()-start)>1000) {logger.warning("WARNING: BOOSTER PAGE TOOK OVER A SECOND TO FINISH! CONSIDER ARCHIVING DATA! " + (Date.now()-start));}
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 renderTemplateAndEnd("templates/booster.ejs", { user: query.user, cards: result, error: "", eventTokens: resultTokens[0].eventTokens }, res);
             }
