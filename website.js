@@ -188,8 +188,8 @@ function booster(req, res, query) {
         httpError(res, 400, "Missing Parameter");
         return;
     }
-
-    con.query("SELECT waifus.* FROM boosters_opened JOIN users ON boosters_opened.userid = users.id LEFT JOIN cards ON boosters_opened.id = cards.boosterid JOIN waifus ON cards.waifuid = waifus.id WHERE users.name = ? AND boosters_opened.status = 'open' ORDER BY waifus.id ASC", query.user, function (err, result) {
+    let start = Date.now();
+    con.query("SELECT waifus.* FROM boosters_opened JOIN users ON boosters_opened.userid = users.id LEFT JOIN cards ON boosters_opened.id = cards.boosterid LEFT JOIN waifus ON cards.waifuid = waifus.id WHERE users.name = ? AND boosters_opened.status = 'open' ORDER BY waifus.id ASC", query.user, function (err, result) {
         if (err) throw err;
         let wantJSON = false;
         if ("accept" in req.headers && req.headers["accept"] === "application/json") {
@@ -247,6 +247,7 @@ function booster(req, res, query) {
                 }));
                 res.end();
             } else {
+                if ((Date.now()-start)>1000) {logger.warning("WARNING: BOOSTER PAGE TOOK OVER A SECOND TO FINISH! CONSIDER ARCHIVING DATA! " + (Date.now()-start));}
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 renderTemplateAndEnd("templates/booster.ejs", { user: query.user, cards: result, error: "", eventTokens: resultTokens[0].eventTokens }, res);
             }
