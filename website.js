@@ -190,8 +190,7 @@ function booster(req, res, query) {
     }
     let start = Date.now();
     //console.log("Starting booster query at " + start);
-    con.query("SELECT waifus.* FROM boosters_opened JOIN users ON boosters_opened.userid = users.id LEFT JOIN cards ON boosters_opened.id = cards.boosterid LEFT JOIN waifus ON cards.waifuid = waifus.id WHERE users.name = ? AND boosters_opened.status = 'open' ORDER BY waifus.id ASC", query.user, function (err, 
-result) {
+    con.query("SELECT waifus.* FROM boosters_opened JOIN users ON boosters_opened.userid = users.id LEFT JOIN cards ON boosters_opened.id = cards.boosterid LEFT JOIN waifus ON cards.waifuid = waifus.id WHERE users.name = ? AND boosters_opened.status = 'open' ORDER BY waifus.id ASC", query.user, function (err, result) {
         if (err) throw err;
         //console.log("Query returned after " + (Date.now()-start));
         let wantJSON = false;
