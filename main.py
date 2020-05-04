@@ -6471,7 +6471,7 @@ loadConfig()
 checkAndRenewAppAccessToken()
 
 # get user data for the bot itself
-headers = {"Authorization": "Bearer %s" % config["appAccessToken"]}
+headers = {"Authorization": "Bearer %s" % config["appAccessToken"], "Client-ID": config["clientID"]}
 r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
                  params={"login": str(config["username"]).lower()})
 j = r.json()
