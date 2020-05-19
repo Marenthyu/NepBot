@@ -212,7 +212,7 @@ def checkAndRenewAppAccessToken():
             cur = db.cursor()
             cur.execute("UPDATE config SET value = %s WHERE name = 'appAccessToken'", [jsondata['access_token']])
             cur.close()
-            headers = {"Authorization": "Bearer %s" % config["appAccessToken"]}
+            headers = {"Authorization": "Bearer %s" % config["appAccessToken"], "Client-ID": config["clientID"]}
         except ValueError as error:
             logger.error("Access Token renew/get request was not successful")
             raise error
