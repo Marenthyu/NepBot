@@ -247,7 +247,6 @@ function booster(req, res, query) {
                 }));
                 res.end();
             } else {
-                if ((Date.now()-start)>1000) {logger.warning("WARNING: BOOSTER PAGE TOOK OVER A SECOND TO FINISH! CONSIDER ARCHIVING DATA! " + (Date.now()-start));}
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 renderTemplateAndEnd("templates/booster.ejs", { user: query.user, cards: result, error: "", eventTokens: resultTokens[0].eventTokens }, res);
             }
