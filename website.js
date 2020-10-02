@@ -772,7 +772,7 @@ function browser(req, res, query) {
     if (config['adminPass'] === pass) {
         con.query("SELECT waifus.* FROM waifus LIMIT ?, 100", [(page * 100)], function (err, result) {
             if (err) throw err;
-            renderTemplateAndEnd("templates/image-browser.ejs", {user: user, page: page, cards: result})
+            renderTemplateAndEnd("templates/image-browser.ejs", {user: user, page: page, cards: result}, res);
         });
 
     } else {
