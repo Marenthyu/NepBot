@@ -3629,7 +3629,7 @@ class NepBot(NepBotClass):
 
                 with db.cursor() as cur:
                     cur.execute(
-                        "SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s",
+                        "SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s AND status != 'hidden'",
                         [args[0]])
                     war = cur.fetchone()
 
@@ -3714,7 +3714,7 @@ class NepBot(NepBotClass):
                 
                 with db.cursor() as cur:
                     # find out if this is a bidwar, an incentive or nothing
-                    cur.execute("SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s", [args[0]])
+                    cur.execute("SELECT id, title, status, openEntry, openEntryMinimum, openEntryMaxLength FROM bidWars WHERE id = %s AND status != 'hidden'", [args[0]])
                     war = cur.fetchone()
 
                     if war is not None:
@@ -3826,7 +3826,7 @@ class NepBot(NepBotClass):
                             tags['display-name'], contributionStr, theirchoice, title))
                         return
                     else:
-                        cur.execute("SELECT id, title, amount, required FROM incentives WHERE id = %s", [args[0]])
+                        cur.execute("SELECT id, title, amount, required FROM incentives WHERE id = %s AND status = 'open'", [args[0]])
                         incentive = cur.fetchone()
 
                         if incentive is None:
@@ -3837,6 +3837,7 @@ class NepBot(NepBotClass):
                         title = incentive[1]
                         currAmount = incentive[2]
                         required = incentive[3]
+                        memeMult = (10000000 if incid == "BonusGame" else 1)
 
                         if currAmount >= required:
                             self.message(channel,
@@ -3862,7 +3863,7 @@ class NepBot(NepBotClass):
                             takePudding(tags['user-id'], points)
 
                             contribution = min(points * exchangeRate, required - currAmount)
-                            contributionStr = "%d pudding (-> %d points)" % (points, contribution)
+                            contributionStr = "%d pudding (-> %d points)" % (points, contribution * memeMult)
                             currency = 'pudding'
                         else:
                             points = min(points, required - currAmount)
@@ -3873,7 +3874,7 @@ class NepBot(NepBotClass):
 
                             addPoints(tags['user-id'], -points)
                             contribution = points
-                            contributionStr = "%d points" % points
+                            contributionStr = "%d points" % (points * memeMult)
                             currency = 'points'
                         
                         cur.execute(
@@ -3890,7 +3891,7 @@ class NepBot(NepBotClass):
                         else:
                             self.message(channel,
                                         "%s -> You successfully donated %s towards the %s incentive. It needs %d more points to be met." % (
-                                            tags['display-name'], contributionStr, title, required - currAmount - contribution),
+                                            tags['display-name'], contributionStr, title, (required - currAmount - contribution) * memeMult),
                                         isWhisper)
 
                         return
@@ -3903,6 +3904,9 @@ class NepBot(NepBotClass):
                         incnum += 1
                         if ic[2] >= ic[3]:
                             incentives.append("%s%s (%s) - MET!" % ("; " if incnum > 1 else "", ic[1], ic[0]))
+                        elif ic[1] == "BonusGame":
+                            incentives.append(
+                                "%s%s (%s) - %d/%d points" % ("; " if incnum > 1 else "", ic[1], ic[0], ic[2] * 10000000, ic[3] * 10000000))
                         else:
                             incentives.append(
                                 "%s%s (%s) - %d/%d points" % ("; " if incnum > 1 else "", ic[1], ic[0], ic[2], ic[3]))
