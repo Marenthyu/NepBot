@@ -758,7 +758,6 @@ function browser(req, res, query) {
         page = query.page;
     }
     let auth = req.headers["authorization"];
-    console.log("auth is: " + auth);
     if (!auth) {
         res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
         httpError(res, 401, "Unauthorized");
