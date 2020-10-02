@@ -247,7 +247,6 @@ function booster(req, res, query) {
                 }));
                 res.end();
             } else {
-                if ((Date.now()-start)>1000) {logger.warning("WARNING: BOOSTER PAGE TOOK OVER A SECOND TO FINISH! CONSIDER ARCHIVING DATA! " + (Date.now()-start));}
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 renderTemplateAndEnd("templates/booster.ejs", { user: query.user, cards: result, error: "", eventTokens: resultTokens[0].eventTokens }, res);
             }
@@ -343,7 +342,7 @@ function api(req, res, query) {
                 res.end();
             });
         } else if (query.type === 'incentives') {
-            con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result) {
+            con.query("SELECT id, title, status, IF(id='BonusGame', amount * 10000000, amount) AS amount, IF(id='BonusGame', required*10000000, required) AS required FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result) {
                 if (err) throw err;
                 res.writeHead(200, { 'Content-Type': 'text/json' });
                 res.write(JSON.stringify(result));
@@ -388,7 +387,7 @@ function api(req, res, query) {
                         })
                     }
                 }
-                con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result2) {
+                con.query("SELECT id, title, status, IF(id='BonusGame', amount * 10000000, amount) AS amount, IF(id='BonusGame', required*10000000, required) AS required FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result2) {
                     if (err) throw err;
                     con.query("SELECT * FROM cpuwar ORDER BY votes DESC", function (err, result3) {
                         if (err) throw err;
@@ -702,7 +701,7 @@ function tracker(req, res, query) {
     if ('user' in query) {
         user = query.user;
     }
-    con.query("SELECT * FROM bidWars LEFT JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
+    con.query("SELECT * FROM bidWars LEFT JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID WHERE bidWars.status != 'hidden' ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
         if (err) throw err;
         let wars = [];
         let lastwarid = '';
@@ -739,7 +738,7 @@ function tracker(req, res, query) {
             }
             war.total = warTotal;
         }
-        con.query("SELECT * FROM incentives ORDER BY incentives.id ASC", function (err, result2) {
+        con.query("SELECT id, title, status, IF(id='BonusGame', amount * 10000000, amount) AS amount, IF(id='BonusGame', required*10000000, required) AS required FROM incentives WHERE incentives.status != 'hidden' ORDER BY incentives.id ASC", function (err, result2) {
             let incentives = result2;
             if (err) {
                 res.writeHead(500, 'Internal Server Error');
