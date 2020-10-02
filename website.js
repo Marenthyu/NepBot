@@ -758,23 +758,26 @@ function browser(req, res, query) {
         page = query.page;
     }
     let auth = req.headers["authorization"];
+    console.log("auth is: " + auth);
     if (!auth) {
         res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
         httpError(res, 401, "Unauthorized");
         return
     }
-    let buff = new Buffer(auth, 'base64');
-    let authText = buff.toString('UTF-8');
-    let user, pass = authText.split(':');
+    let buff = Buffer.from(auth.replace('Basic ', ''), 'base64');
+    let authText = buff.toString('utf-8');
+    let parts = authText.split(':');
+    let user = parts[0];
+    let pass = parts[1];
     if (config['adminPass'] === pass) {
-        con.query("SELECT waifus.* FROM waifus LIMIT ?, 100", [(page * 100)], function (error, result) {
+        con.query("SELECT waifus.* FROM waifus LIMIT ?, 100", [(page * 100)], function (err, result) {
             if (err) throw err;
             renderTemplateAndEnd("templates/image-browser.ejs", {user: user, page: page, cards: result})
         });
 
     } else {
         res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
-        httpError(res, 401, "Unauthorized");
+        httpError(res, 401, "Unauthorized wrong password");
         return
     }
 
