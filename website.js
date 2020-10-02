@@ -753,7 +753,7 @@ function tracker(req, res, query) {
     });
 }
 
-function browser(res, req, query) {
+function browser(req, res, query) {
     let page = 0;
     if ("page" in query) {
         page = query.page;
