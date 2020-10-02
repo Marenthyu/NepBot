@@ -753,6 +753,34 @@ function tracker(req, res, query) {
     });
 }
 
+function browser(res, req, query) {
+    let page = 0;
+    if ("page" in query) {
+        page = query.page;
+    }
+    let auth = req.headers["authorization"];
+    if (!auth) {
+        res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
+        httpError(res, 401, "Unauthorized");
+        return
+    }
+    let buff = new Buffer(auth, 'base64');
+    let authText = buff.toString('UTF-8');
+    let user, pass = authText.split(':');
+    if (config['adminPass'] === pass) {
+        con.query("SELECT waifus.* FROM waifus LIMIT ?, 100", [(page * 100)], function (error, result) {
+            if (err) throw err;
+            renderTemplateAndEnd("templates/image-browser.ejs", {user: user, page: page, cards: result})
+        });
+
+    } else {
+        res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
+        httpError(res, 401, "Unauthorized");
+        return
+    }
+
+}
+
 function readConfig(callback) {
     config = {};
     if (!isLocalMode) {
@@ -857,6 +885,10 @@ function bootServer(callback) {
                 case "rules": {
                     res.writeHead(200, "OK", { 'Content-Type': 'text/html' });
                     renderTemplateAndEnd("templates/rules.ejs", { nepdoc: config['nepdocURL'], currentPage: "rules", user: q.query.user }, res);
+                    break;
+                }
+                case "browser": {
+                    browser(req, res, q.query);
                     break;
                 }
                 default: {
