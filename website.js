@@ -120,6 +120,7 @@ let jsfiles = fs.readdirSync("js/");
 jsfiles.forEach(function (filename) {
     jsdata[filename] = fs.readFileSync('js/' + filename, 'utf8');
 });
+jsdata['sw.js'] = fs.readFileSync('sw.js', 'utf-8'); //needs to be explicitly on the root
 
 function booleanConfig(key) {
     return key in config && !["off", "no", "false"].includes(config[key].trim().toLowerCase());
@@ -919,21 +920,31 @@ function pushRegistration(req, res, query) {
                     httpError(res, 422, 'Unprocessable Entity', "That's not a valid subscription!");
                     return
                 }
-                con.query("INSERT INTO push_subscriptions(subscription, userid) VALUES (?, ?)", [JSON.stringify(sub), payload.sub], (err, result) => {
-                    if (err) {
-                        httpError(res, 500, 'Server Error', 'Server Error adding subscription');
-                        console.error(err);
-                    } else {
-                        res.writeHead(200, 'OK', {
-                            'Content-Type': 'application/json',
-                            'Access-Control-Allow-Origin': 'https://waifus.de',
-                            'Access-Control-Allow-Headers': 'Authorization',
-                            'Access-Control-Allow-Methods': 'OPTIONS, POST'
-                        });
-                        res.end(JSON.stringify({message: 'Subscription added successfully!'}));
-                        console.log("Subscription added to database!");
-                    }
+                webpush.sendNotification(sub, JSON.stringify({
+                    type: 'subSuccess',
+                    message: 'Successfully Subscribed to TCG Push Notifications!'
+                })).then(() => {
+                    con.query("INSERT INTO push_subscriptions(subscription, userid) VALUES (?, ?)", [JSON.stringify(sub), payload.sub], (err, result) => {
+                        if (err) {
+                            httpError(res, 500, 'Server Error', 'Server Error adding subscription');
+                            console.error(err);
+                        } else {
+                            res.writeHead(200, 'OK', {
+                                'Content-Type': 'application/json',
+                                'Access-Control-Allow-Origin': 'https://waifus.de',
+                                'Access-Control-Allow-Headers': 'Authorization',
+                                'Access-Control-Allow-Methods': 'OPTIONS, POST'
+                            });
+                            res.end(JSON.stringify({message: 'Subscription added successfully!'}));
+                            console.log("Subscription added to database!");
+                        }
+                    });
+                }).catch((err) => {
+                    console.error(err);
+                    httpError(res, 500, 'Server Error', 'Could not send test notification.');
                 })
+
+
             })
         });
     } else {
@@ -970,6 +981,12 @@ function bootServer(callback) {
             if (q.pathname.startsWith("/js/") && jsdata[q.pathname.substring(4)]) {
                 res.writeHead(200, {'Content-Type': 'text/javascript'});
                 res.write(jsdata[q.pathname.substring(4)]);
+                res.end();
+                return;
+            }
+            if (q.pathname === "/sw.js") {
+                res.writeHead(200, {'Content-Type': 'text/javascript'});
+                res.write(jsdata['sw.js']);
                 res.end();
                 return;
             }
@@ -1063,6 +1080,15 @@ function bootServer(callback) {
                 }
                 case "pushregistration": {
                     pushRegistration(req, res, q.query);
+                    break;
+                }
+                case "twitchauth": {
+                    res.writeHead(200, "OK", {'Content-Type': 'text/html'});
+                    renderTemplateAndEnd("templates/twitchauth.ejs", {
+                        currentPage: "twitchauth",
+                        publicKey: config["vapidPublicKey"],
+                        user: "user" in q.query ? q.query['user'] : ''
+                    }, res);
                     break;
                 }
                 default: {

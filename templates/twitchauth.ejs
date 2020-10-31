@@ -1,0 +1,13 @@
+<%
+title = "Waifu TCG - Twitch OIDC Authentication";
+currentPage = "packs";
+_%>
+<% include includes/header %>
+<h1>Authenticate with Twitch</h1>
+<div>
+    <p>You should be here because you authorized through Twitch. Let's check it...</p>
+    <script>let publicKey = "<%= publicKey %>"</script>
+    <script src="js/authcallback.js"></script>
+    <div id="authcallbackoutput">Loading...</div>
+</div>
+<% include includes/footer _%>

@@ -136,5 +136,12 @@ $(document).ready( function() {
         $('.toast').toast('show');
     
         return false;
-    });
+    })
+
+    // Install Service Worker / Trigger update if it changed.
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', {
+            scope: '/'
+        })
+    }
 });
