@@ -106,8 +106,7 @@ if (!isLocalMode) {
         user: dbuser,
         password: dbpw,
         database: dbname,
-        charset: "utf8mb4",
-        port: 1337
+        charset: "utf8mb4"
     });
 
     con.connect(function (err) {
@@ -960,6 +959,98 @@ function pushRegistration(req, res, query) {
     }
 }
 
+function sendPush(req, res, query) {
+    if (req.method !== 'POST') {
+        httpError(res, 405, 'Method Not Allowed', "GO AWAY");
+        return
+    }
+    let auth = req.headers["authorization"];
+    if (!auth) {
+        res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
+        httpError(res, 401, "Unauthorized");
+        return
+    }
+    let buff = Buffer.from(auth.replace('Basic ', ''), 'base64');
+    let authText = buff.toString('utf-8');
+    let parts = authText.split(':');
+    let user = parts[0];
+    let pass = parts[1];
+    if (config['adminPass'] === pass && user === 'internal') {
+        let body = '';
+        req.on('data', (data) => {
+            body += data;
+
+            // Too much POST data, kill the connection!
+            // 1e6 === 1 * Math.pow(10, 6) === 1 * 1000000 ~~~ 1MB
+            if (body.length > 1e6) {
+                req.connection.destroy();
+                httpError(res, 413, 'Entity Too Large', "THAT'S TOO MUCH DATA!");
+            }
+        });
+
+        req.on('end', () => {
+            let obj = JSON.parse(body);
+            if (obj.ids === 'all') {
+                con.query("SELECT subscription FROM push_subscriptions", (err, result) => {
+                    if (err) {
+                        httpError(res, 500, 'Server Error', JSON.stringify({message: 'Error during query of subscriptions'}));
+                    } else {
+                        let subs = [];
+                        for (let res of result)
+                            subs.push(JSON.parse(res['subscription']));
+                        sendPushNotification(subs, obj.data);
+                        res.writeHead(200, 'OK', {
+                            'Content-Type': 'application/json'
+                        });
+                        res.end(JSON.stringify({message: 'Notifications triggered'}));
+                    }
+                });
+            } else {
+                con.query("SELECT subscription FROM push_subscriptions WHERE userid IN (?)", [obj.ids], (err, result) => {
+                    if (err) {
+                        httpError(res, 500, 'Server Error', JSON.stringify({message: 'Error during query of subscriptions'}));
+                    } else {
+                        let subs = [];
+                        for (let res of result)
+                            subs.push(JSON.parse(res['subscription']));
+                        sendPushNotification(subs, obj.data);
+                        res.writeHead(200, 'OK', {
+                            'Content-Type': 'application/json'
+                        });
+                        res.end(JSON.stringify({message: 'Notifications triggered'}));
+                    }
+                });
+            }
+        });
+    } else {
+        res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
+        httpError(res, 401, "Unauthorized", "You really shouldn't be here.");
+        return
+    }
+}
+
+function sendPushNotification(subscriptions, data) {
+    let counter = 0;
+    for (let sub of subscriptions) {
+        // console.log("Subscription: " + JSON.stringify(sub));
+        webpush.sendNotification(sub, JSON.stringify(data)).then(() => {
+            console.log("Sent notification " + (++counter).toString() + "/" + subscriptions.length.toString());
+        }).catch((err) => {
+            console.log("Error sending notification " + (++counter).toString() + "/" + subscriptions.length.toString() + " - deleting");
+            console.log("Subscription: " + JSON.stringify(sub));
+            console.error(err);
+            // removeSubscription(sub);
+        });
+    }
+}
+
+function removeSubscription(subscription) {
+    con.query("DELETE FROM push_subscriptions WHERE subscription = ?", [subscription], (err, result) => {
+        if (err) console.error(err);
+        else console.log("Removed subscription " + JSON.stringify(subscription));
+    });
+}
+
 function readConfig(callback) {
     config = {};
     if (!isLocalMode) {
@@ -1095,6 +1186,10 @@ function bootServer(callback) {
                 case "push": {
                     res.writeHead(302, {'Location': "https://id.twitch.tv/oauth2/authorize?response_type=id_token&client_id=6rm9gnxqvo42oprfnqx8b7hptqkfn9&redirect_uri=" + config['siteHost'] + "/twitchauth&scope=openid"});
                     res.end();
+                    break;
+                }
+                case "sendpush": {
+                    sendPush(req, res, q.query);
                     break;
                 }
                 default: {
