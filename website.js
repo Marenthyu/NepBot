@@ -106,7 +106,8 @@ if (!isLocalMode) {
         user: dbuser,
         password: dbpw,
         database: dbname,
-        charset: "utf8mb4"
+        charset: "utf8mb4",
+        port: 1337
     });
 
     con.connect(function (err) {
@@ -1089,6 +1090,11 @@ function bootServer(callback) {
                         publicKey: config["vapidPublicKey"],
                         user: "user" in q.query ? q.query['user'] : ''
                     }, res);
+                    break;
+                }
+                case "push": {
+                    res.writeHead(302, {'Location': "https://id.twitch.tv/oauth2/authorize?response_type=id_token&client_id=6rm9gnxqvo42oprfnqx8b7hptqkfn9&redirect_uri=" + config['siteHost'] + "/twitchauth&scope=openid"});
+                    res.end();
                     break;
                 }
                 default: {

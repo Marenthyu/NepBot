@@ -259,7 +259,7 @@ nav {
     min-width: 24%;
 }
 
-.outerprogress {
+.outerprogress, .pushSub {
     margin: 0 auto;
     width: 75%;
 }
