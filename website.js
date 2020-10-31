@@ -8,6 +8,56 @@ let request = require('request');
 let async = require('async');
 let ejs = require('ejs');
 let moment = require('moment');
+let webpush = require('web-push');
+let got = require('got');
+// From BarryCarlyon, thanks! https://github.com/BarryCarlyon/twitch_misc/blob/master/authentication/oidc_authentication/server.js
+const jwt = require('jsonwebtoken');
+
+let oidc_data = {};
+let verifier_options;
+let verifier_keys;
+let verifier_client;
+let jwksClient = require('jwks-rsa');
+
+// Fetch OpenID data
+
+// Twitch provides a endpoint that contains information about openID
+// This includes the relevant endpoitns for authentatication
+// And the available scopes
+// And the keys for validation JWT's
+got({
+    url: 'https://id.twitch.tv/oauth2/.well-known/openid-configuration',
+    method: 'GET',
+    responseType: 'json'
+})
+    .then(resp => {
+        console.log('BOOT: Got openID config');
+        oidc_data = resp.body;
+
+        verifier_options = {
+            algorithms: oidc_data.id_token_signing_alg_values_supported,
+            audience: config['clientID'],
+            issuer: oidc_data.issuer
+        }
+
+        verifier_client = jwksClient({
+            jwksUri: oidc_data.jwks_uri
+        });
+    })
+    .catch(err => {
+        console.error('OIDC Got a', err);
+    });
+
+// https://github.com/auth0/node-jsonwebtoken
+function getKey(header, callback) {
+    verifier_client.getSigningKey(header.kid, function(err, key) {
+        var signingKey = key.publicKey || key.rsaPublicKey;
+        callback(null, signingKey);
+    });
+}
+
+// END Barry Code
+
 
 let download = function (uri, filename, callback) {
     request.head(uri, function (err, res, body) {
@@ -56,7 +106,7 @@ if (!isLocalMode) {
         user: dbuser,
         password: dbpw,
         database: dbname,
-        charset: "utf8mb4",
+        charset: "utf8mb4"
     });
 
     con.connect(function (err) {
@@ -782,6 +832,95 @@ function browser(req, res, query) {
 
 }
 
+function pushRegistration(req, res, query) {
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200, 'BUGGER OFF CORS', {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': 'https://waifus.de',
+            'Access-Control-Allow-Headers': 'Authorization',
+            'Access-Control-Allow-Methods': 'OPTIONS, POST'
+        });
+        res.end(JSON.stringify({message: 'SERIOUSLY; I HATE THIS!'}));
+        return
+    } else if (req.method === 'POST') {
+        let auth = req.headers['authorization'];
+        console.log(JSON.stringify(auth));
+        if (!auth) {
+            httpError(res, 401, 'Unauthorized', 'You did not send any authentication, smh');
+            return
+        }
+        console.log("Found auth header: " + JSON.stringify(auth));
+        let authParts = auth.split(" ");
+        if (authParts.length !== 2 || authParts[0] !== 'Bearer') {
+            httpError(res, 401, 'Unauthorized', 'Invalid Auth Header');
+            return;
+        }
+        jwt.verify(authParts[1], getKey, verifier_options, function(err, payload) {
+            if (err) {
+                console.error("Error authenticating user JWT.");
+                console.error(err);
+                httpError(res, 401, 'Unauthorized', 'Error during authentication verification.');
+            } else {
+                console.log("Successful login for " + payload.sub + ", waiting for post data...");
+                let body = '';
+                req.on('data', (data) => {
+                    body += data;
+
+                    // Too much POST data, kill the connection!
+                    // 1e6 === 1 * Math.pow(10, 6) === 1 * 1000000 ~~~ 1MB
+                    if (body.length > 1e6) {
+                        req.connection.destroy();
+                        httpError(res, 413, 'Entity Too Large', "THAT'S TOO MUCH DATA!");
+                    }
+                });
+
+                req.on('end', () => {
+                    let sub = {};
+                    try {
+                        sub = JSON.parse(body);
+                        if (!sub.hasOwnProperty('endpoint') || !sub.hasOwnProperty('expirationTime') || !sub.hasOwnProperty('keys')) {
+                            throw new Error("Missing Properties");
+                        }
+                        new url.URL(sub.endpoint);
+                        if (sub.expirationTime !== null && Date.now() > sub.expirationTime) {
+                            throw new Error("Already Expired");
+                        }
+                    } catch (e) {
+                        console.error("Error during post data processing:");
+                        console.error(e);
+                        httpError(res, 422, 'Unprocessable Entity', "That's not a valid subscription!");
+                        return
+                    }
+                    con.query("INSERT INTO push_subscriptions(subscription, userid) VALUES (?, ?)", [JSON.stringify(sub), payload.sub], (err, result) => {
+                        if (err) {
+                            httpError(res, 500, 'Server Error', 'Server Error adding subscription');
+                            console.error(err);
+                        } else {
+                            res.writeHead(200, 'OK', {
+                                'Content-Type': 'application/json',
+                                'Access-Control-Allow-Origin': 'https://waifus.de',
+                                'Access-Control-Allow-Headers': 'Authorization',
+                                'Access-Control-Allow-Methods': 'OPTIONS, POST'
+                            });
+                            res.end(JSON.stringify({message: 'Subscription added successfully!'}));
+                            console.log("Subscription added to database!");
+                        }
+                    })
+                })
+            }
+        });
+    } else {
+        res.writeHead(405, 'Method Not Allowed', {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': 'https://waifus.de',
+            'Access-Control-Allow-Headers': 'Authorization',
+            'Access-Control-Allow-Methods': 'OPTIONS, POST',
+            'Allow': 'OPTIONS, POST'
+        });
+        res.end(JSON.stringify({message: 'The hell are you trying to do?'}))
+    }
+}
+
 function readConfig(callback) {
     config = {};
     if (!isLocalMode) {
@@ -789,6 +928,7 @@ function readConfig(callback) {
             for (let row of result) {
                 config[row.name] = row.value;
             }
+            webpush.setVapidDetails('mailto:' + config["vapidContactEmail"], config['vapidPublicKey'], config['vapidPrivateKey']);
             callback();
         });
     } else {
@@ -890,6 +1030,10 @@ function bootServer(callback) {
                 }
                 case "browser": {
                     browser(req, res, q.query);
+                    break;
+                }
+                case "pushregistration": {
+                    pushRegistration(req, res, q.query);
                     break;
                 }
                 default: {

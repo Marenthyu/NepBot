@@ -4,8 +4,12 @@
   "dependencies": {
     "async": "^2.6.1",
     "ejs": "^2.6.1",
+    "got": "^11.8.0",
+    "jwks-rsa": "^1.11.0",
     "moment": "^2.24.0",
     "mysql": "^2.15.0",
-    "request": "^2.88.0"
+    "request": "^2.88.0",
+    "web-push": "^3.4.4",
+    "jsonwebtoken": "^8.5.1"
   }
 }
