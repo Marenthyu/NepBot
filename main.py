@@ -501,7 +501,7 @@ def disenchant(bot, cardid):
 
 
 def sendPushNotification(ids, data):
-    pushHeaders = {'Authorization': 'Basic ' + base64.b64encode('internal:' + config['adminPass'])}
+    pushHeaders = {'Authorization': 'Basic ' + base64.b64encode(bytes('internal:' + config['adminPass'], 'utf-8')).decode('utf-8')}
     r = requests.post(config['siteHost'] + '/sendpush', headers=pushHeaders, json={'ids': ids, 'data': data})
     try:
         res = r.json()
