@@ -247,7 +247,6 @@ function booster(req, res, query) {
                 }));
                 res.end();
             } else {
-                if ((Date.now()-start)>1000) {logger.warning("WARNING: BOOSTER PAGE TOOK OVER A SECOND TO FINISH! CONSIDER ARCHIVING DATA! " + (Date.now()-start));}
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 renderTemplateAndEnd("templates/booster.ejs", { user: query.user, cards: result, error: "", eventTokens: resultTokens[0].eventTokens }, res);
             }
@@ -343,7 +342,7 @@ function api(req, res, query) {
                 res.end();
             });
         } else if (query.type === 'incentives') {
-            con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result) {
+            con.query("SELECT id, title, status, IF(id='BonusGame', amount * 10000000, amount) AS amount, IF(id='BonusGame', required*10000000, required) AS required FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result) {
                 if (err) throw err;
                 res.writeHead(200, { 'Content-Type': 'text/json' });
                 res.write(JSON.stringify(result));
@@ -388,7 +387,7 @@ function api(req, res, query) {
                         })
                     }
                 }
-                con.query("SELECT * FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result2) {
+                con.query("SELECT id, title, status, IF(id='BonusGame', amount * 10000000, amount) AS amount, IF(id='BonusGame', required*10000000, required) AS required FROM incentives WHERE incentives.status = 'open' AND incentives.amount < incentives.required ORDER BY incentives.id ASC", function (err, result2) {
                     if (err) throw err;
                     con.query("SELECT * FROM cpuwar ORDER BY votes DESC", function (err, result3) {
                         if (err) throw err;
@@ -702,7 +701,7 @@ function tracker(req, res, query) {
     if ('user' in query) {
         user = query.user;
     }
-    con.query("SELECT * FROM bidWars LEFT JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
+    con.query("SELECT * FROM bidWars LEFT JOIN bidWarChoices ON bidWars.id = bidWarChoices.warID WHERE bidWars.status != 'hidden' ORDER BY bidWars.id ASC, bidWarChoices.amount DESC, RAND() ASC", function (err, result) {
         if (err) throw err;
         let wars = [];
         let lastwarid = '';
@@ -739,7 +738,7 @@ function tracker(req, res, query) {
             }
             war.total = warTotal;
         }
-        con.query("SELECT * FROM incentives ORDER BY incentives.id ASC", function (err, result2) {
+        con.query("SELECT id, title, status, IF(id='BonusGame', amount * 10000000, amount) AS amount, IF(id='BonusGame', required*10000000, required) AS required FROM incentives WHERE incentives.status != 'hidden' ORDER BY incentives.id ASC", function (err, result2) {
             let incentives = result2;
             if (err) {
                 res.writeHead(500, 'Internal Server Error');
@@ -751,6 +750,36 @@ function tracker(req, res, query) {
             renderTemplateAndEnd("templates/tracker.ejs", { user: user, wars: wars, incentives: incentives }, res);
         });
     });
+}
+
+function browser(req, res, query) {
+    let page = 0;
+    if ("page" in query) {
+        page = query.page;
+    }
+    let auth = req.headers["authorization"];
+    if (!auth) {
+        res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
+        httpError(res, 401, "Unauthorized");
+        return
+    }
+    let buff = Buffer.from(auth.replace('Basic ', ''), 'base64');
+    let authText = buff.toString('utf-8');
+    let parts = authText.split(':');
+    let user = parts[0];
+    let pass = parts[1];
+    if (config['adminPass'] === pass) {
+        con.query("SELECT waifus.* FROM waifus LIMIT ?, 100", [(page * 100)], function (err, result) {
+            if (err) throw err;
+            renderTemplateAndEnd("templates/image-browser.ejs", {user: user, page: page, cards: result}, res);
+        });
+
+    } else {
+        res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
+        httpError(res, 401, "Unauthorized wrong password");
+        return
+    }
+
 }
 
 function readConfig(callback) {
@@ -857,6 +886,10 @@ function bootServer(callback) {
                 case "rules": {
                     res.writeHead(200, "OK", { 'Content-Type': 'text/html' });
                     renderTemplateAndEnd("templates/rules.ejs", { nepdoc: config['nepdocURL'], currentPage: "rules", user: q.query.user }, res);
+                    break;
+                }
+                case "browser": {
+                    browser(req, res, q.query);
                     break;
                 }
                 default: {

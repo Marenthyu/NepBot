@@ -1,0 +1,27 @@
+<%
+    title = "Image Browser";
+    currentPage = "image-browser";
+_%>
+<% include includes/header %>
+<div id='cards-grid'>
+    <% if(cards.length) { %>
+        <button id='sort-mode' class='btn btn-primary'>Sorthand command generator</button>
+        <% cards.forEach(function(card) { %>
+            <% include includes/browsercard %>
+        <% }); %>
+    <% } else if(error) { %>
+        <%= error %>
+    <% } %>
+</div>
+<a class="btn btn-primary" href="/browser?page=<%= 1 + parseInt(page) %>">Next Page</a>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.11/moment-timezone-with-data.js"></script>
+<script src="https://code.jquery.com/ui/1.12.0/jquery-ui.min.js"></script>
+<script type="text/javascript" src="/js/hand.js"></script>
+
+<input class="sorthand-output" id="sorthand-single" onClick="this.select();document.execCommand('copy');" readonly type="text">
+<textarea class="sorthand-output" id="sorthand-multiple"></textarea>
+<br />
+<i id="date-display-text">Card creation dates are displayed in UTC.</i><br />
+
+<% include includes/footer %>
