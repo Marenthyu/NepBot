@@ -3059,7 +3059,7 @@ class NepBot(NepBotClass):
 
                             self.message(channel, "Trade executed!", isWhisper=isWhisper)
 
-                            sendPushNotification([otherid], {'type': 'tradeAccepted', 'image': have['image'],
+                            sendPushNotification([otherid], {'type': 'tradeAccepted', 'image': want['image'],
                                                              'message': "{otherplayer} has accepted your trade offer!".format(
                                                                  otherplayer=tags['display-name']),
                                                              'openurl': 'https://twitch.tv/nepnepbot'})
