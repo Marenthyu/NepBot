@@ -354,7 +354,7 @@ def getOpenBooster(twitchid):
              
 def getCard(cardID):
     with db.cursor(pymysql.cursors.DictCursor) as cur:
-        cur.execute("SELECT cards.*, waifus.base_rarity FROM cards JOIN waifus ON cards.waifuid=waifus.id WHERE cards.id = %s", [cardID])
+        cur.execute("SELECT cards.*, waifus.base_rarity, waifus.image FROM cards JOIN waifus ON cards.waifuid=waifus.id WHERE cards.id = %s", [cardID])
         return cur.fetchone()
         
 def addCard(userid, waifuid, source, boosterid=None, rarity=None):
@@ -2951,7 +2951,7 @@ class NepBot(NepBotClass):
                             else:
                                 cur.execute("UPDATE trades SET status = 'cancelled', updated = %s WHERE id = %s", [current_milli_time(), trade[0]])
                                 self.message(channel, "You cancelled your pending trade with %s." % otherparty, isWhisper)
-                                sendPushNotification([otherid], {'type': 'tradeCancelled', 'image': have['image'],
+                                sendPushNotification([otherid], {'type': 'tradeCancelled', 'image': 'https://lowee.de',
                                                                  'message': "{otherplayer} has cancelled the trade with you.".format(
                                                                      otherplayer=tags['display-name']),
                                                                  'openurl': 'https://twitch.tv/nepnepbot'})
@@ -3008,7 +3008,7 @@ class NepBot(NepBotClass):
                             cur.execute("UPDATE trades SET status = 'declined', updated = %s WHERE id = %s",
                                         [current_milli_time(), trade[0]])
                             self.message(channel, "Trade declined.", isWhisper=isWhisper)
-                            sendPushNotification([otherid], {'type': 'tradeDeclined', 'image': have['image'],
+                            sendPushNotification([otherid], {'type': 'tradeDeclined', 'image': have['customImage'] if have['customImage'] != null else have['image'],
                                                              'message': "{otherplayer} has declined your trade offer.".format(
                                                                  otherplayer=tags['display-name']),
                                                             'openurl': 'https://twitch.tv/nepnepbot'})
