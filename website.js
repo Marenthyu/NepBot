@@ -907,11 +907,11 @@ function pushRegistration(req, res, query) {
                 let sub = {};
                 try {
                     sub = JSON.parse(body);
-                    if (!sub.hasOwnProperty('endpoint') || !sub.hasOwnProperty('expirationTime') || !sub.hasOwnProperty('keys')) {
+                    if (!sub.hasOwnProperty('endpoint') || !sub.hasOwnProperty('keys')) {
                         throw new Error("Missing Properties");
                     }
                     new url.URL(sub.endpoint);
-                    if (sub.expirationTime !== null && Date.now() > sub.expirationTime) {
+                    if (sub.hasOwnProperty('expirationTime') && sub.expirationTime !== null && Date.now() > sub.expirationTime) {
                         throw new Error("Already Expired");
                     }
                 } catch (e) {
