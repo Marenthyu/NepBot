@@ -1042,7 +1042,7 @@ function sendPushNotification(subscriptions, data) {
 function removeSubscription(subID) {
     con.query("DELETE FROM push_subscriptions WHERE id = ?", [subID], (err, result) => {
         if (err) console.error(err);
-        else console.log("Removed subscription " + JSON.stringify(subscription));
+        else console.log("Removed subscription " + JSON.stringify(subID));
     });
 }
 
