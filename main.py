@@ -434,7 +434,7 @@ def disenchant(bot, cardid):
         updateCard(cardid, {"userid": None, "boosterid": None})
         # bounty to fill?
         cur.execute(
-            "SELECT bounties.id, bounties.userid, users.name, bounties.amount, waifus.name, waifus.base_rarity FROM bounties JOIN users ON bounties.userid = users.id JOIN waifus ON bounties.waifuid = waifus.id WHERE bounties.waifuid = %s AND bounties.status = 'open' ORDER BY bounties.amount DESC LIMIT 1",
+            "SELECT bounties.id, bounties.userid, users.name, bounties.amount, waifus.name, waifus.base_rarity, waifus.image FROM bounties JOIN users ON bounties.userid = users.id JOIN waifus ON bounties.waifuid = waifus.id WHERE bounties.waifuid = %s AND bounties.status = 'open' ORDER BY bounties.amount DESC LIMIT 1",
             [card["waifuid"]])
         order = cur.fetchone()
 
