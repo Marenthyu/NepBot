@@ -995,10 +995,7 @@ function sendPush(req, res, query) {
                     if (err) {
                         httpError(res, 500, 'Server Error', JSON.stringify({message: 'Error during query of subscriptions'}));
                     } else {
-                        let subs = [];
-                        for (let res of result)
-                            subs.push(JSON.parse(res['subscription']));
-                        sendPushNotification(subs, obj.data);
+                        sendPushNotification(result, obj.data);
                         res.writeHead(200, 'OK', {
                             'Content-Type': 'application/json'
                         });
@@ -1010,10 +1007,8 @@ function sendPush(req, res, query) {
                     if (err) {
                         httpError(res, 500, 'Server Error', JSON.stringify({message: 'Error during query of subscriptions'}));
                     } else {
-                        let subs = [];
-                        for (let res of result)
-                            subs.push(JSON.parse(res['subscription']));
-                        sendPushNotification(subs, obj.data);
+
+                        sendPushNotification(result, obj.data);
                         res.writeHead(200, 'OK', {
                             'Content-Type': 'application/json'
                         });
@@ -1033,19 +1028,19 @@ function sendPushNotification(subscriptions, data) {
     let counter = 0;
     for (let sub of subscriptions) {
         // console.log("Subscription: " + JSON.stringify(sub));
-        webpush.sendNotification(sub, JSON.stringify(data)).then(() => {
+        webpush.sendNotification(JSON.parse(sub['subscription']), JSON.stringify(data)).then(() => {
             console.log("Sent notification " + (++counter).toString() + "/" + subscriptions.length.toString());
         }).catch((err) => {
             console.log("Error sending notification " + (++counter).toString() + "/" + subscriptions.length.toString() + " - deleting");
             console.log("Subscription: " + JSON.stringify(sub));
             console.error(err);
-            removeSubscription(sub);
+            removeSubscription(sub['id']);
         });
     }
 }
 
-function removeSubscription(subscription) {
-    con.query("DELETE FROM push_subscriptions WHERE subscription = ?", [subscription], (err, result) => {
+function removeSubscription(subID) {
+    con.query("DELETE FROM push_subscriptions WHERE id = ?", [subID], (err, result) => {
         if (err) console.error(err);
         else console.log("Removed subscription " + JSON.stringify(subscription));
     });
