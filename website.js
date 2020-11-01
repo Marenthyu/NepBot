@@ -1039,7 +1039,7 @@ function sendPushNotification(subscriptions, data) {
             console.log("Error sending notification " + (++counter).toString() + "/" + subscriptions.length.toString() + " - deleting");
             console.log("Subscription: " + JSON.stringify(sub));
             console.error(err);
-            // removeSubscription(sub);
+            removeSubscription(sub);
         });
     }
 }
