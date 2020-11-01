@@ -1003,7 +1003,7 @@ function sendPush(req, res, query) {
                     }
                 });
             } else {
-                con.query("SELECT subscription FROM push_subscriptions WHERE userid IN (?)", [obj.ids], (err, result) => {
+                con.query("SELECT subscription, id FROM push_subscriptions WHERE userid IN (?)", [obj.ids], (err, result) => {
                     if (err) {
                         httpError(res, 500, 'Server Error', JSON.stringify({message: 'Error during query of subscriptions'}));
                     } else {
