@@ -29,6 +29,10 @@ async function signup() {
             $('#authcallbackoutput').text("There was an error installing the Service Worker - Are you blocking scripts or something?");
             return
         }
+        if (!Reflect.has(window, "Notification")) {
+            $('#authcallbackoutput').text('Sorry! Your Browser seems to not support Notifications. :/ - Please use a different browser, if possible!');
+            return
+        }
         let perm = await Notification.requestPermission();
         if (perm) {
             $('#authcallbackoutput').text('Thank you! Please be patient while we do some magic...');
