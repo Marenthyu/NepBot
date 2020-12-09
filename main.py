@@ -5773,57 +5773,40 @@ class NepBot(NepBotClass):
                             self.message(channel, "Base god rarity waifus cannot have their picture changed!", isWhisper)
                             return
 
-                        if canManageImages:
-                            # automatically do the change
-                            try:
-                                hostedURL = processWaifuURL(args[2])
-                            except Exception as ex:
-                                self.message(channel, "Could not process image. %s" % str(ex), isWhisper)
-                                return
-                                
-                            updateCard(card['cardid'], {"customImage": hostedURL})
+                        cur.execute("SELECT COALESCE(MAX(created), 0) FROM godimage_requests WHERE state = 'accepted' AND cardid = %s", [card['cardid']])
+                        lastRequest = cur.fetchone()[0]
+                        cooldown = lastRequest + int(config["imageChangeCooldownDays"])*86400000 - current_milli_time()
 
-                            # log the change for posterity
-                            insertArgs = [tags['user-id'], card['cardid'], args[2], tags['user-id'], current_milli_time()]
-                            cur.execute("INSERT INTO godimage_requests (requesterid, cardid, image, state, moderatorid, created) VALUES(%s, %s, %s, 'auto_accepted', %s, %s)", insertArgs)
-
-                            self.message(channel, "Image change processed successfully.", isWhisper)
+                        if cooldown > 0:
+                            datestring = formatTimeDelta(cooldown, False)
+                            self.message(channel, "Sorry, that card has had its image changed too recently. Please try again in %s" % datestring, isWhisper)
                             return
-                        else:
-                            cur.execute("SELECT COALESCE(MAX(created), 0) FROM godimage_requests WHERE state = 'accepted' AND cardid = %s", [card['cardid']])
-                            lastRequest = cur.fetchone()[0]
-                            cooldown = lastRequest + int(config["imageChangeCooldownDays"])*86400000 - current_milli_time()
-
-                            if cooldown > 0:
-                                datestring = formatTimeDelta(cooldown, False)
-                                self.message(channel, "Sorry, that card has had its image changed too recently. Please try again in %s" % datestring, isWhisper)
-                                return
-                            
-                            try:
-                                validateWaifuURL(args[2])
-                            except ValueError as ex:
-                                self.message(channel, "Invalid link specified. %s" % str(ex), isWhisper)
-                                return
-                            except Exception:
-                                self.message(channel, "There was an unknown problem with the link you specified. Please try again later.", isWhisper)
-                                return
-                            # cancel any old pending requests for this card
-                            cur.execute("UPDATE godimage_requests SET state = 'cancelled', updated = %s WHERE cardid = %s AND state = 'pending'", [current_milli_time(), card['cardid']])
-
-                            # record a new request
-                            insertArgs = [tags['user-id'], card['cardid'], args[2], current_milli_time()]
-                            cur.execute("INSERT INTO godimage_requests (requesterid, cardid, image, state, created) VALUES(%s, %s, %s, 'pending', %s)", insertArgs)
-
-                            # notify the discordhook of the new request
-                            discordArgs = {"user": tags['display-name'], "waifuid": card['waifuid'], "cardid": card['cardid'], "name": card["name"], "image": args[2]}
-                            discordbody = {
-                                "username": "WTCG Admin", 
-                                "content" : "{user} requested an image change for [{waifuid}] {name} to <{image}>!\nUse `!godimage check {cardid}` in any chat to check it.".format(**discordArgs)
-                            }
-                            threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
-
-                            self.message(channel, "Your request has been placed. You will be notified when bot staff accept or decline it.", isWhisper)
+                        
+                        try:
+                            validateWaifuURL(args[2])
+                        except ValueError as ex:
+                            self.message(channel, "Invalid link specified. %s" % str(ex), isWhisper)
                             return
+                        except Exception:
+                            self.message(channel, "There was an unknown problem with the link you specified. Please try again later.", isWhisper)
+                            return
+                        # cancel any old pending requests for this card
+                        cur.execute("UPDATE godimage_requests SET state = 'cancelled', updated = %s WHERE cardid = %s AND state = 'pending'", [current_milli_time(), card['cardid']])
+
+                        # record a new request
+                        insertArgs = [tags['user-id'], card['cardid'], args[2], current_milli_time()]
+                        cur.execute("INSERT INTO godimage_requests (requesterid, cardid, image, state, created) VALUES(%s, %s, %s, 'pending', %s)", insertArgs)
+
+                        # notify the discordhook of the new request
+                        discordArgs = {"user": tags['display-name'], "waifuid": card['waifuid'], "cardid": card['cardid'], "name": card["name"], "image": args[2]}
+                        discordbody = {
+                            "username": "WTCG Admin", 
+                            "content" : "{user} requested an image change for [{waifuid}] {name} to <{image}>!\nUse `!godimage check {cardid}` in any chat to check it.".format(**discordArgs)
+                        }
+                        threading.Thread(target=sendAdminDiscordAlert, args=(discordbody,)).start()
+
+                        self.message(channel, "Your request has been placed. You will be notified when bot staff accept or decline it.", isWhisper)
+                        return
                 elif subcmd == "list":
                     with db.cursor() as cur:
                         cur.execute("SELECT waifus.id, waifus.name FROM godimage_requests gr JOIN cards ON gr.cardid=cards.id JOIN waifus ON cards.waifuid = waifus.id WHERE gr.requesterid = %s AND gr.state = 'pending'", [tags['user-id']])
