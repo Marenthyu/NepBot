@@ -5956,7 +5956,7 @@ class NepBot(NepBotClass):
                         
                         cur.execute("UPDATE points_transfers SET status='confirmed', confirmed=%s WHERE id = %s", [current_milli_time(), transfer["id"]])
 
-                        self.message(channel, "%s, you successfully paid %d points to send %d points to %s." % (tags["display-name"], transfer["paid"], transfer["sent"], transfer["toName"]))
+                        self.message(channel, "%s, you successfully paid %d points to send %d points to %s." % (tags["display-name"], transfer["paid"], transfer["sent"], transfer["toName"]), isWhisper)
                     else:
                         if len(args) < 3:
                             self.message(channel, "Usage: !sendpoints <user> <amount> <reason>", isWhisper)
@@ -5988,7 +5988,7 @@ class NepBot(NepBotClass):
                         reason = " ".join(args[2:])
 
                         if len(reason) < 10:
-                            self.message(channel, "Your reason for the transfer must be at least 10 characters long.")
+                            self.message(channel, "Your reason for the transfer must be at least 10 characters long.", isWhisper)
                             return
 
                         toPay = amount * 2
@@ -6013,7 +6013,7 @@ class NepBot(NepBotClass):
                         self.message(channel, "Successfully reset %s's hand to default sort order." % tags['display-name'], isWhisper)
                     else:
                         if args[0].count(",") != args[1].count(","):
-                            self.message(channel, "You must provide an equal amount of waifu/card IDs and sort values.")
+                            self.message(channel, "You must provide an equal amount of waifu/card IDs and sort values.", isWhisper)
                             return
                         
                         cardSpecifiers = args[0].split(",")
