@@ -332,7 +332,7 @@ def getHand(twitchid):
         logger.error("Got non-integer id for getHand. Aborting.")
         return []
     with db.cursor(pymysql.cursors.DictCursor) as cur:
-        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity, cards.tradeableAt FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid IS NULL ORDER BY COALESCE(cards.sortValue, 32000) ASC, (rarity < %s) DESC, waifus.id ASC, cards.id ASC",
+        cur.execute("SELECT cards.id AS cardid, waifus.name, waifus.id AS waifuid, cards.rarity, waifus.series, COALESCE(cards.customImage, waifus.image) AS image, waifus.base_rarity, cards.tradeableAt, waifus.is_event AS waifu_event, cards.isEvent AS card_event FROM cards JOIN waifus ON cards.waifuid = waifus.id WHERE cards.userid = %s AND cards.boosterid IS NULL ORDER BY COALESCE(cards.sortValue, 32000) ASC, (rarity < %s) DESC, waifus.id ASC, cards.id ASC",
         [tID, int(config["numNormalRarities"])])
         return cur.fetchall()
              
@@ -356,14 +356,18 @@ def getCard(cardID):
         cur.execute("SELECT cards.*, waifus.base_rarity, waifus.image FROM cards JOIN waifus ON cards.waifuid=waifus.id WHERE cards.id = %s", [cardID])
         return cur.fetchone()
         
-def addCard(userid, waifuid, source, boosterid=None, rarity=None):
+def addCard(userid, waifuid, source, boosterid=None, rarity=None, event=None):
     with db.cursor() as cur:
         if rarity is None:
             cur.execute("SELECT base_rarity FROM waifus WHERE id = %s", [waifuid])
             rarity = cur.fetchone()[0]
-            
-        waifuInfo = [userid, boosterid, waifuid, rarity, current_milli_time(), userid, boosterid, source]
-        cur.execute("INSERT INTO cards (userid, boosterid, waifuid, rarity, created, originalOwner, originalBooster, source) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)", waifuInfo)
+
+        if event is None:
+            cur.execute("SELECT is_event FROM waifus WHERE id = %s", [waifuid])
+            event = cur.fetchone()[0]
+
+        waifuInfo = [userid, boosterid, waifuid, rarity, current_milli_time(), userid, boosterid, source, event]
+        cur.execute("INSERT INTO cards (userid, boosterid, waifuid, rarity, created, originalOwner, originalBooster, source, isEvent) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s)", waifuInfo)
         return cur.lastrowid
         
 def updateCard(id, changes):
@@ -3165,6 +3169,30 @@ class NepBot(NepBotClass):
                         points = highercost - lowercost
                         if want["rarity"] < have["rarity"]:
                             payup = otherid
+
+                    # Check for event card gains for either side and add/subtract from the points accordingly
+                    eventMultiplier = 0
+                    if want["card_event"]:
+                        for card in ourhand:
+                            if want["waifuid"] == card["waifuid"]:
+                                eventMultiplier += 1
+
+                    if have["card_event"]:
+                        for card in otherhand:
+                            if have["waifuid"] == card["waifuid"]:
+                                eventMultiplier -= 1
+
+                    if (payup == ourid):
+                        points += 10000 * eventMultiplier
+                        if (points < 0):
+                            points = points * -1
+                            payup = otherid
+
+                    elif (payup == otherid):
+                        points -= 10000 * eventMultiplier
+                        if (points < 0):
+                            points = points * -1
+                            payup = ourid
 
                     # cancel any old trades with this pairing
                     cur.execute(
