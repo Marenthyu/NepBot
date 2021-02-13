@@ -5457,7 +5457,7 @@ class NepBot(NepBotClass):
                         # check for affordability
                         old_bounty = 0 if myorderinfo is None else myorderinfo[1]
                         points_delta = amount if myorderinfo is None else amount - myorderinfo[1]
-                        effectiveMultiplier = math.pow(10, eventMultiplier)
+                        effectiveMultiplier = pow(10, eventMultiplier)
                         points_delta = points_delta * effectiveMultiplier
 
                         if points_delta > 0 and not hasPoints(tags['user-id'], points_delta):
