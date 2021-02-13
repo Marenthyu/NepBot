@@ -2219,6 +2219,7 @@ class NepBot(NepBotClass):
         logger.debug("Got command: %s with arguments %s", command, str(args))
         isMarathonChannel = channel == config['marathonChannel'] and not isWhisper
         # temp workaround to keep old syntax valid
+        # There is nothing as permanent as a temporary solution. https://youtu.be/J1Yv24cM2os?t=191
         if command == "tokengacha":
             command = "tokenshop"
             args = ["gacha"] + args
