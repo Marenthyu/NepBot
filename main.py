@@ -194,11 +194,10 @@ def loadConfig():
 
 def checkAndRenewAppAccessToken():
     global config, headers
-    krakenHeaders = {"Authorization": "OAuth %s" % config["appAccessToken"], "Accept": "application/vnd.twitchtv.v5+json"}
-    r = requests.get("https://api.twitch.tv/kraken", headers=krakenHeaders)
+    r = requests.get("https://id.twitch.tv/oauth2/validate", headers={"Authorization": "Bearer %s" % config["appAccessToken"], "Client-ID": config["clientID"]})
     resp = r.json()
 
-    if "token" not in resp or "valid" not in resp["token"] or not resp["token"]["valid"]:
+    if "client_id" not in resp or ("status" in resp and resp["status"] == 401):
         # app access token has expired, get a new one
         logger.debug("Requesting new token")
         url = 'https://id.twitch.tv/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials' % (
