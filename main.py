@@ -940,7 +940,7 @@ def getWaifuById(id):
     except ValueError:
         return None
     with db.cursor(pymysql.cursors.DictCursor) as cur:
-        cur.execute("SELECT id, name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite, can_purchase FROM waifus WHERE id=%s", [id])
+        cur.execute("SELECT id, name, image, base_rarity, series, can_lookup, pulls, last_pull, can_favourite, can_purchase, is_event FROM waifus WHERE id=%s", [id])
         return cur.fetchone()
     
 def getWaifuOwners(id, rarity):
@@ -5418,19 +5418,32 @@ class NepBot(NepBotClass):
                             cur.close()
                             return
 
+                        # check if user has card already and it is an event card
+                        eventMultiplier = 0
+                        if waifu['is_event']:
+                            hand = getHand(tags['user-id'])
+                            for card in hand:
+                                if card['waifuid'] == waifu['id']:
+                                    eventMultiplier += 1
+
                         # check for affordability
                         old_bounty = 0 if myorderinfo is None else myorderinfo[1]
                         points_delta = amount if myorderinfo is None else amount - myorderinfo[1]
+                        effectiveMultiplier = math.pow(10, eventMultiplier)
+                        points_delta = points_delta * effectiveMultiplier
 
                         if points_delta > 0 and not hasPoints(tags['user-id'], points_delta):
                             if myorderinfo is None:
+                                message = "%s, you don't have enough points to place a bounty with that amount." % tags['display-name']
+                                if eventMultiplier > 0:
+                                    message = message + " (You have to pay " + effectiveMultiplier + " times the amount due to owning one or more copies of this event card already.)"
                                 self.message(channel,
-                                             "%s, you don't have enough points to place a bounty with that amount." %
-                                             tags['display-name'], isWhisper)
+                                             message, isWhisper)
                             else:
-                                self.message(channel,
-                                             "%s, you don't have enough points to increase your bounty to that amount." %
-                                             tags['display-name'], isWhisper)
+                                message = "%s, you don't have enough points to increase your bounty to that amount." % tags['display-name']
+                                if eventMultiplier > 0:
+                                    message = message + " (You have to pay " + effectiveMultiplier + " times the amount due to owning one or more copies of this event card already.)"
+                                self.message(channel, message, isWhisper)
                             cur.close()
                             return
 
