@@ -903,15 +903,16 @@ def sendSetAlert(channel, user, name, waifus, reward, firstTime, discord=True):
 
 def followsme(userid):
     try:
-        krakenHeaders = {"Authorization": "OAuth %s" % config["appAccessToken"],
-                         "Accept": "application/vnd.twitchtv.v5+json"}
         r = requests.get(
-            "https://api.twitch.tv/kraken/users/{twitchid}/follows/channels/{myid}".format(twitchid=str(userid),
+            "https://api.twitch.tv/helix/users/follows?from_id={twitchid}&to_id={myid}".format(twitchid=str(userid),
                                                                                            myid=str(
                                                                                                config["twitchid"])),
-            headers=krakenHeaders)
+            headers=headers)
         j = r.json()
-        return "channel" in j and "_id" in j["channel"] and int(config["twitchid"]) == int(j["channel"]["_id"])
+        for element in j["data"]:
+            if element["from_id"] == str(userid):
+                return True
+        return False
     except Exception:
         return False
 
