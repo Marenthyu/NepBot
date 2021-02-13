@@ -573,17 +573,34 @@ def getRawRunner(runner):
         return runner
     return runner[runner.index('[') + 1 : runner.index(']')]
 
+def getGameID(gameName):
+    # Try exact matches first, then fall back on search endpoint
+    r = requests.get("https://api.twitch.tv/helix/games", params={"name":gameName})
+    try:
+        j = r.json()
+        data = j["data"]
+        return data[0]["id"]
+    except Exception:
+        # Not found, checking search endpoint...
+        r = requests.get("https://api.twitch.tv/helix/search/categories", params={"query": gameName})
+        try:
+            j = r.json()
+            data = j["data"]
+            return data[0]["id"]
+        except Exception:
+            return 0
+    return 0
 
 def updateBoth(game, title):
     if not booleanConfig("marathonBotFunctions"):
         return
     myheaders = headers.copy()
-    myheaders["Authorization"] = "OAuth " + config["marathonOAuth"].replace("oauth:", "")
+    myheaders["Authorization"] = "Bearer " + config["marathonOAuth"].replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
-    myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
-    body = {"channel": {"status": str(title), "game": str(game)}}
+    gameID = getGameID(game)
+    body = {"title": str(title), "game_id": gameID}
     logger.debug(str(body))
-    r = requests.put("https://api.twitch.tv/kraken/channels/"+config["marathonChannelID"], headers=myheaders, json=body)
+    r = requests.patch("https://api.twitch.tv/helix/channels?broadcaster_id="+config["marathonChannelID"], headers=myheaders, json=body)
     try:
         j = r.json()
         logger.debug("Response from twitch: "+str(j))
@@ -597,11 +614,10 @@ def updateTitle(title):
     if not booleanConfig("marathonBotFunctions"):
         return
     myheaders = headers.copy()
-    myheaders["Authorization"] = "OAuth " + config["marathonOAuth"].replace("oauth:", "")
+    myheaders["Authorization"] = "Bearer " + config["marathonOAuth"].replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
-    myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
-    body = {"channel": {"status": str(title)}}
-    r = requests.put("https://api.twitch.tv/kraken/channels/"+config["marathonChannelID"], headers=myheaders, json=body)
+    body = {"title": str(title)}
+    r = requests.patch("https://api.twitch.tv/helix/channels?broadcaster_id="+config["marathonChannelID"], headers=myheaders, json=body)
     try:
         j = r.json()
     except Exception:
@@ -613,11 +629,11 @@ def updateGame(game):
     if not booleanConfig("marathonBotFunctions"):
         return
     myheaders = headers.copy()
-    myheaders["Authorization"] = "OAuth " + config["marathonOAuth"].replace("oauth:", "")
+    myheaders["Authorization"] = "Bearer " + config["marathonOAuth"].replace("oauth:", "")
     myheaders["Content-Type"] = "application/json"
-    myheaders["Accept"] = "application/vnd.twitchtv.v5+json"
-    body = {"channel": {"game": str(game)}}
-    r = requests.put("https://api.twitch.tv/kraken/channels/"+config["marathonChannelID"], headers=myheaders, json=body)
+    gameID = getGameID(game)
+    body = {"game_id": gameID}
+    r = requests.patch("https://api.twitch.tv/helix/channels?broadcaster_id="+config["marathonChannelID"], headers=myheaders, json=body)
     try:
         j = r.json()
     except Exception:
