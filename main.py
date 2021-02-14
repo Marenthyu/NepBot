@@ -1056,7 +1056,7 @@ def getUniqueCards(userid):
             return [row[0] for row in rows]
 
 
-def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDowngrades=True, bannedCards=None):
+def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDowngrades=True, bannedCards=None, allowEvents=True):
     random.seed()
     if rarity == -1:
         maxrarity = int(config["numNormalRarities"]) - 1
@@ -1071,7 +1071,7 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
             else:
                 break
         return dropCard(rarity=rarity, useEventWeightings=useEventWeightings, allowDowngrades=allowDowngrades,
-                        bannedCards=bannedCards)
+                        bannedCards=bannedCards, allowEvents=allowEvents)
     else:
         with db.cursor() as cur:
             if bannedCards is not None and len(bannedCards) > 0:
@@ -1079,6 +1079,8 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
             else:
                 banClause = ""
                 bannedCards = []
+            if not allowEvents:
+                banClause += " AND is_event = 0"
             weighting_column = "(event_weighting*normal_weighting)" if useEventWeightings else "normal_weighting"
             result = None
             if rarity >= int(config["strongerWeightingMinRarity"]):
@@ -1483,6 +1485,16 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         for card in cards:
             addCard(userid, card, 'booster', boosterid)
 
+        # cancel bounties for event cards
+        cardFormatStr = ",".join(["%s"] * len(cards))
+        cur.execute("SELECT bounties.id, bounties.amount, bounties.eventMultiplier, waifus.id, waifus.name FROM bounties JOIN waifus ON bounties.waifuid=waifus.id WHERE bounties.userid = %s AND bounties.status = 'open' AND bounties.waifuid IN({1}) AND waifus.is_event > 0".format(cardFormatStr), [userid] + cards)
+        eventBounties = cur.fetchall()
+        for eventBounty in eventBounties:
+            cur.execute("UPDATE bounties SET status = 'cancelled', updated = %s WHERE id = %s", [current_milli_time(), eventBounty[0]])
+            effectiveMultiplier = pow(10, eventBounty[2])
+            addPoints(userid, eventBounty[1] * effectiveMultiplier)
+            bot.message("#%s" % username, "Your bounty for [%d] %s was cancelled due to you pulling it. You received your %d points back." % (eventBounty[3], eventBounty[4], eventBounty[1] * effectiveMultiplier), True)
+        
         # alerts
         alertname = display_name if display_name.lower() == username.lower() else "%s (%s)" % (display_name, username)
         for w in alertwaifus:
@@ -2517,7 +2529,7 @@ class NepBot(NepBotClass):
                         if rewardInfo[1] is not None:
                             wid = rewardInfo[1]
                         else:
-                            wid = dropCard(rarity=rewardInfo[2], bannedCards=getUniqueCards(tags['user-id']))
+                            wid = dropCard(rarity=rewardInfo[2], bannedCards=getUniqueCards(tags['user-id']), allowEvents=False)
                         
                         row = getWaifuById(wid)
                         recordPullMetrics(row['id'])
@@ -2709,7 +2721,7 @@ class NepBot(NepBotClass):
                                  isWhisper=isWhisper)
                     return
                 chosenWaifu = dropCard(rarity=rarity, allowDowngrades=False,
-                                       bannedCards=getUniqueCards(tags['user-id']))
+                                       bannedCards=getUniqueCards(tags['user-id']), allowEvents=False)
                 if chosenWaifu is not None:
                     addPoints(tags['user-id'], 0 - price)
                     row = getWaifuById(chosenWaifu)
@@ -5585,8 +5597,8 @@ class NepBot(NepBotClass):
 
                             if myorderinfo is None:
                                 cur.execute(
-                                    "INSERT INTO bounties (userid, waifuid, amount, status, created) VALUES(%s, %s, %s, 'open', %s)",
-                                    [tags['user-id'], waifu['id'], amount, current_milli_time()])
+                                    "INSERT INTO bounties (userid, waifuid, amount, status, created, eventMultiplier) VALUES(%s, %s, %s, 'open', %s, %s)",
+                                    [tags['user-id'], waifu['id'], amount, current_milli_time(), eventMultiplier])
                                 self.message(channel, "%s, you placed a new bounty on [%d] %s for %d points." % (
                                     tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
                             else:
@@ -5626,19 +5638,15 @@ class NepBot(NepBotClass):
                         # check for a current order
                         cur = db.cursor()
                         cur.execute(
-                            "SELECT id, amount, created, updated FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'",
+                            "SELECT id, amount, created, updated, eventMultiplier FROM bounties WHERE userid = %s AND waifuid = %s AND status='open'",
                             [tags['user-id'], waifu['id']])
                         myorderinfo = cur.fetchone()
-                        bounty_time = myorderinfo[3] if myorderinfo[3] is not None else myorderinfo[2]
 
                         if myorderinfo is not None:
+                            bounty_time = myorderinfo[3] if myorderinfo[3] is not None else myorderinfo[2]
+
                             # check if user has card already and it is an event card
-                            eventMultiplier = 0
-                            if waifu['is_event']:
-                                hand = getHand(tags['user-id'])
-                                for card in hand:
-                                    if card['waifuid'] == waifu['id']:
-                                        eventMultiplier += 1
+                            eventMultiplier = myorderinfo[4]
                             effectiveMultiplier = pow(10, eventMultiplier)
 
                             cur.execute("UPDATE bounties SET status = 'cancelled', updated = %s WHERE id = %s",
@@ -5725,14 +5733,15 @@ class NepBot(NepBotClass):
 
                     # cancel all bounties
                     cur.execute(
-                        "SELECT bounties.userid, users.name, bounties.amount FROM bounties JOIN users ON bounties.userid = users.id WHERE bounties.waifuid = %s AND bounties.status = 'open'",
+                        "SELECT bounties.userid, users.name, bounties.amount, bounties.eventMultiplier FROM bounties JOIN users ON bounties.userid = users.id WHERE bounties.waifuid = %s AND bounties.status = 'open'",
                         [waifu['id']])
                     bounties = cur.fetchall()
                     for bounty in bounties:
-                        addPoints(bounty[0], bounty[2])
+                        effectiveMultiplier = pow(10, bounty[3])
+                        addPoints(bounty[0], bounty[2] * effectiveMultiplier)
                         self.message('#%s' % bounty[1],
                                      "Your bounty for [%d] %s has been cancelled due to its rarity changing. Your %d points have been refunded." % (
-                                         waifu['id'], waifu['name'], bounty[2]), True)
+                                         waifu['id'], waifu['name'], bounty[2] * effectiveMultiplier), True)
                     cur.execute(
                         "UPDATE bounties SET status='cancelled', updated=%s WHERE waifuid = %s AND status='open'",
                         [current_milli_time(), waifu['id']])
