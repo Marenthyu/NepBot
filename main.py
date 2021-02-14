@@ -3045,6 +3045,20 @@ class NepBot(NepBotClass):
                                              isWhisper=isWhisper)
                                 return
 
+                            if want["card_event"]:
+                                cur.execute("SELECT COUNT(*) FROM bounties WHERE waifuid = %s AND status = 'open' AND userid IN(%s, %s)", (want["waifuid"], ourid, otherid))
+                                if cur.fetchone()[0] > 0:
+                                    wantdata = getWaifuById(want['waifuid'])
+                                    self.message(channel, "Could not complete this trade. Either you or %s has a bounty on [%d] %s which is an event card." % (otherparty, want['waifuid'], wantdata['name']), isWhisper)
+                                    return
+
+                            if have["card_event"]:
+                                cur.execute("SELECT COUNT(*) FROM bounties WHERE waifuid = %s AND status = 'open' AND userid IN(%s, %s)", (have["waifuid"], ourid, otherid))
+                                if cur.fetchone()[0] > 0:
+                                    havedata = getWaifuById(have['waifuid'])
+                                    self.message(channel, "Could not complete this trade. Either you or %s has a bounty on [%d] %s which is an event card." % (otherparty, have['waifuid'], havedata['name']), isWhisper)
+                                    return
+
                             # move the cards
                             updateCard(want['id'], {"userid": otherid, "boosterid": None})
                             updateCard(have['id'], {"userid": ourid, "boosterid": None})
@@ -3173,11 +3187,21 @@ class NepBot(NepBotClass):
                     # Check for event card gains for either side and add/subtract from the points accordingly
                     eventMultiplier = 0
                     if want["card_event"]:
+                        cur.execute("SELECT COUNT(*) FROM bounties WHERE waifuid = %s AND status = 'open' AND userid IN(%s, %s)", (want["waifuid"], ourid, otherid))
+                        if cur.fetchone()[0] > 0:
+                            wantdata = getWaifuById(want['waifuid'])
+                            self.message(channel, "Could not start this trade. Either you or %s has a bounty on [%d] %s which is an event card." % (other, want['waifuid'], wantdata['name']), isWhisper)
+                            return
                         for card in ourhand:
                             if want["waifuid"] == card["waifuid"]:
                                 eventMultiplier += 1
 
                     if have["card_event"]:
+                        cur.execute("SELECT COUNT(*) FROM bounties WHERE waifuid = %s AND status = 'open' AND userid IN(%s, %s)", (have["waifuid"], ourid, otherid))
+                        if cur.fetchone()[0] > 0:
+                            havedata = getWaifuById(have['waifuid'])
+                            self.message(channel, "Could not start this trade. Either you or %s has a bounty on [%d] %s which is an event card." % (other, have['waifuid'], havedata['name']), isWhisper)
+                            return
                         for card in otherhand:
                             if have["waifuid"] == card["waifuid"]:
                                 eventMultiplier -= 1
