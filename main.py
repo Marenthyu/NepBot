@@ -1487,7 +1487,7 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
 
         # cancel bounties for event cards
         cardFormatStr = ",".join(["%s"] * len(cards))
-        cur.execute("SELECT bounties.id, bounties.amount, bounties.eventMultiplier, waifus.id, waifus.name FROM bounties JOIN waifus ON bounties.waifuid=waifus.id WHERE bounties.userid = %s AND bounties.status = 'open' AND bounties.waifuid IN({0}) AND waifus.is_event > 0".format(cardFormatStr), [userid] + cards)
+        cur.execute("SELECT bounties.id, bounties.amount, bounties.eventMultiplier, waifus.id, waifus.name FROM bounties JOIN waifus ON bounties.waifuid=waifus.id WHERE bounties.userid = %s AND bounties.status = 'open' AND bounties.waifuid IN({0}) AND waifus.is_event = 1".format(cardFormatStr), [userid] + cards)
         eventBounties = cur.fetchall()
         for eventBounty in eventBounties:
             cur.execute("UPDATE bounties SET status = 'cancelled', updated = %s WHERE id = %s", [current_milli_time(), eventBounty[0]])
