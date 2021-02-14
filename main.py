@@ -3186,7 +3186,7 @@ class NepBot(NepBotClass):
 
                     # Check for event card gains for either side and add/subtract from the points accordingly
                     eventMultiplier = 0
-                    if want["isEvent"]:
+                    if want["card_event"]:
                         cur.execute("SELECT COUNT(*) FROM bounties WHERE waifuid = %s AND status = 'open' AND userid IN(%s, %s)", (want["waifuid"], ourid, otherid))
                         if cur.fetchone()[0] > 0:
                             wantdata = getWaifuById(want['waifuid'])
@@ -3196,7 +3196,7 @@ class NepBot(NepBotClass):
                             if want["waifuid"] == card["waifuid"]:
                                 eventMultiplier += 1
 
-                    if have["isEvent"]:
+                    if have["card_event"]:
                         cur.execute("SELECT COUNT(*) FROM bounties WHERE waifuid = %s AND status = 'open' AND userid IN(%s, %s)", (have["waifuid"], ourid, otherid))
                         if cur.fetchone()[0] > 0:
                             havedata = getWaifuById(have['waifuid'])
