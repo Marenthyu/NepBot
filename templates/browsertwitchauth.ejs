@@ -1,0 +1,12 @@
+<%
+title = "Waifu TCG - Twitch Authentication";
+currentPage = "browser";
+_%>
+<% include includes/header %>
+<h1>Authenticate with Twitch</h1>
+<div>
+    <p>You should be here because you authorized through Twitch. Let's check it...</p>
+    <script src="js/browserauthcallback.js"></script>
+    <div id="authcallbackoutput">Loading...</div>
+</div>
+<% include includes/footer _%>

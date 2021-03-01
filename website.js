@@ -829,27 +829,62 @@ function browser(req, res, query) {
     if ("page" in query) {
         page = query.page;
     }
+    res.writeHead(200, "OK");
+    renderTemplateAndEnd("templates/image-browser.ejs", {
+        user: "user" in query ? query.user : '',
+        clientID: config['clientID'],
+        page: page
+    }, res);
+}
+
+function browserdata(req, res, query) {
+    let page = 0;
+    if ("page" in query) {
+        page = query.page;
+    }
     let auth = req.headers["authorization"];
     if (!auth) {
-        res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
-        httpError(res, 401, "Unauthorized");
+        res.setHeader("WWW-Authenticate", "Bearer realm=\"Waifu TCG Browser\", charset=\"UTF-8\"");
+        httpError(res, 401, "Unauthorized", JSON.stringify({status: "NOTLOGGEDIN"}));
         return
     }
-    let buff = Buffer.from(auth.replace('Basic ', ''), 'base64');
-    let authText = buff.toString('utf-8');
-    let parts = authText.split(':');
-    let user = parts[0];
-    let pass = parts[1];
-    if (config['adminPass'] === pass) {
-        con.query("SELECT waifus.* FROM waifus LIMIT ?, 100", [(page * 100)], function (err, result) {
-            if (err) throw err;
-            renderTemplateAndEnd("templates/image-browser.ejs", {user: user, page: page, cards: result}, res);
-        });
-
+    let authParts = auth.split(" ");
+    if (authParts.length !== 2 || authParts[0] !== "Bearer") {
+        httpError(res, 401, "Invalid auth format");
     } else {
-        res.setHeader("WWW-Authenticate", "Basic realm=\"Waifu TCG Admin\", charset=\"UTF-8\"");
-        httpError(res, 401, "Unauthorized wrong password");
-        return
+        verifyTwitchToken(authParts[1]).then((tokenResult) => {
+            if (!tokenResult.success) {
+                httpError(res, 401, "Unauthorized", JSON.stringify({status: "INVALIDTOKEN"}));
+                return
+            }
+            con.query("SELECT waifus.* FROM waifus LIMIT ?, 100", [(page * 100)], function (err, result) {
+                if (err) throw err;
+                res.writeHead(200, "OK", {"Content-Type":"application/json"});
+                res.end(JSON.stringify({
+                    user: tokenResult.result.login,
+                    page: page,
+                    cards: result
+                }));
+
+            });
+        });
+    }
+}
+
+async function verifyTwitchToken(token) {
+    try {
+        const response = await got({
+            url: "https://id.twitch.tv/oauth2/validate",
+            headers: {
+                "Authorization": "OAuth " + token
+            },
+            method: "GET"
+        }).json();
+        return {"success": true, "result": response};
+    } catch (e) {
+        if (e.response.statusCode === 401) {
+            return {"success": false};
+        }
     }
 
 }
@@ -1178,8 +1213,20 @@ function bootServer(callback) {
                     }, res);
                     break;
                 }
+                case "browsertwitchauth": {
+                    res.writeHead(200, "OK", {'Content-Type': 'text/html'});
+                    renderTemplateAndEnd("templates/browsertwitchauth.ejs", {
+                        currentPage: "browsertwitchauth",
+                        user: "user" in q.query ? q.query['user'] : ''
+                    }, res);
+                    break;
+                }
+                case "browserdata": {
+                    browserdata(req, res, q.query);
+                    break;
+                }
                 case "push": {
-                    res.writeHead(302, {'Location': "https://id.twitch.tv/oauth2/authorize?response_type=id_token&client_id=6rm9gnxqvo42oprfnqx8b7hptqkfn9&redirect_uri=" + config['siteHost'] + "/twitchauth&scope=openid"});
+                    res.writeHead(302, {'Location': "https://id.twitch.tv/oauth2/authorize?response_type=id_token&client_id=" + config['clientID'] + "&redirect_uri=" + config['siteHost'] + "/twitchauth&scope=openid"});
                     res.end();
                     break;
                 }
