@@ -2699,6 +2699,7 @@ class NepBot(NepBotClass):
                         args[0] = "buy"
                         command = "booster"
                         self.do_command(command, args, sender, channel, tags, isWhisper)
+                        return
                     else:
                         self.message(channel, "Usage: !buy <rarity> (So !buy uncommon for an uncommon)",
                                      isWhisper=isWhisper)
