@@ -5589,23 +5589,26 @@ class NepBot(NepBotClass):
 
                             # if it passed all of those checks it should be good to go.
                             # penalize them for reducing a bounty above regular cap?
+                            amount_changed = 0
                             if points_delta < 0 and old_bounty > rarity_cap:
                                 change_above_cap = min(-points_delta, old_bounty - rarity_cap)
-                                addPoints(tags['user-id'], (change_above_cap // 2 + (-points_delta - change_above_cap))*effectiveMultiplier)
+                                amount_changed = (change_above_cap // 2 + (-points_delta - change_above_cap))*effectiveMultiplier
+                                addPoints(tags['user-id'], amount_changed)
                             else:
-                                addPoints(tags['user-id'], -points_delta*effectiveMultiplier)
+                                amount_changed = -points_delta*effectiveMultiplier
+                                addPoints(tags['user-id'], amount_changed)
 
                             if myorderinfo is None:
                                 cur.execute(
                                     "INSERT INTO bounties (userid, waifuid, amount, status, created, eventMultiplier) VALUES(%s, %s, %s, 'open', %s, %s)",
                                     [tags['user-id'], waifu['id'], amount, current_milli_time(), eventMultiplier])
-                                self.message(channel, "%s, you placed a new bounty on [%d] %s for %d points." % (
-                                    tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
+                                self.message(channel, "%s, you placed a new bounty on [%d] %s for %d points.%s" % (
+                                    tags['display-name'], waifu['id'], waifu['name'], amount, "" + ((" (costing you " + (-amount_changed) + " points due to having this event card already.)") if effectiveMultiplier != 1.0 else "")), isWhisper)
                             else:
                                 cur.execute("UPDATE bounties SET amount = %s, updated = %s WHERE id = %s",
                                             [amount, current_milli_time(), myorderinfo[0]])
-                                self.message(channel, "%s, you updated your bounty on [%d] %s to %d points." % (
-                                    tags['display-name'], waifu['id'], waifu['name'], amount), isWhisper)
+                                self.message(channel, "%s, you updated your bounty on [%d] %s to %d points.%s" % (
+                                    tags['display-name'], waifu['id'], waifu['name'], amount, "" + ((" (costing you " + (-amount_changed) + " points due to having this event card already.)") if effectiveMultiplier != 1.0 else "")), isWhisper)
 
                             # outbid message?
                             if outbidding:
