@@ -996,6 +996,12 @@ def addPoints(userid, amount):
     cur.execute("UPDATE users SET points = points + %s WHERE id = %s", [amount, userid])
     cur.close()
 
+def getIDFromName(username):
+    cur = db.cursor()
+    cur.execute("SELECT id FROM users WHERE name = %s", [username])
+    ret = cur.fetchone()[0]
+    cur.close()
+    return ret
 
 def getPuddingBalance(userid):
     with db.cursor() as cur:
@@ -2253,7 +2259,14 @@ class NepBot(NepBotClass):
     def message(self, channel, message, isWhisper=False):
         logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
         if isWhisper:
-            super().message("#jtv", "/w " + str(channel).replace("#", "") + " " + str(message))
+            #super().message("#jtv", "/w " + str(channel).replace("#", "") + " " + str(message))
+            r = requests.post("https://api.twitch.tv/helix/whispers",
+                             headers={"Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
+                                      "Client-ID": config["clientID"]},
+                             params={first: 1000, to_user_id: getIDFromName(str(channel).replace("#", "")),
+                                     from_user_id: config["twitchid"]},
+                              json={"message": message})
+            logger.debug("Whisper API Response: %s", str(r))
         elif not silence:
             super().message(channel, message)
         else:
