@@ -1886,27 +1886,36 @@ class NepBot(NepBotClass):
                 # print("Activitymap: " + str(activitymap))
                 doneusers = set([])
                 validactivity = set([])
-                for channel in self.channels:
-                    # print("Fetching for channel " + str(channel))
-                    channelName = str(channel).replace("#", "")
+
+                for channelid in channelids:
+                    name = idtoname[channelid]
+                    logger.debug("Checking chatters for %s - %s", channelid, name)
                     try:
+                        r = requests.get("https://api.twitch.tv/helix/chat/chatters",
+                                         headers={"Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
+                                                  "Client-ID": config["clientID"]},
+                                         params={first: 1000, broadcaster_id: channelid,
+                                                 moderator_id: config["twitchid"]})
+                        resp = r.json()
                         a = []
-                        if channelName in viewerCount and viewerCount[channelName] >= 800:
-                            logger.debug("%s had more than 800 viewers, catching from chatters endpoint", channelName)
-                            with urllib.request.urlopen(
-                                    'https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
-                                data = json.loads(response.read().decode())
-                                chatters = data["chatters"]
-                                a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters[
-                                    "global_mods"] + chatters["viewers"]
-                        else:
-                            logger.debug("Users in %s: %s", channel, self.channels[channel]['users'])
-                            for viewer in self.channels[channel]['users']:
-                                a.append(viewer)
+                        for user in resp["data"]:
+                            a.append(user["user_login"])
+                        while ("pagination" in resp) and ("cursor" in resp["pagination"]):
+                            logger.debug("Got more viewers, paginating...")
+                            r = requests.get("https://api.twitch.tv/helix/chat/chatters",
+                                             headers={
+                                                 "Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
+                                                 "Client-ID": config["clientID"]},
+                                             params={first: 1000, broadcaster_id: channelid,
+                                                     moderator_id: config["twitchid"],
+                                                     after: resp["pagination"]["cursor"]})
+                            resp = r.json()
+                            for user in resp["data"]:
+                                a.append(user["user_login"])
+                        logger.debug("Users in %s: %s", name, a)
                         doneusers.update(set(a))
-                        if isLive[channelName]:
+                        if isLive[name]:
                             validactivity.update(set(a))
-                            
                     except Exception:
                         logger.error("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
                         logger.error("Error: %s", str(sys.exc_info()))
@@ -1928,9 +1937,11 @@ class NepBot(NepBotClass):
                         while len(doneusers) > 0:
                             logger.debug('Slicing... remaining length: %s' % len(doneusers))
                             currentSlice = doneusers[:100]
-                            cur.execute("SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(["%s"] * len(currentSlice)), currentSlice)
+                            cur.execute(
+                                "SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(
+                                    ["%s"] * len(currentSlice)), currentSlice)
                             foundUsersData = cur.fetchall()
-                            
+
                             foundUsers = set([row[0] for row in foundUsersData])
                             newUsers.update(set(currentSlice) - foundUsers)
 
@@ -1940,7 +1951,8 @@ class NepBot(NepBotClass):
                                     pointGain = passivePoints
                                     if viewerInfo[0] in activitymap and viewerInfo[0] in validactivity:
                                         pointGain += max(10 - int(activitymap[viewerInfo[0]]), 0)
-                                    if viewerInfo[0] in marathonActivityMap and marathonActivityMap[viewerInfo[0]] < 10 and marathonLive:
+                                    if viewerInfo[0] in marathonActivityMap and marathonActivityMap[
+                                        viewerInfo[0]] < 10 and marathonLive:
                                         altPointGain = passivePoints + 10 - marathonActivityMap[viewerInfo[0]]
                                         altPointGain = round(altPointGain * maraPointsMult)
                                         pointGain = max(pointGain, altPointGain)
@@ -1953,7 +1965,7 @@ class NepBot(NepBotClass):
                                     if pointGain > 0:
                                         updateData.append((pointGain, viewerInfo[0]))
                                 cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
-                            
+
                             doneusers = doneusers[100:]
                         cur.execute('COMMIT')
 
@@ -1975,7 +1987,7 @@ class NepBot(NepBotClass):
                 updateNames = []
                 newAccounts = []
                 updateData = []
-                
+
                 # don't hold the busyLock the whole time here - since we're dealing with twitch API
                 while len(newUsers) > 0:
                     logger.debug("Adding new users...")
@@ -1997,15 +2009,16 @@ class NepBot(NepBotClass):
                     if len(currentIdMapping) > 0:
                         with busyLock:
                             with db.cursor() as cur:
-                                cur.execute("SELECT id, name FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
+                                cur.execute("SELECT id, name FROM users WHERE id IN(%s)" % ",".join(
+                                    ["%s"] * len(currentIdMapping)),
                                             [id for id in currentIdMapping])
                                 foundIdsData = cur.fetchall()
                     localIds = [row[0] for row in foundIdsData]
-                    oldIdMapping = {row[0] : row[1] for row in foundIdsData}
+                    oldIdMapping = {row[0]: row[1] for row in foundIdsData}
 
                     # users to update the names for (id already exists)
                     updateNames.extend([(currentIdMapping[id], id) for id in currentIdMapping if id in localIds])
-                    nameChanges = {oldIdMapping[id] : currentIdMapping[id] for id in currentIdMapping if id in localIds}
+                    nameChanges = {oldIdMapping[id]: currentIdMapping[id] for id in currentIdMapping if id in localIds}
                     if len(nameChanges) > 0:
                         with busyLock:
                             self.handleNameChanges(nameChanges)
@@ -2037,16 +2050,15 @@ class NepBot(NepBotClass):
                         if len(updateNames) > 0:
                             logger.debug("Updating names...")
                             cur.executemany("UPDATE users SET name = %s WHERE id = %s", updateNames)
-                        
+
                         if len(newAccounts) > 0:
                             cur.executemany("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)",
                                             newAccounts)
-                        
+
                         if len(updateData) > 0:
                             cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
 
                         cur.execute("COMMIT")
-
 
                 for user in activitymap:
                     activitymap[user] += 1
