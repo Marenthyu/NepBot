@@ -1892,6 +1892,7 @@ class NepBot(NepBotClass):
                 # print("Activitymap: " + str(activitymap))
                 doneusers = set([])
                 validactivity = set([])
+                user_id_to_name_mappings = {}
 
                 for channelid in channelids:
                     name = idtoname[channelid]
@@ -1905,7 +1906,9 @@ class NepBot(NepBotClass):
                         resp = r.json()
                         a = []
                         for user in resp["data"]:
-                            a.append(user["user_login"])
+                            a.append(user)
+                            # Yes, we should not be casting to an int, but it's done elsewhere already and i can't be bothered to clean that up right now.
+                            user_id_to_name_mappings[int(user["user_id"])] = user["user_login"]
                         while ("pagination" in resp) and ("cursor" in resp["pagination"]):
                             logger.debug("Got more viewers, paginating...")
                             r = requests.get("https://api.twitch.tv/helix/chat/chatters",
@@ -1917,11 +1920,13 @@ class NepBot(NepBotClass):
                                                      after: resp["pagination"]["cursor"]})
                             resp = r.json()
                             for user in resp["data"]:
-                                a.append(user["user_login"])
+                                a.append(user)
+                                user_id_to_name_mappings[int(user["user_id"])] = user["user_login"]
                         logger.debug("Users in %s: %s", name, a)
-                        doneusers.update(set(a))
+                        user_logins = set(row["user_login"] for row in a)
+                        doneusers.update(user_logins)
                         if isLive[name]:
-                            validactivity.update(set(a))
+                            validactivity.update(user_logins)
                     except Exception:
                         logger.error("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
                         logger.error("Error: %s", str(sys.exc_info()))
@@ -1985,31 +1990,33 @@ class NepBot(NepBotClass):
 
                 # now deal with user names that aren't already in the DB
                 newUsers = list(newUsers)
-                if len(newUsers) > 10000:
-                    logger.warning(
-                        "DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
-                    newUsers = newUsers[:10000]
+                # Should be fine with new Chatters API giving the mapping directly.
+                #if len(newUsers) > 10000:
+                #    logger.warning(
+                #        "DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
+                #    newUsers = newUsers[:10000]
 
                 updateNames = []
                 newAccounts = []
                 updateData = []
 
-                # don't hold the busyLock the whole time here - since we're dealing with twitch API
+                # don't hold the busyLock the whole time here - since we're dealing (used to deal) with twitch API
                 while len(newUsers) > 0:
                     logger.debug("Adding new users...")
                     currentSlice = newUsers[:100]
                     logger.debug("New users to add: %s", str(currentSlice))
-                    r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
-                                     params={"login": currentSlice})
-                    if r.status_code == 429:
-                        logger.warning("Rate Limit Exceeded! Skipping account creation!")
-                        r.raise_for_status()
-                    j = r.json()
-                    if "data" not in j:
-                        # error, what do?
-                        r.raise_for_status()
+                    # r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
+                    #                 params={"login": currentSlice})
+                    #if r.status_code == 429:
+                    #    logger.warning("Rate Limit Exceeded! Skipping account creation!")
+                    #    r.raise_for_status()
+                    #j = r.json()
+                    #if "data" not in j:
+                    #    # error, what do?
+                    #    r.raise_for_status()
 
-                    currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
+                    #currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
+                    currentIdMapping = user_id_to_name_mappings
                     logger.debug("currentIdMapping: %s", currentIdMapping)
                     foundIdsData = []
                     if len(currentIdMapping) > 0:
