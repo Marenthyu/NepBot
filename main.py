@@ -1393,8 +1393,11 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         scalingThresholds = [int(config["pullScalingRarity%dThreshold" % rarity]) for rarity in
                              range(minScalingRarity, maxScalingRarity + 1)]
         
-        cur.execute("SELECT pullScalingData FROM users WHERE id = %s", [userid])
-        scalingRaw = cur.fetchone()[0]
+        cur.execute("SELECT pullScalingData, pityCounter FROM users WHERE id = %s", [userid])
+        result = cur.fetchone()
+        scalingRaw = result[0]
+        pityCounter = int(result[1])
+
         if scalingRaw is None:
             scalingData = [0] * numScalingRarities
         else:
@@ -1483,7 +1486,15 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                 bot.message("#%s" % username, "You won a free %s pack due to getting a %s pack worth %d points. Open it with !freepacks open %s" % msgArgs, True)
 
             if (useEventWeightings and not gotEventCard):
-                cur.execute("UPDATE users SET pityCounter = pityCounter + 1 WHERE id = %s", [userid])
+                pityCounter += 1
+                if (pityCounter >= int(config["pityThreshold"])):
+                    logger.debug("%s qualifies for a Pity!" % userid)
+                    pityCounter = 0
+                    bot.message("#%s" % username,
+                                "You qualify for a Pity Event Card! Use !pity <id> to choose one of the current Event Cards!",
+                                True)
+                    cur.execute("UPDATE users SET pityQualifications = pityQualifications + 1 WHERE id = %s", [userid])
+                cur.execute("UPDATE users SET pityCounter = %s WHERE id = %s", [pityCounter, userid])
         
         cards.sort()
         recordPullMetrics(*cards)
@@ -1593,6 +1604,18 @@ def getRewardsMetadata():
         cur.execute("SELECT COUNT(*), SUM(IF(is_good != 0, 1, 0)) FROM free_rewards")
         return cur.fetchone()
         
+def redeemPityQualification(userid, waifuid):
+    with db.cursor() as cur:
+        cur.execute("SELECT pityQualifications FROM users WHERE id = %s", [userid])
+        qualifications = int(cur.fetchone()[0])
+        if (qualifications < 1):
+            return False
+        waifu = getWaifuById(int(waifuid))
+        if ((int(waifu["is_event"]) == 1) and (int(waifu["base_rarity"]) < 8) and (int(waifu["can_lookup"]) == 1)):
+            cur.execute("UPDATE users SET pityQualifications = pityQualifications - 1 WHERE id = %s", [userid])
+            return addCard(userid, waifuid, "pity", event=1)
+        else:
+            return False
 
 
 # From https://github.com/Shizmob/pydle/issues/35
@@ -2208,7 +2231,7 @@ class NepBot(NepBotClass):
          "de", "buy", "booster", "trade", "lookup", "owners", "alerts", "alert", "redeem", "wars",
           "war", "vote", "donate", "incentives", "upgrade", "search", "freepacks", "freepack", "bet",
            "sets", "set", "setbadge", "giveaway", "raffle", "bounty", "profile", "packspending", "godimage",
-            "sendpoints", "sorthand"]
+            "sendpoints", "sorthand", "pity"]
         
         userid = int(tags['user-id'])
         if userid in blacklist:
@@ -6514,6 +6537,12 @@ class NepBot(NepBotClass):
 
                         self.message(channel, "%s, you have %d Anniversary Tokens. Items currently available to you: %s" % (tags['display-name'], purchaseData[3], " / ".join(purchasable)), isWhisper)
                 return
+            if command == "pity":
+                redeemedCard = redeemPityQualification(tags['user-id'], args[0])
+                if (redeemedCard):
+                    self.message(channel, "Successfully redeemed your pity qualification! Check your hand for %s" % redeemedCard, isWhisper)
+                else:
+                    self.message(channel, "That didn't work - make sure you qualify for a pity and the waifu is available right now!", isWhisper)
 
 
 
