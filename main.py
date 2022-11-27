@@ -1414,6 +1414,7 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                     tokensDropped += 1
                     
             totalTokensDropped += tokensDropped
+            gotEventCard = False
             iterDE = 0
             for i in range(numCards - tokensDropped):
                 # scale chances of the card appropriately
@@ -1460,6 +1461,9 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                 waifu = getWaifuById(card)
                 iterDE += int(config["rarity%dValue" % waifu['base_rarity']])
 
+                if (waifu["is_event"]):
+                    gotEventCard = True
+
                 if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                     alertwaifus.append(waifu)
 
@@ -1477,6 +1481,9 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                 giveFreeBooster(userid, reward)
                 msgArgs = (reward, packname, iterDE, reward)
                 bot.message("#%s" % username, "You won a free %s pack due to getting a %s pack worth %d points. Open it with !freepacks open %s" % msgArgs, True)
+
+            if (useEventWeightings and not gotEventCard):
+                cur.execute("UPDATE users SET pityCounter = pityCounter + 1 WHERE id = %s", [userid])
         
         cards.sort()
         recordPullMetrics(*cards)
