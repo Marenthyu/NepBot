@@ -1931,8 +1931,8 @@ class NepBot(NepBotClass):
                         r = requests.get("https://api.twitch.tv/helix/chat/chatters",
                                          headers={"Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
                                                   "Client-ID": config["clientID"]},
-                                         params={first: 1000, broadcaster_id: channelid,
-                                                 moderator_id: config["twitchid"]})
+                                         params={"first": 1000, "broadcaster_id": channelid,
+                                                 "moderator_id": config["twitchid"]})
                         resp = r.json()
                         a = []
                         for user in resp["data"]:
@@ -1945,9 +1945,9 @@ class NepBot(NepBotClass):
                                              headers={
                                                  "Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
                                                  "Client-ID": config["clientID"]},
-                                             params={first: 1000, broadcaster_id: channelid,
-                                                     moderator_id: config["twitchid"],
-                                                     after: resp["pagination"]["cursor"]})
+                                             params={"first": 1000, "broadcaster_id": channelid,
+                                                     "moderator_id": config["twitchid"],
+                                                     "after": resp["pagination"]["cursor"]})
                             resp = r.json()
                             for user in resp["data"]:
                                 a.append(user)
@@ -2300,8 +2300,8 @@ class NepBot(NepBotClass):
             r = requests.post("https://api.twitch.tv/helix/whispers",
                              headers={"Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
                                       "Client-ID": config["clientID"]},
-                             params={first: 1000, to_user_id: getIDFromName(str(channel).replace("#", "")),
-                                     from_user_id: config["twitchid"]},
+                             params={"first": 1000, "to_user_id": getIDFromName(str(channel).replace("#", "")),
+                                     "from_user_id": config["twitchid"]},
                               json={"message": message})
             logger.debug("Whisper API Response: %s", str(r))
         elif not silence:
