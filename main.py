@@ -1942,6 +1942,7 @@ class NepBot(NepBotClass):
                             cur = db.cursor()
                             cur.execute("DELETE FROM channels WHERE name = %s", [name])
                             cur.close()
+                            self.mychannels.remove("#" + name)
                             continue
                         logger.debug("NO ERROR FOR CHECKING")
                         a = []
