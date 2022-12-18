@@ -1938,11 +1938,10 @@ class NepBot(NepBotClass):
                         resp = r.json()
                         logger.debug("Twitch Chatters Response: " + str(resp))
                         if "error" in resp and (resp["status"] == 403 or resp["status"] == 404):
-                            self.leavechannels += "#" + name
+                            self.leavechannels.append("#" + name)
                             cur = db.cursor()
                             cur.execute("DELETE FROM channels WHERE name = %s", [name])
                             cur.close()
-                            self.mychannels.remove("#" + name)
                             continue
                         logger.debug("NO ERROR FOR CHECKING")
                         a = []
