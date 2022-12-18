@@ -996,6 +996,12 @@ def addPoints(userid, amount):
     cur.execute("UPDATE users SET points = points + %s WHERE id = %s", [amount, userid])
     cur.close()
 
+def getIDFromName(username):
+    cur = db.cursor()
+    cur.execute("SELECT id FROM users WHERE name = %s", [username])
+    ret = cur.fetchone()[0]
+    cur.close()
+    return ret
 
 def getPuddingBalance(userid):
     with db.cursor() as cur:
@@ -1387,8 +1393,11 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         scalingThresholds = [int(config["pullScalingRarity%dThreshold" % rarity]) for rarity in
                              range(minScalingRarity, maxScalingRarity + 1)]
         
-        cur.execute("SELECT pullScalingData FROM users WHERE id = %s", [userid])
-        scalingRaw = cur.fetchone()[0]
+        cur.execute("SELECT pullScalingData, pityCounter FROM users WHERE id = %s", [userid])
+        result = cur.fetchone()
+        scalingRaw = result[0]
+        pityCounter = int(result[1])
+
         if scalingRaw is None:
             scalingData = [0] * numScalingRarities
         else:
@@ -1408,6 +1417,7 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                     tokensDropped += 1
                     
             totalTokensDropped += tokensDropped
+            gotEventCard = False
             iterDE = 0
             for i in range(numCards - tokensDropped):
                 # scale chances of the card appropriately
@@ -1454,6 +1464,9 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                 waifu = getWaifuById(card)
                 iterDE += int(config["rarity%dValue" % waifu['base_rarity']])
 
+                if (waifu["is_event"]):
+                    gotEventCard = True
+
                 if waifu['base_rarity'] >= int(config["drawAlertMinimumRarity"]):
                     alertwaifus.append(waifu)
 
@@ -1471,6 +1484,17 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                 giveFreeBooster(userid, reward)
                 msgArgs = (reward, packname, iterDE, reward)
                 bot.message("#%s" % username, "You won a free %s pack due to getting a %s pack worth %d points. Open it with !freepacks open %s" % msgArgs, True)
+
+            if (useEventWeightings and not gotEventCard):
+                pityCounter += 1
+                if (pityCounter >= int(config["pityThreshold"])):
+                    logger.debug("%s qualifies for a Pity!" % userid)
+                    pityCounter = 0
+                    bot.message("#%s" % username,
+                                "You qualify for a Pity Event Card! Use !pity <id> to choose one of the current Event Cards!",
+                                True)
+                    cur.execute("UPDATE users SET pityQualifications = pityQualifications + 1 WHERE id = %s", [userid])
+                cur.execute("UPDATE users SET pityCounter = %s WHERE id = %s", [pityCounter, userid])
         
         cards.sort()
         recordPullMetrics(*cards)
@@ -1580,6 +1604,18 @@ def getRewardsMetadata():
         cur.execute("SELECT COUNT(*), SUM(IF(is_good != 0, 1, 0)) FROM free_rewards")
         return cur.fetchone()
         
+def redeemPityQualification(userid, waifuid):
+    with db.cursor() as cur:
+        cur.execute("SELECT pityQualifications FROM users WHERE id = %s", [userid])
+        qualifications = int(cur.fetchone()[0])
+        if (qualifications < 1):
+            return False
+        waifu = getWaifuById(int(waifuid))
+        if ((int(waifu["is_event"]) == 1) and (int(waifu["base_rarity"]) < 8) and (int(waifu["can_lookup"]) == 1)):
+            cur.execute("UPDATE users SET pityQualifications = pityQualifications - 1 WHERE id = %s", [userid])
+            return addCard(userid, waifuid, "pity", event=1)
+        else:
+            return False
 
 
 # From https://github.com/Shizmob/pydle/issues/35
@@ -1886,27 +1922,41 @@ class NepBot(NepBotClass):
                 # print("Activitymap: " + str(activitymap))
                 doneusers = set([])
                 validactivity = set([])
-                for channel in self.channels:
-                    # print("Fetching for channel " + str(channel))
-                    channelName = str(channel).replace("#", "")
+                user_id_to_name_mappings = {}
+
+                for channelid in channelids:
+                    name = idtoname[channelid]
+                    logger.debug("Checking chatters for %s - %s", channelid, name)
                     try:
+                        r = requests.get("https://api.twitch.tv/helix/chat/chatters",
+                                         headers={"Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
+                                                  "Client-ID": config["clientID"]},
+                                         params={first: 1000, broadcaster_id: channelid,
+                                                 moderator_id: config["twitchid"]})
+                        resp = r.json()
                         a = []
-                        if channelName in viewerCount and viewerCount[channelName] >= 800:
-                            logger.debug("%s had more than 800 viewers, catching from chatters endpoint", channelName)
-                            with urllib.request.urlopen(
-                                    'https://tmi.twitch.tv/group/user/' + channelName + '/chatters') as response:
-                                data = json.loads(response.read().decode())
-                                chatters = data["chatters"]
-                                a = chatters["moderators"] + chatters["staff"] + chatters["admins"] + chatters[
-                                    "global_mods"] + chatters["viewers"]
-                        else:
-                            logger.debug("Users in %s: %s", channel, self.channels[channel]['users'])
-                            for viewer in self.channels[channel]['users']:
-                                a.append(viewer)
-                        doneusers.update(set(a))
-                        if isLive[channelName]:
-                            validactivity.update(set(a))
-                            
+                        for user in resp["data"]:
+                            a.append(user)
+                            # Yes, we should not be casting to an int, but it's done elsewhere already and i can't be bothered to clean that up right now.
+                            user_id_to_name_mappings[int(user["user_id"])] = user["user_login"]
+                        while ("pagination" in resp) and ("cursor" in resp["pagination"]):
+                            logger.debug("Got more viewers, paginating...")
+                            r = requests.get("https://api.twitch.tv/helix/chat/chatters",
+                                             headers={
+                                                 "Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
+                                                 "Client-ID": config["clientID"]},
+                                             params={first: 1000, broadcaster_id: channelid,
+                                                     moderator_id: config["twitchid"],
+                                                     after: resp["pagination"]["cursor"]})
+                            resp = r.json()
+                            for user in resp["data"]:
+                                a.append(user)
+                                user_id_to_name_mappings[int(user["user_id"])] = user["user_login"]
+                        logger.debug("Users in %s: %s", name, a)
+                        user_logins = set(row["user_login"] for row in a)
+                        doneusers.update(user_logins)
+                        if isLive[name]:
+                            validactivity.update(user_logins)
                     except Exception:
                         logger.error("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
                         logger.error("Error: %s", str(sys.exc_info()))
@@ -1928,9 +1978,11 @@ class NepBot(NepBotClass):
                         while len(doneusers) > 0:
                             logger.debug('Slicing... remaining length: %s' % len(doneusers))
                             currentSlice = doneusers[:100]
-                            cur.execute("SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(["%s"] * len(currentSlice)), currentSlice)
+                            cur.execute(
+                                "SELECT name, points, lastActiveTimestamp FROM users WHERE name IN(%s)" % ",".join(
+                                    ["%s"] * len(currentSlice)), currentSlice)
                             foundUsersData = cur.fetchall()
-                            
+
                             foundUsers = set([row[0] for row in foundUsersData])
                             newUsers.update(set(currentSlice) - foundUsers)
 
@@ -1940,7 +1992,8 @@ class NepBot(NepBotClass):
                                     pointGain = passivePoints
                                     if viewerInfo[0] in activitymap and viewerInfo[0] in validactivity:
                                         pointGain += max(10 - int(activitymap[viewerInfo[0]]), 0)
-                                    if viewerInfo[0] in marathonActivityMap and marathonActivityMap[viewerInfo[0]] < 10 and marathonLive:
+                                    if viewerInfo[0] in marathonActivityMap and marathonActivityMap[
+                                        viewerInfo[0]] < 10 and marathonLive:
                                         altPointGain = passivePoints + 10 - marathonActivityMap[viewerInfo[0]]
                                         altPointGain = round(altPointGain * maraPointsMult)
                                         pointGain = max(pointGain, altPointGain)
@@ -1953,7 +2006,7 @@ class NepBot(NepBotClass):
                                     if pointGain > 0:
                                         updateData.append((pointGain, viewerInfo[0]))
                                 cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
-                            
+
                             doneusers = doneusers[100:]
                         cur.execute('COMMIT')
 
@@ -1967,45 +2020,48 @@ class NepBot(NepBotClass):
 
                 # now deal with user names that aren't already in the DB
                 newUsers = list(newUsers)
-                if len(newUsers) > 10000:
-                    logger.warning(
-                        "DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
-                    newUsers = newUsers[:10000]
+                # Should be fine with new Chatters API giving the mapping directly.
+                #if len(newUsers) > 10000:
+                #    logger.warning(
+                #        "DID YOU LET ME JOIN GDQ CHAT OR WHAT?!!? ... capping new user accounts at 10k. Sorry, bros!")
+                #    newUsers = newUsers[:10000]
 
                 updateNames = []
                 newAccounts = []
                 updateData = []
-                
-                # don't hold the busyLock the whole time here - since we're dealing with twitch API
+
+                # don't hold the busyLock the whole time here - since we're dealing (used to deal) with twitch API
                 while len(newUsers) > 0:
                     logger.debug("Adding new users...")
                     currentSlice = newUsers[:100]
                     logger.debug("New users to add: %s", str(currentSlice))
-                    r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
-                                     params={"login": currentSlice})
-                    if r.status_code == 429:
-                        logger.warning("Rate Limit Exceeded! Skipping account creation!")
-                        r.raise_for_status()
-                    j = r.json()
-                    if "data" not in j:
-                        # error, what do?
-                        r.raise_for_status()
+                    # r = requests.get("https://api.twitch.tv/helix/users", headers=headers,
+                    #                 params={"login": currentSlice})
+                    #if r.status_code == 429:
+                    #    logger.warning("Rate Limit Exceeded! Skipping account creation!")
+                    #    r.raise_for_status()
+                    #j = r.json()
+                    #if "data" not in j:
+                    #    # error, what do?
+                    #    r.raise_for_status()
 
-                    currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
+                    #currentIdMapping = {int(row["id"]): row["login"] for row in j["data"]}
+                    currentIdMapping = user_id_to_name_mappings
                     logger.debug("currentIdMapping: %s", currentIdMapping)
                     foundIdsData = []
                     if len(currentIdMapping) > 0:
                         with busyLock:
                             with db.cursor() as cur:
-                                cur.execute("SELECT id, name FROM users WHERE id IN(%s)" % ",".join(["%s"] * len(currentIdMapping)),
+                                cur.execute("SELECT id, name FROM users WHERE id IN(%s)" % ",".join(
+                                    ["%s"] * len(currentIdMapping)),
                                             [id for id in currentIdMapping])
                                 foundIdsData = cur.fetchall()
                     localIds = [row[0] for row in foundIdsData]
-                    oldIdMapping = {row[0] : row[1] for row in foundIdsData}
+                    oldIdMapping = {row[0]: row[1] for row in foundIdsData}
 
                     # users to update the names for (id already exists)
                     updateNames.extend([(currentIdMapping[id], id) for id in currentIdMapping if id in localIds])
-                    nameChanges = {oldIdMapping[id] : currentIdMapping[id] for id in currentIdMapping if id in localIds}
+                    nameChanges = {oldIdMapping[id]: currentIdMapping[id] for id in currentIdMapping if id in localIds}
                     if len(nameChanges) > 0:
                         with busyLock:
                             self.handleNameChanges(nameChanges)
@@ -2037,16 +2093,15 @@ class NepBot(NepBotClass):
                         if len(updateNames) > 0:
                             logger.debug("Updating names...")
                             cur.executemany("UPDATE users SET name = %s WHERE id = %s", updateNames)
-                        
+
                         if len(newAccounts) > 0:
                             cur.executemany("INSERT INTO users (id, name, points, lastFree) VALUES(%s, %s, 0, 0)",
                                             newAccounts)
-                        
+
                         if len(updateData) > 0:
                             cur.executemany("UPDATE users SET points = points + %s WHERE name = %s", updateData)
 
                         cur.execute("COMMIT")
-
 
                 for user in activitymap:
                     activitymap[user] += 1
@@ -2176,7 +2231,7 @@ class NepBot(NepBotClass):
          "de", "buy", "booster", "trade", "lookup", "owners", "alerts", "alert", "redeem", "wars",
           "war", "vote", "donate", "incentives", "upgrade", "search", "freepacks", "freepack", "bet",
            "sets", "set", "setbadge", "giveaway", "raffle", "bounty", "profile", "packspending", "godimage",
-            "sendpoints", "sorthand"]
+            "sendpoints", "sorthand", "pity"]
         
         userid = int(tags['user-id'])
         if userid in blacklist:
@@ -2241,7 +2296,14 @@ class NepBot(NepBotClass):
     def message(self, channel, message, isWhisper=False):
         logger.debug("sending message %s %s %s" % (channel, message, "Y" if isWhisper else "N"))
         if isWhisper:
-            super().message("#jtv", "/w " + str(channel).replace("#", "") + " " + str(message))
+            #super().message("#jtv", "/w " + str(channel).replace("#", "") + " " + str(message))
+            r = requests.post("https://api.twitch.tv/helix/whispers",
+                             headers={"Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
+                                      "Client-ID": config["clientID"]},
+                             params={first: 1000, to_user_id: getIDFromName(str(channel).replace("#", "")),
+                                     from_user_id: config["twitchid"]},
+                              json={"message": message})
+            logger.debug("Whisper API Response: %s", str(r))
         elif not silence:
             super().message(channel, message)
         else:
@@ -6478,6 +6540,12 @@ class NepBot(NepBotClass):
 
                         self.message(channel, "%s, you have %d Anniversary Tokens. Items currently available to you: %s" % (tags['display-name'], purchaseData[3], " / ".join(purchasable)), isWhisper)
                 return
+            if command == "pity":
+                redeemedCard = redeemPityQualification(tags['user-id'], args[0])
+                if (redeemedCard):
+                    self.message(channel, "Successfully redeemed your pity qualification! Check your hand for %s" % redeemedCard, isWhisper)
+                else:
+                    self.message(channel, "That didn't work - make sure you qualify for a pity and the waifu is available right now!", isWhisper)
 
 
 
