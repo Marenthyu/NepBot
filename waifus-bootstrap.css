@@ -110,15 +110,15 @@ nav {
             #9f7928 30%,
             #8a6e2f 40%,
             transparent 80%
-        ),
-        radial-gradient(
+    ),
+    radial-gradient(
             ellipse farthest-corner at left top,
             #fedb37 0%,
             #fdb931 8%,
             #d1b464 25%,
             #5d4a1f 62.5%,
             #5d4a1f 100%
-        );
+    );
     color: white;
 }
 
@@ -141,8 +141,8 @@ nav {
             rgba(0, 0, 255, 0.8),
             rgba(75, 0, 162, 0.8),
             rgba(238, 162, 238, 0.8)
-        ),
-        black;
+    ),
+    black;
     color: white;
 }
 
@@ -155,8 +155,8 @@ nav {
             rgba(0, 0, 255, 0.8),
             rgba(75, 0, 162, 0.8),
             rgba(238, 162, 238, 0.8)
-        ),
-        black;
+    ),
+    black;
     color: white;
 }
 
@@ -170,6 +170,9 @@ nav {
     margin: 0.5rem;
     display: inline-block;
     min-width: 170px;
+    transition: transform 0.5s ease, box-shadow 0.2s ease;
+    will-change: transform, filter;
+    transform-origin: center;
 }
 
 .card-image {
@@ -351,7 +354,8 @@ nav {
     margin-left: auto;
     margin-right: auto;
     max-width: 100px;
-    left: 5px; right: 5px;
+    left: 5px;
+    right: 5px;
 }
 
 .toast-header {
@@ -491,7 +495,7 @@ textarea.sorthand-output {
 }
 
 html.dark-mode input[type=text], html.dark-mode textarea {
-    border-color: rgba(0,0,0,0.8);
+    border-color: rgba(0, 0, 0, 0.8);
     background-color: #1d1d1d;
     color: #d6d6d6;
 }
@@ -506,7 +510,7 @@ html.dark-mode nav {
 }
 
 html.dark-mode .card {
-    border-color: rgba(0,0,0,0.8);
+    border-color: rgba(0, 0, 0, 0.8);
 }
 
 html.dark-mode .card-body {
@@ -564,22 +568,187 @@ html.dark-mode .card-header {
     -webkit-transition: opacity .3s;
     line-height: 1;
     text-decoration: none !important;
-  }
+}
 
-  .hash-link:hover {
+.hash-link:hover {
     opacity: 1 !important;
-  }
+}
 
-  .dark-mode .hash-link-icon {
-      fill: #999;
-  }
+.dark-mode .hash-link-icon {
+    fill: #999;
+}
 
-  .hash-link .hash-link-icon {
-        vertical-align: middle;
+.hash-link .hash-link-icon {
+    vertical-align: middle;
+}
+
+.anchor {
+    position: relative;
+    top: -60px;
+    display: block;
+}
+
+.card-tcg:before,
+.card-tcg:after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: 0;
+    background-repeat: no-repeat;
+    opacity: .5;
+    mix-blend-mode: color-dodge;
+    transition: all .33s ease;
+}
+
+.card-tcg:before {
+    background-position: 50% 50%;
+    background-size: 300% 300%;
+    background-image: linear-gradient(
+            115deg,
+            transparent 0%,
+            var(--color1) 25%,
+            transparent 47%,
+            transparent 53%,
+            var(--color2) 75%,
+            transparent 100%
+    );
+    opacity: .5;
+    filter: brightness(.5) contrast(1);
+    z-index: 1;
+}
+
+.card-tcg:after {
+    background-image: url("https://assets.codepen.io/13471/sparkles.gif"),
+    url(https://assets.codepen.io/13471/holo.png),
+    linear-gradient(125deg, #ff008450 15%, #fca40040 30%, #ffff0030 40%, #00ff8a20 60%, #00cfff40 70%, #cc4cfa50 85%);
+    background-position: 50% 50%;
+    background-size: 160%;
+    background-blend-mode: overlay;
+    z-index: 2;
+    filter: brightness(1) contrast(1);
+    transition: all .33s ease;
+    mix-blend-mode: color-dodge;
+    opacity: .75;
+}
+
+.card-tcg.active:after,
+.card-tcg:hover:after {
+    filter: brightness(1) contrast(1);;
+    opacity: 1;
+}
+
+.card-tcg.active,
+.card-tcg:hover {
+    animation: none;
+    transition: box-shadow 0.1s ease-out;
+}
+
+:root {
+    --color1: rgb(0, 231, 255);
+    --color2: rgb(255, 0, 231);
+}
+
+.card-tcg.active:before,
+.card-tcg:hover:before {
+    animation: none;
+    background-image: linear-gradient(
+            110deg,
+            transparent 25%,
+            var(--color1) 48%,
+            var(--color2) 52%,
+            transparent 75%
+    );
+    background-position: 50% 50%;
+    background-size: 250% 250%;
+    opacity: .88;
+    filter: brightness(.66) contrast(1.33);
+    transition: none;
+}
+
+.card-tcg.active:before,
+.card-tcg:hover:before,
+.card-tcg.active:after,
+.card-tcg:hover:after {
+    animation: none;
+    transition: none;
+}
+
+.card-tcg.animated {
+    transition: none;
+    animation: holoCard 12s ease 0s 1;
+}
+
+.card-tcg.animated:after {
+    transition: none;
+    animation: holoSparkle 12s ease 0s 1;
+}
+
+.card-tcg.animated:before {
+    transition: none;
+    animation: holoGradient 12s ease 0s 1;
+}
+
+@keyframes holoSparkle {
+    0%, 100% {
+        opacity: .75; background-position: 50% 50%; filter: brightness(1.2) contrast(1.25);
     }
+    5%, 8% {
+        opacity: 1; background-position: 40% 40%; filter: brightness(.8) contrast(1.2);
+    }
+    13%, 16% {
+        opacity: .5; background-position: 50% 50%; filter: brightness(1.2) contrast(.8);
+    }
+    35%, 38% {
+        opacity: 1; background-position: 60% 60%; filter: brightness(1) contrast(1);
+    }
+    55% {
+        opacity: .33; background-position: 45% 45%; filter: brightness(1.2) contrast(1.25);
+    }
+}
 
-  .anchor {
-      position: relative;
-      top: -60px;
-      display: block;
-  }
+@keyframes holoGradient {
+    0%, 100% {
+        opacity: 0.5;
+        background-position: 50% 50%;
+        filter: brightness(.5) contrast(1);
+    }
+    5%, 9% {
+        background-position: 100% 100%;
+        opacity: 1;
+        filter: brightness(.75) contrast(1.25);
+    }
+    13%, 17% {
+        background-position: 0% 0%;
+        opacity: .88;
+    }
+    35%, 39% {
+        background-position: 100% 100%;
+        opacity: 1;
+        filter: brightness(.5) contrast(1);
+    }
+    55% {
+        background-position: 0% 0%;
+        opacity: 1;
+        filter: brightness(.75) contrast(1.25);
+    }
+}
+
+@keyframes holoCard {
+    0%, 100% {
+        transform: rotateZ(0deg) rotateX(0deg) rotateY(0deg);
+    }
+    5%, 8% {
+        transform: rotateZ(0deg) rotateX(6deg) rotateY(-20deg);
+    }
+    13%, 16% {
+        transform: rotateZ(0deg) rotateX(-9deg) rotateY(32deg);
+    }
+    35%, 38% {
+        transform: rotateZ(3deg) rotateX(12deg) rotateY(20deg);
+    }
+    55% {
+        transform: rotateZ(-3deg) rotateX(-12deg) rotateY(-27deg);
+    }
+}

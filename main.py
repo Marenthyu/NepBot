@@ -1904,7 +1904,9 @@ class NepBot(NepBotClass):
                     url = url + "&user_id=" + user
                 logger.debug("Constructed URL: " + url)
                 response = requests.get(url, headers=headers)
-                data = response.json()["data"]
+                responseJSON = response.json()
+                logger.debug("Got Twitch Response JSON: " + str(responseJSON))
+                data = responseJSON["data"]
                 logger.debug("Got Twitch Response Data: " + str(data))
                 for element in data:
                     chanName = idtoname[str(element["user_id"])]
