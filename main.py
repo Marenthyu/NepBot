@@ -1889,21 +1889,30 @@ class NepBot(NepBotClass):
             isLive = {}
             viewerCount = {}
             for row in rows:
+                logger.debug("Checking row " + str(row))
                 channelids.append(str(row[1]))
                 idtoname[str(row[1])] = row[0]
                 isLive[str(row[0])] = False
 
+            logger.debug("Channel IDs to check: " + str(channelids))
+
             while len(channelids) > 0:
                 currentSlice = channelids[:100]
-                response = requests.get("https://api.twitch.tv/helix/streams", headers=headers,
-                                        params={"type": "live", "user_id": currentSlice})
+                logger.debug(str(currentSlice))
+                url = "https://api.twitch.tv/helix/streams?type=live"
+                for user in currentSlice:
+                    url = url + "&user_id=" + user
+                logger.debug("Constructed URL: " + url)
+                response = requests.get(url, headers=headers)
                 data = response.json()["data"]
+                logger.debug("Got Twitch Response Data: " + str(data))
                 for element in data:
                     chanName = idtoname[str(element["user_id"])]
                     isLive[chanName] = True
                     logger.debug("%s is live!", idtoname[str(element["user_id"])])
                     viewerCount[chanName] = element["viewer_count"]
                 channelids = channelids[100:]
+                logger.debug("New Channel IDs: " + str(channelids))
             
             marathonLive = config['marathonChannel'][1:] in viewerCount
 
