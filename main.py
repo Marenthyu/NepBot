@@ -1769,10 +1769,7 @@ class NepBot(NepBotClass):
                     logger.debug("Could not handle name change properly, abandoning the attempt.")
 
     def start(self, password):
-        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
-        self.pw = password
-        logger.info("Connecting...")
-
+        
         def timer():
             with busyLock:
                 global t
@@ -2174,6 +2171,9 @@ class NepBot(NepBotClass):
                             cur.execute("UPDATE config SET value = %s WHERE name = 'marathonHelpAutopostLast'",
                                         [config["marathonHelpAutopostLast"]])
 
+        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
+        self.pw = password
+        logger.info("Connecting...")
         if t is None:
             timer()
 
