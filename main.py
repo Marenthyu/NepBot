@@ -1940,7 +1940,7 @@ class NepBot(NepBotClass):
                                                  "moderator_id": config["twitchid"]})
                         resp = r.json()
                         logger.debug("Twitch Chatters Response: " + str(resp))
-                        if "error" in resp and resp["status"] == 403:
+                        if "error" in resp and (resp["status"] == 403 or resp["status"] == 404):
                             self.leavechannels += "#" + name
                             continue
                         logger.debug("NO ERROR FOR CHECKING")
