@@ -1942,7 +1942,7 @@ class NepBot(NepBotClass):
                         logger.debug("Twitch Chatters Response: " + str(resp))
                         if "error" in resp and resp["status"] == 403:
                             self.leavechannels += "#" + name
-                            pass
+                            continue
                         logger.debug("NO ERROR FOR CHECKING")
                         a = []
                         for user in resp["data"]:
