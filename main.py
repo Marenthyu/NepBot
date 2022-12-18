@@ -1935,9 +1935,8 @@ class NepBot(NepBotClass):
                 doneusers = set([])
                 validactivity = set([])
                 user_id_to_name_mappings = {}
-                name = idtoname[channelid]
                 for channelid in channelids:
-
+                    name = idtoname[channelid]
                     logger.debug("Checking chatters for %s - %s", channelid, name)
                     try:
                         r = requests.get("https://api.twitch.tv/helix/chat/chatters",
