@@ -1945,6 +1945,7 @@ class NepBot(NepBotClass):
                                          params={"first": 1000, "broadcaster_id": channelid,
                                                  "moderator_id": config["twitchid"]})
                         resp = r.json()
+                        logger.debug("Twitch Chatters Response: " + str(resp))
                         a = []
                         for user in resp["data"]:
                             a.append(user)
