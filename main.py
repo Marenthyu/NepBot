@@ -1939,6 +1939,9 @@ class NepBot(NepBotClass):
                         logger.debug("Twitch Chatters Response: " + str(resp))
                         if "error" in resp and (resp["status"] == 403 or resp["status"] == 404):
                             self.leavechannels += "#" + name
+                            cur = db.cursor()
+                            cur.execute("DELETE FROM channels WHERE name = %s", [name])
+                            cur.close()
                             continue
                         logger.debug("NO ERROR FOR CHECKING")
                         a = []
