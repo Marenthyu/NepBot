@@ -1943,6 +1943,7 @@ class NepBot(NepBotClass):
                         if "error" in resp and resp["status"] == 403:
                             self.leavechannels += "#" + name
                             pass
+                        logger.debug("NO ERROR FOR CHECKING")
                         a = []
                         for user in resp["data"]:
                             a.append(user)
