@@ -1923,13 +1923,7 @@ class NepBot(NepBotClass):
             for c in self.addchannels:
                 self.mychannels.append(c)
             self.addchannels = []
-            for c in self.leavechannels:
-                try:
-                    self.mychannels.remove(c)
-                except Exception:
-                    logger.warning("Couldn't remove channel %s from channels, it wasn't found. Channel list: %s",
-                                   str(c), str(self.mychannels))
-            self.leavechannels = []
+
             try:
                 # print("Activitymap: " + str(activitymap))
                 doneusers = set([])
@@ -1946,6 +1940,9 @@ class NepBot(NepBotClass):
                                                  "moderator_id": config["twitchid"]})
                         resp = r.json()
                         logger.debug("Twitch Chatters Response: " + str(resp))
+                        if "error" in resp and resp["status"] == 403:
+                            self.leavechannels += "#" + name
+                            pass
                         a = []
                         for user in resp["data"]:
                             a.append(user)
@@ -2124,6 +2121,13 @@ class NepBot(NepBotClass):
                 logger.warning("Error: %s", str(sys.exc_info()))
                 logger.warning("Last run query: %s", cur._last_executed)
 
+            for c in self.leavechannels:
+                try:
+                    self.mychannels.remove(c)
+                except Exception:
+                    logger.warning("Couldn't remove channel %s from channels, it wasn't found. Channel list: %s",
+                                   str(c), str(self.mychannels))
+            self.leavechannels = []
             if self.autoupdate and booleanConfig("marathonBotFunctions"):
                 logger.debug("Updating Title and Game with horaro info")
                 schedule = getHoraro()
