@@ -1341,18 +1341,18 @@ def addBooster(userid, boostername, paid, status, eventTokens, channel, isWhispe
         return cur.lastrowid
 
 
-def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True, mega=False):
+def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True, mega=False, excludeFromScaling=None):
     with db.cursor() as cur:
         rarityColumns = ", ".join(
             "rarity" + str(i) + "UpgradeChance" for i in range(int(config["numNormalRarities"]) - 1))
 
         if buying:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, applyScaling, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
                 [packname])
         else:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, " + rarityColumns + " FROM boosters WHERE name = %s",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, applyScaling, " + rarityColumns + " FROM boosters WHERE name = %s",
                 [packname])
 
         packinfo = cur.fetchone()
@@ -1370,8 +1370,12 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         numTokens = packinfo[7]
         tokenChance = packinfo[8]
         canMega = packinfo[9]
-        normalChances = packinfo[10:]
-        
+        applyScaling = packinfo[10] != 0
+        normalChances = packinfo[11:]
+
+        if excludeFromScaling is None:
+            excludeFromScaling = applyScaling
+
         if numTokens >= numCards:
             raise InvalidBoosterException()
             
@@ -1398,7 +1402,7 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         scalingRaw = result[0]
         pityCounter = int(result[1])
 
-        if scalingRaw is None:
+        if scalingRaw is None or excludeFromScaling:
             scalingData = [0] * numScalingRarities
         else:
             scalingData = [int(n) for n in scalingRaw.split(':')]
@@ -1500,8 +1504,9 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         recordPullMetrics(*cards)
         addSpending(userid, cost*iterations)
 
-        # pity pull data update
-        cur.execute("UPDATE users SET pullScalingData = %s, eventTokens = eventTokens + %s WHERE id = %s",
+        # pity pull data update, if scaling is wanted
+        if not excludeFromScaling:
+            cur.execute("UPDATE users SET pullScalingData = %s, eventTokens = eventTokens + %s WHERE id = %s",
                     [":".join(str(round(n)) for n in scalingData), totalTokensDropped, userid])
 
         # insert opened booster
