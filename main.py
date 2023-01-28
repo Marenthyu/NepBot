@@ -1341,18 +1341,18 @@ def addBooster(userid, boostername, paid, status, eventTokens, channel, isWhispe
         return cur.lastrowid
 
 
-def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True, mega=False):
+def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True, mega=False, excludeFromScaling=None):
     with db.cursor() as cur:
         rarityColumns = ", ".join(
             "rarity" + str(i) + "UpgradeChance" for i in range(int(config["numNormalRarities"]) - 1))
 
         if buying:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, applyScaling, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
                 [packname])
         else:
             cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, " + rarityColumns + " FROM boosters WHERE name = %s",
+                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, applyScaling, " + rarityColumns + " FROM boosters WHERE name = %s",
                 [packname])
 
         packinfo = cur.fetchone()
@@ -1370,8 +1370,12 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         numTokens = packinfo[7]
         tokenChance = packinfo[8]
         canMega = packinfo[9]
-        normalChances = packinfo[10:]
-        
+        applyScaling = packinfo[10] != 0
+        normalChances = packinfo[11:]
+
+        if excludeFromScaling is None:
+            excludeFromScaling = not applyScaling
+
         if numTokens >= numCards:
             raise InvalidBoosterException()
             
@@ -1398,7 +1402,7 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         scalingRaw = result[0]
         pityCounter = int(result[1])
 
-        if scalingRaw is None:
+        if scalingRaw is None or excludeFromScaling:
             scalingData = [0] * numScalingRarities
         else:
             scalingData = [int(n) for n in scalingRaw.split(':')]
@@ -1500,8 +1504,9 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         recordPullMetrics(*cards)
         addSpending(userid, cost*iterations)
 
-        # pity pull data update
-        cur.execute("UPDATE users SET pullScalingData = %s, eventTokens = eventTokens + %s WHERE id = %s",
+        # pity pull data update, if scaling is wanted
+        if not excludeFromScaling:
+            cur.execute("UPDATE users SET pullScalingData = %s, eventTokens = eventTokens + %s WHERE id = %s",
                     [":".join(str(round(n)) for n in scalingData), totalTokensDropped, userid])
 
         # insert opened booster
@@ -1769,9 +1774,6 @@ class NepBot(NepBotClass):
                     logger.debug("Could not handle name change properly, abandoning the attempt.")
 
     def start(self, password):
-        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
-        self.pw = password
-        logger.info("Connecting...")
 
         def timer():
             with busyLock:
@@ -1889,21 +1891,33 @@ class NepBot(NepBotClass):
             isLive = {}
             viewerCount = {}
             for row in rows:
+                logger.debug("Checking row " + str(row))
                 channelids.append(str(row[1]))
                 idtoname[str(row[1])] = row[0]
                 isLive[str(row[0])] = False
 
-            while len(channelids) > 0:
-                currentSlice = channelids[:100]
-                response = requests.get("https://api.twitch.tv/helix/streams", headers=headers,
-                                        params={"type": "live", "user_id": currentSlice})
-                data = response.json()["data"]
+            iteratablechannels = channelids
+            logger.debug("Channel IDs to check: " + str(iteratablechannels))
+
+            while len(iteratablechannels) > 0:
+                currentSlice = iteratablechannels[:100]
+                logger.debug(str(currentSlice))
+                url = "https://api.twitch.tv/helix/streams?type=live"
+                for user in currentSlice:
+                    url = url + "&user_id=" + user
+                logger.debug("Constructed URL: " + url)
+                response = requests.get(url, headers=headers)
+                responseJSON = response.json()
+                logger.debug("Got Twitch Response JSON: " + str(responseJSON))
+                data = responseJSON["data"]
+                logger.debug("Got Twitch Response Data: " + str(data))
                 for element in data:
                     chanName = idtoname[str(element["user_id"])]
                     isLive[chanName] = True
                     logger.debug("%s is live!", idtoname[str(element["user_id"])])
                     viewerCount[chanName] = element["viewer_count"]
-                channelids = channelids[100:]
+                iteratablechannels = iteratablechannels[100:]
+                logger.debug("New Channel IDs: " + str(iteratablechannels))
             
             marathonLive = config['marathonChannel'][1:] in viewerCount
 
@@ -1911,19 +1925,12 @@ class NepBot(NepBotClass):
             for c in self.addchannels:
                 self.mychannels.append(c)
             self.addchannels = []
-            for c in self.leavechannels:
-                try:
-                    self.mychannels.remove(c)
-                except Exception:
-                    logger.warning("Couldn't remove channel %s from channels, it wasn't found. Channel list: %s",
-                                   str(c), str(self.mychannels))
-            self.leavechannels = []
+
             try:
                 # print("Activitymap: " + str(activitymap))
                 doneusers = set([])
                 validactivity = set([])
                 user_id_to_name_mappings = {}
-
                 for channelid in channelids:
                     name = idtoname[channelid]
                     logger.debug("Checking chatters for %s - %s", channelid, name)
@@ -1934,6 +1941,14 @@ class NepBot(NepBotClass):
                                          params={"first": 1000, "broadcaster_id": channelid,
                                                  "moderator_id": config["twitchid"]})
                         resp = r.json()
+                        logger.debug("Twitch Chatters Response: " + str(resp))
+                        if "error" in resp and (resp["status"] == 403 or resp["status"] == 404):
+                            self.leavechannels.append("#" + name)
+                            cur = db.cursor()
+                            cur.execute("DELETE FROM channels WHERE name = %s", [name])
+                            cur.close()
+                            continue
+                        logger.debug("NO ERROR FOR CHECKING")
                         a = []
                         for user in resp["data"]:
                             a.append(user)
@@ -1958,7 +1973,7 @@ class NepBot(NepBotClass):
                         if isLive[name]:
                             validactivity.update(user_logins)
                     except Exception:
-                        logger.error("Error fetching chatters for %s, skipping their chat for this cycle" % channelName)
+                        logger.error("Error fetching chatters for %s, skipping their chat for this cycle" % name)
                         logger.error("Error: %s", str(sys.exc_info()))
 
                 # process all users
@@ -2112,6 +2127,13 @@ class NepBot(NepBotClass):
                 logger.warning("Error: %s", str(sys.exc_info()))
                 logger.warning("Last run query: %s", cur._last_executed)
 
+            for c in self.leavechannels:
+                try:
+                    self.mychannels.remove(c)
+                except Exception:
+                    logger.warning("Couldn't remove channel %s from channels, it wasn't found. Channel list: %s",
+                                   str(c), str(self.mychannels))
+            self.leavechannels = []
             if self.autoupdate and booleanConfig("marathonBotFunctions"):
                 logger.debug("Updating Title and Game with horaro info")
                 schedule = getHoraro()
@@ -2160,6 +2182,9 @@ class NepBot(NepBotClass):
         if t is None:
             timer()
 
+        pool.connect(self, "irc.twitch.tv", 6667, tls=False, password=password)
+        self.pw = password
+        logger.info("Connecting...")
     def on_capability_twitch_tv_membership_available(self, nothing=None):
         logger.debug("WE HAS TWITCH MEMBERSHIP AVAILABLE!")
         return True

@@ -110,15 +110,15 @@ nav {
             #9f7928 30%,
             #8a6e2f 40%,
             transparent 80%
-        ),
-        radial-gradient(
+    ),
+    radial-gradient(
             ellipse farthest-corner at left top,
             #fedb37 0%,
             #fdb931 8%,
             #d1b464 25%,
             #5d4a1f 62.5%,
             #5d4a1f 100%
-        );
+    );
     color: white;
 }
 
@@ -141,8 +141,8 @@ nav {
             rgba(0, 0, 255, 0.8),
             rgba(75, 0, 162, 0.8),
             rgba(238, 162, 238, 0.8)
-        ),
-        black;
+    ),
+    black;
     color: white;
 }
 
@@ -155,8 +155,8 @@ nav {
             rgba(0, 0, 255, 0.8),
             rgba(75, 0, 162, 0.8),
             rgba(238, 162, 238, 0.8)
-        ),
-        black;
+    ),
+    black;
     color: white;
 }
 
@@ -170,6 +170,9 @@ nav {
     margin: 0.5rem;
     display: inline-block;
     min-width: 170px;
+    transition: transform 0.5s ease, box-shadow 0.2s ease;
+    will-change: transform, filter;
+    transform-origin: center;
 }
 
 .card-image {
@@ -351,7 +354,8 @@ nav {
     margin-left: auto;
     margin-right: auto;
     max-width: 100px;
-    left: 5px; right: 5px;
+    left: 5px;
+    right: 5px;
 }
 
 .toast-header {
@@ -491,7 +495,7 @@ textarea.sorthand-output {
 }
 
 html.dark-mode input[type=text], html.dark-mode textarea {
-    border-color: rgba(0,0,0,0.8);
+    border-color: rgba(0, 0, 0, 0.8);
     background-color: #1d1d1d;
     color: #d6d6d6;
 }
@@ -506,7 +510,7 @@ html.dark-mode nav {
 }
 
 html.dark-mode .card {
-    border-color: rgba(0,0,0,0.8);
+    border-color: rgba(0, 0, 0, 0.8);
 }
 
 html.dark-mode .card-body {
@@ -564,22 +568,22 @@ html.dark-mode .card-header {
     -webkit-transition: opacity .3s;
     line-height: 1;
     text-decoration: none !important;
-  }
+}
 
-  .hash-link:hover {
+.hash-link:hover {
     opacity: 1 !important;
-  }
+}
 
-  .dark-mode .hash-link-icon {
-      fill: #999;
-  }
+.dark-mode .hash-link-icon {
+    fill: #999;
+}
 
-  .hash-link .hash-link-icon {
-        vertical-align: middle;
-    }
+.hash-link .hash-link-icon {
+    vertical-align: middle;
+}
 
-  .anchor {
-      position: relative;
-      top: -60px;
-      display: block;
-  }
+.anchor {
+    position: relative;
+    top: -60px;
+    display: block;
+}
