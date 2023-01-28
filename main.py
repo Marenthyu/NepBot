@@ -1374,7 +1374,7 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         normalChances = packinfo[11:]
 
         if excludeFromScaling is None:
-            excludeFromScaling = applyScaling
+            excludeFromScaling = not applyScaling
 
         if numTokens >= numCards:
             raise InvalidBoosterException()
