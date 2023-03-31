@@ -6566,11 +6566,20 @@ class NepBot(NepBotClass):
                         self.message(channel, "%s, you have %d Anniversary Tokens. Items currently available to you: %s" % (tags['display-name'], purchaseData[3], " / ".join(purchasable)), isWhisper)
                 return
             if command == "pity":
-                redeemedCard = redeemPityQualification(tags['user-id'], args[0])
-                if (redeemedCard):
-                    self.message(channel, "Successfully redeemed your pity qualification! Check your hand for %s" % redeemedCard, isWhisper)
+                subcmd = "" if not len(args) else args[0].lower()
+                if subcmd == "counter":
+                    cur.execute("SELECT pityQualifications, pityCounter FROM users WHERE id = %s", tags['user-id'])
+                    result = cur.fetchone()
+                    pityQualifications = int(result[0])
+                    pityCounter = int(result[1])
+                    self.message(channel,"You currently have %d pity qualifications, and your counter is at %d / %d" % (pityQualifications, pityCounter, int(config["pityThreshold"])), isWhisper)
                 else:
-                    self.message(channel, "That didn't work - make sure you qualify for a pity and the waifu is available right now!", isWhisper)
+                    redeemedCard = redeemPityQualification(tags['user-id'], args[0])
+                    if redeemedCard:
+                        self.message(channel, "Successfully redeemed your pity qualification! Check your hand for %s" % redeemedCard, isWhisper)
+                    else:
+                        self.message(channel, "That didn't work - make sure you qualify for a pity and the waifu is available right now!", isWhisper)
+                return
 
 
 
