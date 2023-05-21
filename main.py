@@ -6567,7 +6567,7 @@ class NepBot(NepBotClass):
                 return
             if command == "pity":
                 if not len(args):
-                    self.message(channel, "Please provide a waifu ID to redeem or the 'count' subcommand.", isWhisper)
+                    self.message(channel, "Please provide a waifu ID to redeem or the 'counter' subcommand.", isWhisper)
                     return
                 with db.cursor() as cur:
                     subcmd = "" if not len(args) else args[0].lower()
