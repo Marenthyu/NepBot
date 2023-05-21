@@ -6566,6 +6566,9 @@ class NepBot(NepBotClass):
                         self.message(channel, "%s, you have %d Anniversary Tokens. Items currently available to you: %s" % (tags['display-name'], purchaseData[3], " / ".join(purchasable)), isWhisper)
                 return
             if command == "pity":
+                if not len(args):
+                    self.message(channel, "Please provide a waifu ID to redeem or the 'count' subcommand.", isWhisper)
+                    return
                 subcmd = "" if not len(args) else args[0].lower()
                 if subcmd == "counter":
                     cur.execute("SELECT pityQualifications, pityCounter FROM users WHERE id = %s", [tags['user-id']])
