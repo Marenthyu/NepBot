@@ -923,13 +923,14 @@ def sendSetAlert(channel, user, name, waifus, reward, firstTime, discord=True):
 def followsme(userid):
     try:
         r = requests.get(
-            "https://api.twitch.tv/helix/users/follows?from_id={twitchid}&to_id={myid}".format(twitchid=str(userid),
+            "https://api.twitch.tv/helix/channel/followers?user_id={twitchid}&broadcaster_id={myid}".format(twitchid=str(userid),
                                                                                            myid=str(
                                                                                                config["twitchid"])),
-            headers=headers)
+            headers={"Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
+                                                  "Client-ID": config["clientID"]})
         j = r.json()
         for element in j["data"]:
-            if element["from_id"] == str(userid):
+            if element["user_id"] == str(userid):
                 return True
         return False
     except Exception:
@@ -6567,7 +6568,7 @@ class NepBot(NepBotClass):
                 return
             if command == "pity":
                 if not len(args):
-                    self.message(channel, "Please provide a waifu ID to redeem or the 'count' subcommand.", isWhisper)
+                    self.message(channel, "Please provide a waifu ID to redeem or the 'counter' subcommand.", isWhisper)
                     return
                 with db.cursor() as cur:
                     subcmd = "" if not len(args) else args[0].lower()
