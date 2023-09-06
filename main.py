@@ -923,7 +923,7 @@ def sendSetAlert(channel, user, name, waifus, reward, firstTime, discord=True):
 def followsme(userid):
     try:
         r = requests.get(
-            "https://api.twitch.tv/helix/channel/followers?user_id={twitchid}&broadcaster_id={myid}".format(twitchid=str(userid),
+            "https://api.twitch.tv/helix/channels/followers?user_id={twitchid}&broadcaster_id={myid}".format(twitchid=str(userid),
                                                                                            myid=str(
                                                                                                config["twitchid"])),
             headers={"Authorization": "Bearer %s" % config["oauth"].replace("oauth:", ""),
