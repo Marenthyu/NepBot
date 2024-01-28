@@ -2783,7 +2783,11 @@ class NepBot(NepBotClass):
             if command == "buy":
                 if len(args) != 1:
                     if len(args) > 0 and args[0].lower() == "booster":
-                        self.message(channel, "%s, did you mean !booster buy?" % tags['display-name'], isWhisper)
+                        #we know what they meant, just do the command
+                        args[0] = "buy"
+                        command = "booster"
+                        self.do_command(command, args, sender, channel, tags, isWhisper)
+                        return
                     else:
                         self.message(channel, "Usage: !buy <rarity> (So !buy uncommon for an uncommon)",
                                      isWhisper=isWhisper)
