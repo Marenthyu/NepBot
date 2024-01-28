@@ -376,14 +376,34 @@ def updateCard(id, changes):
         cur.execute('UPDATE cards SET {} WHERE id = %s'.format(', '.join('{}=%s'.format(k) for k in changes)), list(changes.values()) + [id])
 
 def search(query, series=None):
+    # Search terms wrapped in quotes "" will use equality instead of LIKE comparisons
+    queryExact = query.startswith('"') and query.endswith('"')
     cur = db.cursor()
     if series is None:
-        cur.execute("SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name LIKE %s",
-                    ["%" + query + "%"])
+        if queryExact:
+            cur.execute("SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name = %s",
+            [query[1:-1]])
+        else:
+            cur.execute("SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name LIKE %s",
+            ["%" + query + "%"])
     else:
-        cur.execute(
-            "SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name LIKE %s AND series LIKE %s",
-            ["%" + query + "%", "%" + series + "%"])
+        seriesExact = series.startswith('"') and series.endswith('"')
+        if queryExact and seriesExact:
+            cur.execute(
+            "SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name = %s AND series = %s",
+            [query[1:-1], series[1:-1]])
+        elif queryExact:
+            cur.execute(
+                "SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name = %s AND series LIKE %s",
+                [query[1:-1], "%" + series + "%"])
+        elif seriesExact:
+            cur.execute(
+                "SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name LIKE %s AND series = %s",
+                ["%" + query + "%", series[1:-1]])
+        else:
+            cur.execute(
+                "SELECT id, name, series, base_rarity FROM waifus WHERE can_lookup = 1 AND name LIKE %s AND series LIKE %s",
+                ["%" + query + "%", "%" + series + "%"])
     rows = cur.fetchall()
     ret = []
     for row in rows:
