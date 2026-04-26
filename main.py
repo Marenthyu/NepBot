@@ -22,6 +22,7 @@ import sys
 import re
 import logging
 import base64
+import signal
 
 import websocket
 import _thread as thread
@@ -191,6 +192,15 @@ def loadConfig():
             if row[0] not in packAmountRewards:
                 packAmountRewards[row[0]] = {}
             packAmountRewards[row[0]][int(row[1])] = row[2]
+
+
+def handle_reload_signal(signum, frame):
+    logger.info("Received reload signal (%s), running loadConfig()", str(signum))
+    try:
+        loadConfig()
+        logger.info("Reload via signal completed")
+    except Exception as ex:
+        logger.exception("Reload via signal failed: %s", str(ex))
 
 
 def checkAndRenewAppAccessToken():
@@ -6770,6 +6780,7 @@ logger.debug("Channels: %s", str(channels))
 curg.close()
 
 loadConfig()
+signal.signal(signal.SIGUSR1, handle_reload_signal)
 
 # twitch api init
 checkAndRenewAppAccessToken()

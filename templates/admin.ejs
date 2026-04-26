@@ -1,0 +1,297 @@
+<%
+title = "Waifu TCG Admin";
+_%>
+<% include includes/header %>
+
+<h1>Admin Panel</h1>
+<p>Signed in as <strong><%= adminUser.display_name %></strong> (@<%= adminUser.login %>, ID <%= adminUser.user_id %>).</p>
+<p><a class="btn btn-outline-secondary btn-sm" href="/admin-logout">Logout</a></p>
+<% if (message) { %>
+    <div class="alert alert-info"><%= message %></div>
+<% } %>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header">Add Waifu</div>
+            <div class="card-body">
+                <form method="POST" action="/admin-waifu-add">
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input class="form-control" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Series</label>
+                        <input class="form-control" name="series" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Image URL</label>
+                        <input class="form-control" name="image" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Base Rarity</label>
+                        <input class="form-control" name="baseRarity" type="number" min="0" max="9" value="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Normal Weighting</label>
+                        <input class="form-control" name="normalWeighting" type="number" min="0" step="0.0001" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Event Weighting</label>
+                        <input class="form-control" name="eventWeighting" type="number" min="0" step="0.0001" value="1" required>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Add Waifu</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header">Edit Waifu</div>
+            <div class="card-body">
+                <form method="GET" action="/admin-waifu-load" class="mb-3">
+                    <div class="form-group">
+                        <label>Waifu ID</label>
+                        <input class="form-control" name="waifuId" type="number" min="1" value="<%= editWaifu.id || '' %>" required>
+                    </div>
+                    <button class="btn btn-secondary" type="submit">Load</button>
+                </form>
+                <form method="POST" action="/admin-waifu-update">
+                    <div class="form-group">
+                        <label>Waifu ID</label>
+                        <input class="form-control" name="waifuId" type="number" min="1" value="<%= editWaifu.id || '' %>" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input class="form-control" name="name" value="<%= editWaifu.name || '' %>" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Series</label>
+                        <input class="form-control" name="series" value="<%= editWaifu.series || '' %>" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Image URL</label>
+                        <input class="form-control" name="image" value="<%= editWaifu.image || '' %>" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Base Rarity</label>
+                        <input class="form-control" name="baseRarity" type="number" min="0" max="9" value="<%= editWaifu.base_rarity || 0 %>" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Normal Weighting</label>
+                        <input class="form-control" name="normalWeighting" type="number" min="0" step="0.0001" value="<%= editWaifu.normal_weighting || 1 %>" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Event Weighting</label>
+                        <input class="form-control" name="eventWeighting" type="number" min="0" step="0.0001" value="<%= editWaifu.event_weighting || 1 %>" required>
+                    </div>
+                    <button class="btn btn-warning" type="submit">Update Waifu</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">Booster Settings (Create / Edit)</div>
+    <div class="card-body">
+        <form method="GET" action="/admin-booster-load" class="mb-3">
+            <div class="form-row">
+                <div class="form-group col-md-8">
+                    <label>Booster Name</label>
+                    <input class="form-control" name="name" value="<%= boosterForm.name || '' %>" required>
+                </div>
+            </div>
+            <button class="btn btn-secondary" type="submit">Load</button>
+        </form>
+        <form method="POST" action="/admin-booster-update">
+            <div class="form-row">
+                <div class="form-group col-md-4">
+                    <label>Booster Name</label>
+                    <input class="form-control" name="name" value="<%= boosterForm.name || '' %>" required>
+                </div>
+                <div class="form-group col-md-4">
+                    <label>Sort Index</label>
+                    <input class="form-control" name="sortIndex" type="number" min="0" value="<%= boosterForm.sortIndex || 0 %>" required>
+                </div>
+                <div class="form-group col-md-4">
+                    <label>Cost</label>
+                    <input class="form-control" name="cost" type="number" min="0" value="<%= boosterForm.cost || 0 %>" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-md-4">
+                    <label>Number of Cards</label>
+                    <input class="form-control" name="numCards" type="number" min="1" value="<%= boosterForm.numCards || 1 %>" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-md-4">
+                    <label>Guarantee Rarity</label>
+                    <input class="form-control" name="guaranteeRarity" type="number" min="0" max="9" value="<%= boosterForm.guaranteeRarity || 0 %>" required>
+                </div>
+                <div class="form-group col-md-4">
+                    <label>Guarantee Count</label>
+                    <input class="form-control" name="guaranteeCount" type="number" min="0" value="<%= boosterForm.guaranteeCount || 0 %>" required>
+                </div>
+                <div class="form-group col-md-4">
+                    <label>Max Event Tokens</label>
+                    <input class="form-control" name="maxEventTokens" type="number" min="0" value="<%= boosterForm.maxEventTokens || 0 %>" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-md-4">
+                    <label>Event Token Chance</label>
+                    <input class="form-control" name="eventTokenChance" type="number" min="0" max="1" step="0.0001" value="<%= boosterForm.eventTokenChance || 0 %>" required>
+                </div>
+                <% boosterUpgradeColumns.forEach(function (column) { %>
+                    <div class="form-group col-md-4">
+                        <label><%= column %></label>
+                        <input class="form-control" name="<%= column %>" type="number" min="0" max="1" step="any" value="<%= boosterForm.rarityChances[column] || 1 %>" required>
+                    </div>
+                <% }) %>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-md-2">
+                    <label>Listed</label>
+                    <select class="form-control" name="listed">
+                        <option value="0" <%= boosterForm.listed ? '' : 'selected' %>>No</option>
+                        <option value="1" <%= boosterForm.listed ? 'selected' : '' %>>Yes</option>
+                    </select>
+                </div>
+                <div class="form-group col-md-2">
+                    <label>Buyable</label>
+                    <select class="form-control" name="buyable">
+                        <option value="0" <%= boosterForm.buyable ? '' : 'selected' %>>No</option>
+                        <option value="1" <%= boosterForm.buyable ? 'selected' : '' %>>Yes</option>
+                    </select>
+                </div>
+                <div class="form-group col-md-3">
+                    <label>Use Event Weightings</label>
+                    <select class="form-control" name="useEventWeightings">
+                        <option value="0" <%= boosterForm.useEventWeightings ? '' : 'selected' %>>No</option>
+                        <option value="1" <%= boosterForm.useEventWeightings ? 'selected' : '' %>>Yes</option>
+                    </select>
+                </div>
+                <div class="form-group col-md-2">
+                    <label>Can Mega</label>
+                    <select class="form-control" name="canMega">
+                        <option value="0" <%= boosterForm.canMega ? '' : 'selected' %>>No</option>
+                        <option value="1" <%= boosterForm.canMega ? 'selected' : '' %>>Yes</option>
+                    </select>
+                </div>
+                <div class="form-group col-md-3">
+                    <label>Apply Scaling</label>
+                    <select class="form-control" name="applyScaling">
+                        <option value="0" <%= boosterForm.applyScaling ? '' : 'selected' %>>No</option>
+                        <option value="1" <%= boosterForm.applyScaling ? 'selected' : '' %>>Yes</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-info" type="submit">Save Booster</button>
+        </form>
+    </div>
+</div>
+
+<div class="card mb-3 border-danger">
+    <div class="card-header text-danger">One-Click Event Close</div>
+    <div class="card-body">
+        <p class="mb-2">
+            This will:
+            <strong>(1)</strong> set all event waifus to <code>promo</code>,
+            <strong>(2)</strong> set one listed booster to unlisted + unbuyable,
+            <strong>(3)</strong> trigger the Python bot reload.
+        </p>
+        <button class="btn btn-danger" id="oneClickEventCloseBtn" type="button">Run One-Click Event Close</button>
+        <div class="mt-2 text-muted" id="oneClickEventCloseStatus"></div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const btn = document.getElementById('oneClickEventCloseBtn');
+        const status = document.getElementById('oneClickEventCloseStatus');
+        if (!btn || !status) {
+            return;
+        }
+
+        function setStatus(message, isError) {
+            status.textContent = message || '';
+            status.className = isError ? 'mt-2 text-danger' : 'mt-2 text-success';
+        }
+
+        async function fetchListedBoosters() {
+            const response = await fetch('/admin-listed-boosters', {credentials: 'same-origin'});
+            if (!response.ok) {
+                throw new Error('Could not load listed boosters.');
+            }
+            const data = await response.json();
+            return Array.isArray(data.boosters) ? data.boosters : [];
+        }
+
+        async function runEventClose(boosterName, allowPromotedCopies) {
+            const payload = new URLSearchParams();
+            payload.set('boosterName', boosterName);
+            payload.set('allowPromotedCopies', allowPromotedCopies ? '1' : '0');
+            const response = await fetch('/admin-event-close', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+                body: payload.toString()
+            });
+            const text = await response.text();
+            let data = {};
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch (e) {
+                data = {};
+            }
+            return {response, data, rawText: text};
+        }
+
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            setStatus('Loading listed boosters...', false);
+            try {
+                const boosters = await fetchListedBoosters();
+                if (!boosters.length) {
+                    throw new Error('No currently listed boosters were found.');
+                }
+                const chosen = window.prompt(
+                    'Pick booster to set unlisted+unbuyable:\n\n' + boosters.join('\n'),
+                    boosters[0]
+                );
+                if (chosen === null) {
+                    setStatus('Cancelled.', false);
+                    return;
+                }
+                const selected = String(chosen).trim();
+                if (!selected) {
+                    throw new Error('No booster selected.');
+                }
+
+                setStatus('Applying one-click event close...', false);
+                let result = await runEventClose(selected, false);
+                if (result.response.status === 409 && result.data && result.data.requiresConfirmation) {
+                    const confirmed = window.confirm((result.data.message || 'Some event waifus are already promoted. Continue?') + '\n\nThis may affect already-promoted event waifus.');
+                    if (!confirmed) {
+                        setStatus('Cancelled after promoted-waifu warning.', false);
+                        return;
+                    }
+                    result = await runEventClose(selected, true);
+                }
+
+                if (!result.response.ok) {
+                    throw new Error(result.data && result.data.message ? result.data.message : (result.rawText || 'Operation failed.'));
+                }
+                setStatus((result.data && result.data.message) || 'One-click event close completed.', false);
+            } catch (err) {
+                setStatus(err && err.message ? err.message : 'Operation failed.', true);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    })();
+</script>
+
+<% include includes/footer _%>

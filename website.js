@@ -10,6 +10,8 @@ let ejs = require('ejs');
 let moment = require('moment');
 let webpush = require('web-push');
 let got = require('got');
+let querystring = require('querystring');
+let childProcess = require('child_process');
 // From BarryCarlyon, thanks! https://github.com/BarryCarlyon/twitch_misc/blob/master/authentication/oidc_authentication/server.js
 const jwt = require('jsonwebtoken');
 
@@ -76,17 +78,23 @@ let dbuser = null;
 let dbhost = null;
 let isLocalMode = false;
 let config = {};
+let cfgConfig = {};
 for (let line of cfglines) {
     let lineparts = line.split("=");
-    if (lineparts[0] === "dbpassword") {
-        dbpw = lineparts[1];
-    } else if (lineparts[0] === "database") {
-        dbname = lineparts[1];
-    } else if (lineparts[0] === "dbuser") {
-        dbuser = lineparts[1];
-    } else if (lineparts[0] === "dbhost") {
-        dbhost = lineparts[1];
-    } else if (lineparts[0] === "local") {
+    let name = lineparts[0];
+    let value = lineparts.slice(1).join("=");
+    if (name) {
+        cfgConfig[name] = value;
+    }
+    if (name === "dbpassword") {
+        dbpw = value;
+    } else if (name === "database") {
+        dbname = value;
+    } else if (name === "dbuser") {
+        dbuser = value;
+    } else if (name === "dbhost") {
+        dbhost = value;
+    } else if (name === "local") {
         isLocalMode = true;
     }
 }
@@ -145,6 +153,583 @@ function httpError(res, code, status, body) {
         res.write(body);
     }
     res.end();
+}
+
+function parseCookies(req) {
+    let header = req.headers.cookie;
+    let cookies = {};
+    if (!header) {
+        return cookies;
+    }
+    let split = header.split(';');
+    for (let item of split) {
+        let parts = item.split('=');
+        if (parts.length < 2) {
+            continue;
+        }
+        cookies[parts[0].trim()] = decodeURIComponent(parts.slice(1).join('='));
+    }
+    return cookies;
+}
+
+function parseRequestBody(req, callback) {
+    let body = '';
+    req.on('data', (data) => {
+        body += data;
+        if (body.length > 1e6) {
+            req.connection.destroy();
+        }
+    });
+    req.on('end', () => {
+        callback(body);
+    });
+}
+
+function isAdminIdentity(identity, callback) {
+    con.query('SELECT 1 FROM admins WHERE LOWER(name) = ? LIMIT 1', [identity.login.toLowerCase()], function (err, result) {
+        if (err) {
+            callback(err, false);
+            return;
+        }
+        callback(null, result.length > 0);
+    });
+}
+
+function getAdminJWTSecret() {
+    return config['adminJwtSecret'] || config['adminjwtsecret'] || config['jwtSecret'] || config['jwtsecret'] || config['admin_jwt_secret'];
+}
+
+function issueAdminJWT(identity) {
+    let secret = getAdminJWTSecret();
+    if (!secret) {
+        throw new Error('Missing adminJwtSecret configuration');
+    }
+    return jwt.sign({
+        display_name: identity.display_name,
+        login: identity.login,
+        user_id: identity.user_id,
+        is_admin: true
+    }, secret, {
+        algorithm: 'HS256',
+        expiresIn: config['adminJwtExpirySeconds'] || '12h',
+        issuer: 'waifus-admin',
+        audience: 'waifus-admin-panel'
+    });
+}
+
+function readAdminJWT(req) {
+    let cookies = parseCookies(req);
+    if (!cookies.admin_token) {
+        return null;
+    }
+    let secret = getAdminJWTSecret();
+    if (!secret) {
+        return null;
+    }
+    try {
+        return jwt.verify(cookies.admin_token, secret, {
+            algorithms: ['HS256'],
+            issuer: 'waifus-admin',
+            audience: 'waifus-admin-panel'
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
+function requireAdminJWT(req, res, callback) {
+    let payload = readAdminJWT(req);
+    if (!payload || payload.is_admin !== true) {
+        httpError(res, 403, 'Forbidden', 'Admin access required.');
+        return;
+    }
+    callback(payload);
+}
+
+function twitchOAuthStart(res) {
+    let clientID = config['clientID'];
+    let redirectUri = (config['siteHost'] || '').replace(/\/$/, '') + '/admin/twitch/callback';
+    if (!clientID || !config['siteHost']) {
+        httpError(res, 500, 'Server Error', 'Missing Twitch OAuth configuration.');
+        return;
+    }
+    let state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    let location = 'https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=' + encodeURIComponent(clientID) +
+        '&redirect_uri=' + encodeURIComponent(redirectUri) + '&scope=openid&state=' + encodeURIComponent(state);
+    res.writeHead(302, {
+        'Location': location,
+        'Set-Cookie': 'twitch_admin_oauth_state=' + encodeURIComponent(state) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=600'
+    });
+    res.end();
+}
+
+function exchangeTwitchCode(code, callback) {
+    let clientID = config['clientID'];
+    let clientSecret = config['clientSecret'] || config['twitchclientsecret'] || config['twitchClientSecret'] || config['client_secret'];
+    let redirectUri = (config['siteHost'] || '').replace(/\/$/, '') + '/admin/twitch/callback';
+    if (!clientID || !clientSecret || !config['siteHost']) {
+        console.error('[admin-oauth] Missing Twitch OAuth config values. clientID?', !!clientID, 'clientSecret?', !!clientSecret, 'siteHost?', !!config['siteHost']);
+        callback(new Error('Missing Twitch OAuth config values clientID/clientSecret/siteHost'));
+        return;
+    }
+    console.log('[admin-oauth] Exchanging Twitch code for token. redirectUri=', redirectUri, 'codeLength=', String(code || '').length);
+    request.post({
+        url: 'https://id.twitch.tv/oauth2/token',
+        form: {
+            client_id: clientID,
+            client_secret: clientSecret,
+            code: code,
+            grant_type: 'authorization_code',
+            redirect_uri: redirectUri
+        },
+        json: true
+    }, function (err, response, body) {
+        if (err) {
+            console.error('[admin-oauth] Twitch token exchange request error:', err);
+        }
+        if (response) {
+            console.log('[admin-oauth] Twitch token exchange response status:', response.statusCode);
+        }
+        if (err || !body || !body.access_token) {
+            console.error('[admin-oauth] Twitch token exchange failed. Response body:', body);
+            callback(err || new Error('Missing access token from Twitch'));
+            return;
+        }
+        console.log('[admin-oauth] Twitch token exchange succeeded. accessTokenLength=', String(body.access_token || '').length);
+        callback(null, body.access_token);
+    });
+}
+
+function fetchTwitchUser(accessToken, callback) {
+    request.get({
+        url: 'https://api.twitch.tv/helix/users',
+        headers: {
+            'Authorization': 'Bearer ' + accessToken,
+            'Client-ID': config['clientID']
+        },
+        json: true
+    }, function (err, response, body) {
+        if (err || !body || !body.data || body.data.length === 0) {
+            callback(err || new Error('Unable to fetch Twitch user profile'));
+            return;
+        }
+        let user = body.data[0];
+        callback(null, {
+            display_name: user.display_name,
+            login: user.login,
+            user_id: user.id
+        });
+    });
+}
+
+function getBoosterUpgradeColumns() {
+    let normalRarities = parseInt(config['numNormalRarities'] || '0', 10);
+    if (!normalRarities || normalRarities < 2) {
+        normalRarities = 6;
+    }
+    let columns = [];
+    for (let i = 0; i < normalRarities - 1; i++) {
+        columns.push('rarity' + i + 'UpgradeChance');
+    }
+    return columns;
+}
+
+function defaultBoosterFormData() {
+    let rarityChances = {};
+    for (let column of getBoosterUpgradeColumns()) {
+        rarityChances[column] = 1;
+    }
+    return {
+        name: '',
+        sortIndex: 0,
+        listed: 0,
+        buyable: 0,
+        cost: 0,
+        numCards: 1,
+        guaranteeRarity: 0,
+        guaranteeCount: 0,
+        useEventWeightings: 0,
+        maxEventTokens: 0,
+        eventTokenChance: 0,
+        canMega: 0,
+        applyScaling: 1,
+        rarityChances: rarityChances
+    };
+}
+
+function parseBoosterForm(form) {
+    let booster = {
+        name: String(form.name || '').trim(),
+        sortIndex: parseInt(form.sortIndex || '0', 10),
+        listed: form.listed === '1' ? 1 : 0,
+        buyable: form.buyable === '1' ? 1 : 0,
+        cost: parseInt(form.cost || '0', 10),
+        numCards: parseInt(form.numCards || '0', 10),
+        guaranteeRarity: parseInt(form.guaranteeRarity || '0', 10),
+        guaranteeCount: parseInt(form.guaranteeCount || '0', 10),
+        useEventWeightings: form.useEventWeightings === '1' ? 1 : 0,
+        maxEventTokens: parseInt(form.maxEventTokens || '0', 10),
+        eventTokenChance: parseFloat(form.eventTokenChance || '0'),
+        canMega: form.canMega === '1' ? 1 : 0,
+        applyScaling: form.applyScaling === '1' ? 1 : 0,
+        rarityChances: {}
+    };
+    for (let column of getBoosterUpgradeColumns()) {
+        booster.rarityChances[column] = parseFloat(form[column] || '1');
+    }
+    let invalidFields = [];
+    for (let field of ['sortIndex', 'cost', 'numCards', 'guaranteeRarity', 'guaranteeCount', 'maxEventTokens', 'eventTokenChance']) {
+        if (Number.isNaN(booster[field])) {
+            invalidFields.push(field);
+        }
+    }
+    for (let column of Object.keys(booster.rarityChances)) {
+        if (Number.isNaN(booster.rarityChances[column])) {
+            invalidFields.push(column);
+        }
+    }
+    if (invalidFields.length) {
+        console.warn('[admin-booster] Parsed booster form contains invalid numeric fields.', {
+            name: booster.name,
+            invalidFields: invalidFields
+        });
+    }
+    return booster;
+}
+
+function renderAdminPanel(req, res, adminUser, message, editWaifu, boosterForm) {
+    res.writeHead(200, {'Content-Type': 'text/html'});
+    renderTemplateAndEnd('templates/admin.ejs', {
+        title: 'Admin Panel',
+        currentPage: 'admin',
+        user: adminUser.login,
+        isAdmin: true,
+        adminUser: adminUser,
+        message: message || '',
+        editWaifu: editWaifu || {
+            id: '',
+            name: '',
+            series: '',
+            image: '',
+            base_rarity: 0,
+            normal_weighting: 1,
+            event_weighting: 1
+        },
+        boosterForm: boosterForm || defaultBoosterFormData(),
+        boosterUpgradeColumns: getBoosterUpgradeColumns()
+    }, res);
+}
+
+function adminPanel(req, res) {
+    let adminUser = readAdminJWT(req);
+    if (!adminUser || adminUser.is_admin !== true) {
+        res.writeHead(302, {'Location': '/admin-login'});
+        res.end();
+        return;
+    }
+    renderAdminPanel(req, res, adminUser, '', null, null);
+}
+
+function adminLogout(res) {
+    res.writeHead(302, {
+        'Location': '/',
+        'Set-Cookie': 'admin_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
+    });
+    res.end();
+}
+
+function adminLoadWaifu(req, res, query) {
+    requireAdminJWT(req, res, (adminUser) => {
+        let waifuID = parseInt(query.waifuId || '0', 10);
+        if (!waifuID) {
+            renderAdminPanel(req, res, adminUser, 'Please provide a valid Waifu ID to load.', null, null);
+            return;
+        }
+        con.query('SELECT id, name, series, image, base_rarity, normal_weighting, event_weighting FROM waifus WHERE id = ? LIMIT 1', [waifuID], (err, rows) => {
+            if (err) {
+                httpError(res, 500, 'Server Error', 'Could not load waifu.');
+                return;
+            }
+            if (!rows || rows.length === 0) {
+                renderAdminPanel(req, res, adminUser, 'No waifu found for ID ' + waifuID + '.', null, null);
+                return;
+            }
+            renderAdminPanel(req, res, adminUser, 'Loaded waifu #' + waifuID + ' for editing.', rows[0], null);
+        });
+    });
+}
+
+function adminUpdateWaifu(req, res) {
+    requireAdminJWT(req, res, () => {
+        parseRequestBody(req, (body) => {
+            let form = querystring.parse(body);
+            let waifuID = parseInt(form.waifuId, 10);
+            if (!waifuID || !form.name || !form.series || !form.image) {
+                httpError(res, 400, 'Bad Request', 'Missing required waifu fields');
+                return;
+            }
+            con.query('UPDATE waifus SET name = ?, series = ?, image = ?, base_rarity = ?, normal_weighting = ?, event_weighting = ? WHERE id = ?', [form.name, form.series, form.image, parseInt(form.baseRarity || 0, 10), parseFloat(form.normalWeighting || 1), parseFloat(form.eventWeighting || 1), waifuID], (err) => {
+                if (err) {
+                    httpError(res, 500, 'Server Error', 'Could not update waifu.');
+                    return;
+                }
+                res.writeHead(302, {'Location': '/admin'});
+                res.end();
+            });
+        });
+    });
+}
+
+function adminAddWaifu(req, res) {
+    requireAdminJWT(req, res, () => {
+        parseRequestBody(req, (body) => {
+            let form = querystring.parse(body);
+            if (!form.name || !form.series || !form.image) {
+                httpError(res, 400, 'Bad Request', 'Missing required waifu fields');
+                return;
+            }
+            con.query('INSERT INTO waifus(name, series, image, base_rarity, normal_weighting, event_weighting) VALUES (?, ?, ?, ?, ?, ?)', [form.name, form.series, form.image, parseInt(form.baseRarity || 0, 10), parseFloat(form.normalWeighting || 1), parseFloat(form.eventWeighting || 1)], (err) => {
+                if (err) {
+                    httpError(res, 500, 'Server Error', 'Could not add waifu.');
+                    return;
+                }
+                res.writeHead(302, {'Location': '/admin'});
+                res.end();
+            });
+        });
+    });
+}
+
+function adminUpdateBooster(req, res) {
+    requireAdminJWT(req, res, (adminUser) => {
+        parseRequestBody(req, (body) => {
+            let form = querystring.parse(body);
+            let booster = parseBoosterForm(form);
+            console.log('[admin-booster] Save request received.', {
+                admin: adminUser && adminUser.login ? adminUser.login : 'unknown',
+                boosterName: booster.name,
+                listed: booster.listed,
+                buyable: booster.buyable,
+                numCards: booster.numCards,
+                rarityColumnsConfigured: getBoosterUpgradeColumns().length
+            });
+            if (!booster.name) {
+                console.warn('[admin-booster] Save aborted due to missing booster name.');
+                httpError(res, 400, 'Bad Request', 'Missing booster name');
+                return;
+            }
+            let rarityColumns = getBoosterUpgradeColumns();
+            let fields = ['name', 'sortIndex', 'listed', 'buyable', 'cost', 'numCards', 'guaranteeRarity', 'guaranteeCount', 'useEventWeightings', 'maxEventTokens', 'eventTokenChance', 'canMega', 'applyScaling'].concat(rarityColumns);
+            let placeholders = fields.map(() => '?').join(', ');
+            let values = [booster.name, booster.sortIndex, booster.listed, booster.buyable, booster.cost, booster.numCards, booster.guaranteeRarity, booster.guaranteeCount, booster.useEventWeightings, booster.maxEventTokens, booster.eventTokenChance, booster.canMega, booster.applyScaling];
+            for (let column of rarityColumns) {
+                values.push(booster.rarityChances[column]);
+            }
+            let updateParts = fields.filter((field) => field !== 'name').map((field) => field + ' = VALUES(' + field + ')').join(', ');
+            let sql = 'INSERT INTO boosters(' + fields.join(', ') + ') VALUES (' + placeholders + ') ON DUPLICATE KEY UPDATE ' + updateParts;
+            con.query(sql, values, (err) => {
+                if (err) {
+                    console.error('[admin-booster] Save failed.', {
+                        boosterName: booster.name,
+                        fieldCount: fields.length,
+                        rarityColumnCount: rarityColumns.length,
+                        errorCode: err.code,
+                        errorNumber: err.errno,
+                        sqlState: err.sqlState,
+                        sqlMessage: err.sqlMessage || err.message
+                    });
+                    httpError(res, 500, 'Server Error', 'Could not save booster settings.');
+                    return;
+                }
+                console.log('[admin-booster] Save successful.', {
+                    boosterName: booster.name,
+                    admin: adminUser && adminUser.login ? adminUser.login : 'unknown'
+                });
+                res.writeHead(302, {'Location': '/admin'});
+                res.end();
+            });
+        });
+    });
+}
+
+function adminLoadBooster(req, res, query) {
+    requireAdminJWT(req, res, (adminUser) => {
+        let boosterName = String(query.name || '').trim();
+        if (!boosterName) {
+            console.warn('[admin-booster] Load aborted due to missing booster name.', {
+                admin: adminUser && adminUser.login ? adminUser.login : 'unknown'
+            });
+            renderAdminPanel(req, res, adminUser, 'Please provide a booster name to load.', null, null);
+            return;
+        }
+        console.log('[admin-booster] Load request received.', {
+            admin: adminUser && adminUser.login ? adminUser.login : 'unknown',
+            boosterName: boosterName
+        });
+        let rarityColumns = getBoosterUpgradeColumns();
+        let sql = 'SELECT name, sortIndex, listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, applyScaling' + (rarityColumns.length ? ', ' + rarityColumns.join(', ') : '') + ' FROM boosters WHERE name = ? LIMIT 1';
+        con.query(sql, [boosterName], (err, rows) => {
+            if (err) {
+                console.error('[admin-booster] Load failed.', {
+                    boosterName: boosterName,
+                    errorCode: err.code,
+                    errorNumber: err.errno,
+                    sqlState: err.sqlState,
+                    sqlMessage: err.sqlMessage || err.message
+                });
+                httpError(res, 500, 'Server Error', 'Could not load booster.');
+                return;
+            }
+            if (!rows || rows.length === 0) {
+                console.warn('[admin-booster] Load found no booster.', {
+                    boosterName: boosterName
+                });
+                renderAdminPanel(req, res, adminUser, 'No booster found for name "' + boosterName + '".', null, null);
+                return;
+            }
+            let row = rows[0];
+            let boosterForm = {
+                name: row.name,
+                sortIndex: row.sortIndex,
+                listed: row.listed,
+                buyable: row.buyable,
+                cost: row.cost,
+                numCards: row.numCards,
+                guaranteeRarity: row.guaranteeRarity,
+                guaranteeCount: row.guaranteeCount,
+                useEventWeightings: row.useEventWeightings,
+                maxEventTokens: row.maxEventTokens,
+                eventTokenChance: row.eventTokenChance,
+                canMega: row.canMega,
+                applyScaling: row.applyScaling,
+                rarityChances: {}
+            };
+            for (let column of rarityColumns) {
+                boosterForm.rarityChances[column] = row[column];
+            }
+            console.log('[admin-booster] Load successful.', {
+                boosterName: boosterName,
+                rarityColumnCount: rarityColumns.length
+            });
+            renderAdminPanel(req, res, adminUser, 'Loaded booster "' + boosterName + '" for editing.', null, boosterForm);
+        });
+    });
+}
+
+function adminGetListedBoosters(req, res) {
+    requireAdminJWT(req, res, () => {
+        con.query('SELECT name FROM boosters WHERE listed = 1 ORDER BY sortIndex ASC, name ASC', (err, rows) => {
+            if (err) {
+                console.error('[admin-event-close] Could not load listed boosters:', err);
+                httpError(res, 500, 'Server Error', 'Could not load listed boosters.');
+                return;
+            }
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({boosters: rows.map((row) => row.name)}));
+        });
+    });
+}
+
+function triggerPythonBotReload(callback) {
+    childProcess.execFile('pkill', ['-USR1', '-f', 'main.py'], (err, stdout, stderr) => {
+        if (err) {
+            callback(err);
+            return;
+        }
+        callback(null, {
+            stdout: stdout,
+            stderr: stderr
+        });
+    });
+}
+
+function adminCloseEvent(req, res) {
+    requireAdminJWT(req, res, (adminUser) => {
+        parseRequestBody(req, (body) => {
+            let form = querystring.parse(body);
+            let boosterName = String(form.boosterName || '').trim();
+            let allowPromotedCopies = form.allowPromotedCopies === '1';
+            if (!boosterName) {
+                httpError(res, 400, 'Bad Request', 'Missing boosterName.');
+                return;
+            }
+            console.log('[admin-event-close] Request received.', {
+                admin: adminUser && adminUser.login ? adminUser.login : 'unknown',
+                boosterName: boosterName,
+                allowPromotedCopies: allowPromotedCopies
+            });
+            con.query('SELECT id, name FROM waifus WHERE is_event = 1 AND rarity = ? LIMIT 1', ['promoted'], (promotedErr, promotedRows) => {
+                if (promotedErr) {
+                    console.error('[admin-event-close] Could not inspect promoted event waifus:', promotedErr);
+                    httpError(res, 500, 'Server Error', 'Could not inspect event waifu rarity state.');
+                    return;
+                }
+                if (promotedRows && promotedRows.length > 0 && !allowPromotedCopies) {
+                    res.writeHead(409, {'Content-Type': 'application/json'});
+                    res.end(JSON.stringify({
+                        requiresConfirmation: true,
+                        message: 'Some event waifus are already promoted. Confirm to continue anyway.',
+                        sampleWaifuId: promotedRows[0].id,
+                        sampleWaifuName: promotedRows[0].name
+                    }));
+                    return;
+                }
+                con.beginTransaction((txErr) => {
+                    if (txErr) {
+                        console.error('[admin-event-close] Could not start transaction:', txErr);
+                        httpError(res, 500, 'Server Error', 'Could not start update transaction.');
+                        return;
+                    }
+                    con.query('UPDATE waifus SET rarity = ? WHERE is_event = 1', ['promo'], (waifuErr, waifuResult) => {
+                        if (waifuErr) {
+                            return con.rollback(() => {
+                                console.error('[admin-event-close] Could not update event waifus:', waifuErr);
+                                httpError(res, 500, 'Server Error', 'Could not update event waifus.');
+                            });
+                        }
+                        con.query('UPDATE boosters SET listed = 0, buyable = 0 WHERE name = ? LIMIT 1', [boosterName], (boosterErr, boosterResult) => {
+                            if (boosterErr) {
+                                return con.rollback(() => {
+                                    console.error('[admin-event-close] Could not update booster listing state:', boosterErr);
+                                    httpError(res, 500, 'Server Error', 'Could not update booster listing state.');
+                                });
+                            }
+                            if (!boosterResult || boosterResult.affectedRows < 1) {
+                                return con.rollback(() => {
+                                    httpError(res, 404, 'Not Found', 'Selected booster not found.');
+                                });
+                            }
+                            con.commit((commitErr) => {
+                                if (commitErr) {
+                                    return con.rollback(() => {
+                                        console.error('[admin-event-close] Could not commit updates:', commitErr);
+                                        httpError(res, 500, 'Server Error', 'Could not commit event close updates.');
+                                    });
+                                }
+                                triggerPythonBotReload((reloadErr) => {
+                                    if (reloadErr) {
+                                        console.error('[admin-event-close] Data updates succeeded, but bot reload trigger failed:', reloadErr);
+                                        httpError(res, 500, 'Server Error', 'Event updates were applied, but bot reload trigger failed.');
+                                        return;
+                                    }
+                                    console.log('[admin-event-close] Completed successfully.', {
+                                        admin: adminUser && adminUser.login ? adminUser.login : 'unknown',
+                                        boosterName: boosterName,
+                                        waifusUpdated: waifuResult && typeof waifuResult.affectedRows === 'number' ? waifuResult.affectedRows : null
+                                    });
+                                    res.writeHead(200, {'Content-Type': 'application/json'});
+                                    res.end(JSON.stringify({
+                                        ok: true,
+                                        message: 'Event waifus switched to promo, booster hidden/unbuyable, and bot reload triggered.'
+                                    }));
+                                });
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    });
 }
 
 let rarities = {
@@ -1047,7 +1632,7 @@ function removeSubscription(subID) {
 }
 
 function readConfig(callback) {
-    config = {};
+    config = Object.assign({}, cfgConfig);
     if (!isLocalMode) {
         con.query("SELECT * FROM config", function (err, result) {
             for (let row of result) {
@@ -1165,6 +1750,46 @@ function bootServer(callback) {
                     browser(req, res, q.query);
                     break;
                 }
+                case "admin": {
+                    adminPanel(req, res);
+                    break;
+                }
+                case "admin-login": {
+                    twitchOAuthStart(res);
+                    break;
+                }
+                case "admin-logout": {
+                    adminLogout(res);
+                    break;
+                }
+                case "admin-waifu-add": {
+                    adminAddWaifu(req, res);
+                    break;
+                }
+                case "admin-waifu-load": {
+                    adminLoadWaifu(req, res, q.query);
+                    break;
+                }
+                case "admin-waifu-update": {
+                    adminUpdateWaifu(req, res);
+                    break;
+                }
+                case "admin-booster-load": {
+                    adminLoadBooster(req, res, q.query);
+                    break;
+                }
+                case "admin-listed-boosters": {
+                    adminGetListedBoosters(req, res);
+                    break;
+                }
+                case "admin-event-close": {
+                    adminCloseEvent(req, res);
+                    break;
+                }
+                case "admin-booster-update": {
+                    adminUpdateBooster(req, res);
+                    break;
+                }
                 case "pushregistration": {
                     pushRegistration(req, res, q.query);
                     break;
@@ -1185,6 +1810,57 @@ function bootServer(callback) {
                 }
                 case "sendpush": {
                     sendPush(req, res, q.query);
+                    break;
+                }
+                case "admin/twitch/callback": {
+                    let cookies = parseCookies(req);
+                    if (!q.query.code || !q.query.state || cookies.twitch_admin_oauth_state !== q.query.state) {
+                        console.error('[admin-oauth] Invalid callback state.', {
+                            hasCode: !!q.query.code,
+                            hasState: !!q.query.state,
+                            hasCookieState: !!cookies.twitch_admin_oauth_state,
+                            stateMatches: cookies.twitch_admin_oauth_state === q.query.state
+                        });
+                        httpError(res, 400, 'Bad Request', 'Invalid Twitch OAuth callback state.');
+                        break;
+                    }
+                    console.log('[admin-oauth] Received valid callback. stateLength=', String(q.query.state || '').length, 'codeLength=', String(q.query.code || '').length);
+                    exchangeTwitchCode(q.query.code, (err, accessToken) => {
+                        if (err) {
+                            console.error('[admin-oauth] Could not exchange Twitch OAuth code:', err);
+                            httpError(res, 500, 'Server Error', 'Could not exchange Twitch OAuth code.');
+                            return;
+                        }
+                        fetchTwitchUser(accessToken, (err2, identity) => {
+                            if (err2) {
+                                httpError(res, 500, 'Server Error', 'Could not load Twitch profile.');
+                                return;
+                            }
+                            isAdminIdentity(identity, (err3, isAdmin) => {
+                                if (err3) {
+                                    httpError(res, 500, 'Server Error', 'Could not verify admin permissions.');
+                                    return;
+                                }
+                                if (!isAdmin) {
+                                    httpError(res, 403, 'Forbidden', 'This Twitch account is not an admin.');
+                                    return;
+                                }
+                                    let token;
+                                    try {
+                                        token = issueAdminJWT(identity);
+                                    } catch (jwtErr) {
+                                        console.error('[admin-oauth] Could not issue admin JWT:', jwtErr);
+                                        httpError(res, 500, 'Server Error', 'Could not issue admin JWT.');
+                                        return;
+                                    }
+                                    res.writeHead(302, {
+                                        'Location': '/admin',
+                                        'Set-Cookie': 'admin_token=' + encodeURIComponent(token) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200'
+                                    });
+                                res.end();
+                            });
+                        });
+                    });
                     break;
                 }
                 default: {
