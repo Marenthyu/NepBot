@@ -13,6 +13,7 @@ import json
 import threading
 import math
 import functools
+import tornado.ioloop
 from string import ascii_letters
 from collections import defaultdict, OrderedDict
 from private_functions import validateWaifuURL, processWaifuURL, validateBadgeURL, processBadgeURL, tokenGachaRoll
@@ -2217,10 +2218,76 @@ class NepBot(NepBotClass):
     def on_connect(self):
         logger.info("Connected! joining channels...")
         super().on_connect()
-        for channel in self.mychannels:
-            channel = channel.lower()
-            logger.debug("Joining %s...", channel)
-            self.join(channel)
+        normalizedChannels = [channel.lower() for channel in self.mychannels]
+        # Twitch default join rate limit for normal accounts: 20 join attempts / 10 seconds.
+        # Use the normal-account limit here to stay safe on legacy deployments.
+        joinRateLimit = 20
+        joinRateWindowSeconds = 10.0
+        joinChunkSize = 20
+        # Be conservative in this legacy stack: keep a margin below 512 to avoid edge-case overflow/rejection.
+        maxJoinArgLength = 512 - len("JOIN ") - 2 - 64
+        joinChunks = []
+        joinChunk = []
+        joinChunkLength = 0
+
+        for channel in normalizedChannels:
+            separatorLength = 1 if len(joinChunk) > 0 else 0
+            channelLength = len(channel)
+            exceedsLengthLimit = joinChunkLength + separatorLength + channelLength > maxJoinArgLength
+            exceedsChannelLimit = len(joinChunk) >= joinChunkSize
+
+            if len(joinChunk) > 0 and (exceedsLengthLimit or exceedsChannelLimit):
+                joinChunks.append(joinChunk)
+                joinChunk = []
+                joinChunkLength = 0
+
+            separatorLength = 1 if len(joinChunk) > 0 else 0
+            joinChunk.append(channel)
+            joinChunkLength += separatorLength + channelLength
+
+        if len(joinChunk) > 0:
+            joinChunks.append(joinChunk)
+
+        if len(joinChunks) == 0:
+            return
+
+        ioloop = tornado.ioloop.IOLoop.current()
+        joinChunkIndex = 0
+        rateWindowStart = time.time()
+        joinsSentInWindow = 0
+
+        def sendNextJoinChunk():
+            nonlocal joinChunkIndex, rateWindowStart, joinsSentInWindow
+
+            if joinChunkIndex >= len(joinChunks):
+                return
+
+            channels = joinChunks[joinChunkIndex]
+
+            now = time.time()
+            elapsed = now - rateWindowStart
+            if elapsed >= joinRateWindowSeconds:
+                rateWindowStart = now
+                joinsSentInWindow = 0
+
+            if joinsSentInWindow > 0 and joinsSentInWindow + len(channels) > joinRateLimit:
+                sleepSeconds = joinRateWindowSeconds - (time.time() - rateWindowStart)
+                if sleepSeconds > 0:
+                    logger.debug("Rate limiting JOINs: waiting %.2fs", sleepSeconds)
+                    ioloop.call_later(sleepSeconds, sendNextJoinChunk)
+                    return
+                rateWindowStart = time.time()
+                joinsSentInWindow = 0
+
+            logger.debug("Joining %s", ",".join(channels))
+            self.rawmsg("JOIN", ",".join(channels))
+            joinsSentInWindow += len(channels)
+            joinChunkIndex += 1
+
+            if joinChunkIndex < len(joinChunks):
+                ioloop.call_later(0, sendNextJoinChunk)
+
+        sendNextJoinChunk()
 
     def on_raw(self, message):
         # print("Raw message: " + str(message))
