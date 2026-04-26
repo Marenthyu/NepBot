@@ -1118,6 +1118,43 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
                 return result[0]
 
 
+def parseGuaranteedRaritySlots(rawValue):
+    if rawValue is None:
+        return None
+    text = str(rawValue).strip()
+    if text == "":
+        return None
+    maxRarity = int(config["numNormalRarities"]) - 1
+    allowed = []
+    for token in text.split(','):
+        value = token.strip()
+        if value == "":
+            continue
+        try:
+            rarity = int(value)
+        except Exception:
+            logger.warning("Invalid allowed rarity token '%s' in booster config. Ignoring token.", value)
+            continue
+        if 0 <= rarity <= maxRarity:
+            if rarity not in allowed:
+                allowed.append(rarity)
+        else:
+            logger.warning("Out-of-range allowed rarity '%s' in booster config. Ignoring token.", value)
+    if len(allowed) == 0:
+        return None
+    return allowed
+
+
+def popForcedRarityFromList(remainingForcedRarities, minRarity=0):
+    if remainingForcedRarities is None or len(remainingForcedRarities) == 0:
+        return None
+    for idx, rarity in enumerate(remainingForcedRarities):
+        if rarity >= minRarity:
+            del remainingForcedRarities[idx]
+            return rarity
+    return None
+
+
 def recordPullMetrics(*cards):
     with db.cursor() as cur:
         inString = ",".join(["%s"] * len(cards))
@@ -1355,17 +1392,30 @@ def addBooster(userid, boostername, paid, status, eventTokens, channel, isWhispe
 
 def openBooster(bot, userid, username, display_name, channel, isWhisper, packname, buying=True, mega=False, excludeFromScaling=None):
     with db.cursor() as cur:
+        maxRarity = int(config["numNormalRarities"]) - 1
         rarityColumns = ", ".join(
-            "rarity" + str(i) + "UpgradeChance" for i in range(int(config["numNormalRarities"]) - 1))
+            "rarity" + str(i) + "UpgradeChance" for i in range(maxRarity))
 
+        queryParams = [packname]
         if buying:
-            cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, applyScaling, " + rarityColumns + " FROM boosters WHERE name = %s AND buyable = 1",
-                [packname])
+            suffix = " AND buyable = 1"
         else:
-            cur.execute(
-                "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, applyScaling, " + rarityColumns + " FROM boosters WHERE name = %s",
-                [packname])
+            suffix = ""
+
+        baseSelect = "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, applyScaling, " + rarityColumns + " FROM boosters WHERE name = %s" + suffix
+        selectWithGuaranteedRaritySlots = "SELECT listed, buyable, cost, numCards, guaranteeRarity, guaranteeCount, useEventWeightings, maxEventTokens, eventTokenChance, canMega, applyScaling, " + rarityColumns + ", guaranteedRaritySlots FROM boosters WHERE name = %s" + suffix
+
+        hasGuaranteedRaritySlotsColumn = True
+        try:
+            cur.execute(selectWithGuaranteedRaritySlots, queryParams)
+        except Exception as ex:
+            errorCode = ex.args[0] if hasattr(ex, 'args') and len(ex.args) > 0 else None
+            if errorCode == 1054:
+                hasGuaranteedRaritySlotsColumn = False
+                logger.info("Column boosters.guaranteedRaritySlots not found. Explicit rarity-set booster logic disabled.")
+                cur.execute(baseSelect, queryParams)
+            else:
+                raise
 
         packinfo = cur.fetchone()
 
@@ -1383,7 +1433,8 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
         tokenChance = packinfo[8]
         canMega = packinfo[9]
         applyScaling = packinfo[10] != 0
-        normalChances = packinfo[11:]
+        normalChances = packinfo[11:11 + maxRarity]
+        guaranteedRaritySlots = parseGuaranteedRaritySlots(packinfo[11 + maxRarity] if hasGuaranteedRaritySlotsColumn else None)
 
         if excludeFromScaling is None:
             excludeFromScaling = not applyScaling
@@ -1435,6 +1486,7 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
             totalTokensDropped += tokensDropped
             gotEventCard = False
             iterDE = 0
+            remainingForcedRarities = list(guaranteedRaritySlots) if guaranteedRaritySlots is not None else []
             for i in range(numCards - tokensDropped):
                 # scale chances of the card appropriately
                 currentChances = list(normalChances)
@@ -1472,8 +1524,14 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
 
                 # actually drop the card
                 logger.debug("using odds for card %d: %s", i, str(currentChances))
-                card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings,
-                                    bannedCards=uniques + cards))
+                minRarity = pgRarity if i < pgCount else guaranteedRarity
+                forcedRarity = popForcedRarityFromList(remainingForcedRarities, minRarity=minRarity)
+                if forcedRarity is None:
+                    card = int(dropCard(upgradeChances=currentChances, useEventWeightings=useEventWeightings,
+                                        bannedCards=uniques + cards))
+                else:
+                    card = int(dropCard(rarity=forcedRarity, useEventWeightings=useEventWeightings,
+                                        bannedCards=uniques + cards))
                 cards.append(card)
 
                 # check its rarity and adjust scaling data
@@ -1492,6 +1550,10 @@ def openBooster(bot, userid, username, display_name, channel, isWhisper, packnam
                             scalingData[r] += cost / (numCards - tokensDropped)
                         else:
                             scalingData[r] = 0
+
+            if len(remainingForcedRarities) > 0:
+                logger.warning("Booster '%s' could not force all configured rarities due to rarity guarantees or card count. Unused forced rarities: %s",
+                               packname, remainingForcedRarities)
                 
             totalDE += iterDE
             # did they win a free amount-based reward pack?

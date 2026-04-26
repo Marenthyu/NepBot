@@ -353,6 +353,7 @@ function defaultBoosterFormData() {
         eventTokenChance: 0,
         canMega: 0,
         applyScaling: 1,
+        guaranteedRaritySlots: '',
         rarityChances: rarityChances
     };
 }
@@ -372,6 +373,7 @@ function parseBoosterForm(form) {
         eventTokenChance: parseFloat(form.eventTokenChance || '0'),
         canMega: form.canMega === '1' ? 1 : 0,
         applyScaling: form.applyScaling === '1' ? 1 : 0,
+        guaranteedRaritySlots: String(form.guaranteedRaritySlots || '').trim(),
         rarityChances: {}
     };
     for (let column of getBoosterUpgradeColumns()) {
@@ -541,12 +543,32 @@ function adminUpdateBooster(req, res) {
                     httpError(res, 500, 'Server Error', 'Could not save booster settings.');
                     return;
                 }
-                console.log('[admin-booster] Save successful.', {
-                    boosterName: booster.name,
-                    admin: adminUser && adminUser.login ? adminUser.login : 'unknown'
+                con.query('UPDATE boosters SET guaranteedRaritySlots = ? WHERE name = ?', [booster.guaranteedRaritySlots || null, booster.name], (allowedErr) => {
+                    if (allowedErr) {
+                        if (allowedErr.code === 'ER_BAD_FIELD_ERROR') {
+                            console.warn('[admin-booster] guaranteedRaritySlots column not present. Skipping explicit rarity-set save.', {
+                                boosterName: booster.name
+                            });
+                        } else {
+                            console.error('[admin-booster] Save failed while writing guaranteedRaritySlots.', {
+                                boosterName: booster.name,
+                                errorCode: allowedErr.code,
+                                errorNumber: allowedErr.errno,
+                                sqlState: allowedErr.sqlState,
+                                sqlMessage: allowedErr.sqlMessage || allowedErr.message
+                            });
+                            httpError(res, 500, 'Server Error', 'Could not save booster settings.');
+                            return;
+                        }
+                    }
+                    console.log('[admin-booster] Save successful.', {
+                        boosterName: booster.name,
+                        admin: adminUser && adminUser.login ? adminUser.login : 'unknown',
+                        guaranteedRaritySlotsConfigured: !!booster.guaranteedRaritySlots
+                    });
+                    res.writeHead(302, {'Location': '/admin'});
+                    res.end();
                 });
-                res.writeHead(302, {'Location': '/admin'});
-                res.end();
             });
         });
     });
@@ -602,16 +624,37 @@ function adminLoadBooster(req, res, query) {
                 eventTokenChance: row.eventTokenChance,
                 canMega: row.canMega,
                 applyScaling: row.applyScaling,
+                guaranteedRaritySlots: '',
                 rarityChances: {}
             };
             for (let column of rarityColumns) {
                 boosterForm.rarityChances[column] = row[column];
             }
-            console.log('[admin-booster] Load successful.', {
-                boosterName: boosterName,
-                rarityColumnCount: rarityColumns.length
+            con.query('SELECT guaranteedRaritySlots FROM boosters WHERE name = ? LIMIT 1', [boosterName], (allowedErr, allowedRows) => {
+                if (allowedErr) {
+                    if (allowedErr.code === 'ER_BAD_FIELD_ERROR') {
+                        console.warn('[admin-booster] guaranteedRaritySlots column not present. Skipping explicit rarity-set load.', {
+                            boosterName: boosterName
+                        });
+                    } else {
+                        console.error('[admin-booster] Could not load guaranteedRaritySlots column.', {
+                            boosterName: boosterName,
+                            errorCode: allowedErr.code,
+                            errorNumber: allowedErr.errno,
+                            sqlState: allowedErr.sqlState,
+                            sqlMessage: allowedErr.sqlMessage || allowedErr.message
+                        });
+                    }
+                } else if (allowedRows && allowedRows.length > 0) {
+                    boosterForm.guaranteedRaritySlots = allowedRows[0].guaranteedRaritySlots || '';
+                }
+                console.log('[admin-booster] Load successful.', {
+                    boosterName: boosterName,
+                    rarityColumnCount: rarityColumns.length,
+                    guaranteedRaritySlotsConfigured: !!boosterForm.guaranteedRaritySlots
+                });
+                renderAdminPanel(req, res, adminUser, 'Loaded booster "' + boosterName + '" for editing.', null, boosterForm);
             });
-            renderAdminPanel(req, res, adminUser, 'Loaded booster "' + boosterName + '" for editing.', null, boosterForm);
         });
     });
 }
