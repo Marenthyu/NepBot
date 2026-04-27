@@ -461,6 +461,42 @@ function adminLoadWaifu(req, res, query) {
     });
 }
 
+function adminSearchWaifus(req, res, query) {
+    requireAdminJWT(req, res, () => {
+        let searchTerm = String(query.q || '').trim();
+        let seriesTerm = String(query.series || '').trim();
+        let limit = Math.max(1, Math.min(100, parseInt(query.limit || 25, 10) || 25));
+        let whereParts = [];
+        let values = [];
+        if (searchTerm) {
+            whereParts.push('(name LIKE ? OR series LIKE ?)');
+            values.push('%' + searchTerm + '%', '%' + searchTerm + '%');
+        }
+        if (seriesTerm) {
+            whereParts.push('series LIKE ?');
+            values.push('%' + seriesTerm + '%');
+        }
+        let whereClause = whereParts.length ? ('WHERE ' + whereParts.join(' AND ')) : '';
+        values.push(limit);
+        con.query('SELECT id, name, series, base_rarity FROM waifus ' + whereClause + ' ORDER BY name ASC, id ASC LIMIT ?', values, (err, rows) => {
+            if (err) {
+                console.error('[admin-waifu] Could not search waifus:', err);
+                httpError(res, 500, 'Server Error', 'Could not search waifus.');
+                return;
+            }
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({
+                waifus: (rows || []).map((row) => ({
+                    id: row.id,
+                    name: row.name,
+                    series: row.series,
+                    baseRarity: row.base_rarity
+                }))
+            }));
+        });
+    });
+}
+
 function adminUpdateWaifu(req, res) {
     requireAdminJWT(req, res, () => {
         parseRequestBody(req, (body) => {
@@ -669,6 +705,26 @@ function adminGetListedBoosters(req, res) {
             }
             res.writeHead(200, {'Content-Type': 'application/json'});
             res.end(JSON.stringify({boosters: rows.map((row) => row.name)}));
+        });
+    });
+}
+
+function adminGetBoosters(req, res) {
+    requireAdminJWT(req, res, () => {
+        con.query('SELECT name, listed, buyable FROM boosters ORDER BY sortIndex ASC, name ASC', (err, rows) => {
+            if (err) {
+                console.error('[admin-booster] Could not load booster list:', err);
+                httpError(res, 500, 'Server Error', 'Could not load boosters.');
+                return;
+            }
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({
+                boosters: (rows || []).map((row) => ({
+                    name: row.name,
+                    listed: !!row.listed,
+                    buyable: !!row.buyable
+                }))
+            }));
         });
     });
 }
@@ -1813,6 +1869,10 @@ function bootServer(callback) {
                     adminLoadWaifu(req, res, q.query);
                     break;
                 }
+                case "admin-waifu-search": {
+                    adminSearchWaifus(req, res, q.query);
+                    break;
+                }
                 case "admin-waifu-update": {
                     adminUpdateWaifu(req, res);
                     break;
@@ -1823,6 +1883,10 @@ function bootServer(callback) {
                 }
                 case "admin-listed-boosters": {
                     adminGetListedBoosters(req, res);
+                    break;
+                }
+                case "admin-boosters": {
+                    adminGetBoosters(req, res);
                     break;
                 }
                 case "admin-event-close": {
