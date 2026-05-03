@@ -285,6 +285,29 @@ _%>
                 <tbody></tbody>
             </table>
         </div>
+        <hr>
+        <h6>Pack Optimizer</h6>
+        <p class="text-muted mb-2">Find upgrade chances that keep average returns around your target not-profitable margin while matching current pack settings.</p>
+        <div class="form-row align-items-end">
+            <div class="form-group col-md-3">
+                <label>Target Not-Profitable Margin (%)</label>
+                <input id="boosterOptimizerTargetMargin" class="form-control" type="number" min="0" max="95" step="0.5" value="10">
+            </div>
+            <div class="form-group col-md-3">
+                <label>Simulation Packs / Candidate</label>
+                <input id="boosterOptimizerPackCount" class="form-control" type="number" min="100" max="50000" step="100" value="1200">
+            </div>
+            <div class="form-group col-md-3">
+                <label>Candidates</label>
+                <input id="boosterOptimizerIterations" class="form-control" type="number" min="20" max="3000" step="10" value="320">
+            </div>
+            <div class="form-group col-md-3 d-flex">
+                <button id="boosterOptimizerRun" class="btn btn-outline-primary mr-2" type="button">Optimize</button>
+                <button id="boosterOptimizerApply" class="btn btn-primary" type="button" disabled>Apply Chances</button>
+            </div>
+        </div>
+        <div id="boosterOptimizerStatus" class="small text-muted mb-2">No optimizer run yet.</div>
+        <div id="boosterOptimizerResult" class="small"></div>
     </div>
 </div>
 
@@ -314,10 +337,18 @@ _%>
         const testDisenchantTotalEl = document.getElementById('boosterTestDisenchantTotal');
         const testProfitDeltaEl = document.getElementById('boosterTestProfitDelta');
         const testResultsBody = document.querySelector('#boosterTestResultsTable tbody');
+        const optimizerTargetMarginInput = document.getElementById('boosterOptimizerTargetMargin');
+        const optimizerPackCountInput = document.getElementById('boosterOptimizerPackCount');
+        const optimizerIterationsInput = document.getElementById('boosterOptimizerIterations');
+        const optimizerRunButton = document.getElementById('boosterOptimizerRun');
+        const optimizerApplyButton = document.getElementById('boosterOptimizerApply');
+        const optimizerStatus = document.getElementById('boosterOptimizerStatus');
+        const optimizerResult = document.getElementById('boosterOptimizerResult');
         const waifuSearchQuery = document.getElementById('adminWaifuSearchQuery');
         const waifuSearchSeries = document.getElementById('adminWaifuSearchSeries');
         const waifuSearchButton = document.getElementById('adminWaifuSearchBtn');
         const waifuSearchResults = document.getElementById('adminWaifuSearchResults');
+        let optimizerBest = null;
         const rarityNameMap = {
             0: 'common',
             1: 'uncommon',
@@ -469,6 +500,20 @@ _%>
             return null;
         }
 
+        function parseForcedRarities(rawValue) {
+            const forcedRarities = [];
+            const seen = {};
+            String(rawValue || '').split(',').forEach((raw) => {
+                const parsed = parseInt(String(raw).trim(), 10);
+                if (!Number.isFinite(parsed) || parsed < 0 || parsed > 9 || seen[parsed]) {
+                    return;
+                }
+                seen[parsed] = true;
+                forcedRarities.push(parsed);
+            });
+            return forcedRarities;
+        }
+
         function buildScaledUpgradeChances(normalChances, scalingData) {
             const currentChances = normalChances.slice();
             let guaranteedRarity = 0;
@@ -508,11 +553,11 @@ _%>
             return {currentChances, guaranteedRarity};
         }
 
-        function simulateBoosterResults() {
-            if (!boosterUpdateForm || !testPackCountInput) {
-                return;
+        function simulateBoosterStats(packCount, chanceOverrides) {
+            if (!boosterUpdateForm) {
+                return null;
             }
-            const packCount = Math.max(1, Math.min(10000, parseInt(testPackCountInput.value || '1', 10) || 1));
+            const sanitizedPackCount = Math.max(1, Math.min(50000, parseInt(packCount || '1', 10) || 1));
             const numCards = Math.max(1, parseInt(parseNumberInput(boosterUpdateForm, 'numCards', 1), 10));
             const maxEventTokens = Math.max(0, parseInt(parseNumberInput(boosterUpdateForm, 'maxEventTokens', 0), 10));
             const eventTokenChance = Math.max(0, Math.min(1, parseNumberInput(boosterUpdateForm, 'eventTokenChance', 0)));
@@ -523,33 +568,27 @@ _%>
             const buyable = parseInt(parseNumberInput(boosterUpdateForm, 'buyable', 0), 10) !== 0;
             const applyScaling = parseInt(parseNumberInput(boosterUpdateForm, 'applyScaling', 0), 10) !== 0;
             const forcedRaritiesRaw = String((boosterUpdateForm.querySelector('[name="guaranteedRaritySlots"]') || {}).value || '');
-            const forcedRarities = [];
-            const seen = {};
-            forcedRaritiesRaw.split(',').forEach((raw) => {
-                const parsed = parseInt(String(raw).trim(), 10);
-                if (!Number.isFinite(parsed) || parsed < 0 || parsed > 9 || seen[parsed]) {
-                    return;
-                }
-                seen[parsed] = true;
-                forcedRarities.push(parsed);
-            });
-            const normalChances = upgradeColumns.map((column) => {
+            const forcedRarities = parseForcedRarities(forcedRaritiesRaw);
+            const normalChances = (chanceOverrides && chanceOverrides.length ? chanceOverrides : upgradeColumns.map((column) => {
                 const value = parseNumberInput(boosterUpdateForm, column, 1);
                 return Math.max(0, Math.min(1, value));
-            });
+            })).map((chance) => Math.max(0, Math.min(1, parseFloat(chance) || 0)));
             const scalingData = [];
             for (let i = 0; i <= (maxScalingRarity - minScalingRarity); i++) {
                 scalingData.push(0);
             }
             const cardsByRarity = {};
             const pityCardsByRarity = {};
+            let totalValue = 0;
+            let profitablePackCount = 0;
             for (let rarity = 0; rarity <= 9; rarity++) {
                 cardsByRarity[rarity] = 0;
                 pityCardsByRarity[rarity] = 0;
             }
 
-            for (let pack = 0; pack < packCount; pack++) {
+            for (let pack = 0; pack < sanitizedPackCount; pack++) {
                 let tokenCount = 0;
+                let packValue = 0;
                 for (let t = 0; t < maxEventTokens; t++) {
                     if (Math.random() < eventTokenChance) {
                         tokenCount++;
@@ -598,6 +637,7 @@ _%>
                     }
                     rarity = Math.max(0, Math.min(9, rarity));
                     cardsByRarity[rarity]++;
+                    packValue += rarityValueMap[rarity] || 0;
                     if (scalingGuaranteedRarity > 0 && rarity === scalingGuaranteedRarity) {
                         pityCardsByRarity[rarity]++;
                     }
@@ -612,8 +652,130 @@ _%>
                         }
                     }
                 }
+                totalValue += packValue;
+                if (packValue > cost) {
+                    profitablePackCount++;
+                }
             }
-            buildRarityTableRows(cardsByRarity, pityCardsByRarity, cost * packCount);
+            return {
+                cardsByRarity,
+                pityCardsByRarity,
+                packCount: sanitizedPackCount,
+                totalCost: cost * sanitizedPackCount,
+                totalValue,
+                profitablePackCount,
+                profitableRate: profitablePackCount / sanitizedPackCount,
+                averageValue: totalValue / sanitizedPackCount
+            };
+        }
+
+        function simulateBoosterResults() {
+            if (!boosterUpdateForm || !testPackCountInput) {
+                return;
+            }
+            const stats = simulateBoosterStats(Math.max(1, Math.min(10000, parseInt(testPackCountInput.value || '1', 10) || 1)));
+            if (!stats) {
+                return;
+            }
+            buildRarityTableRows(stats.cardsByRarity, stats.pityCardsByRarity, stats.totalCost);
+        }
+
+        function evaluateChanceCandidate(chances, packCount, targetMarginRatio) {
+            const stats = simulateBoosterStats(packCount, chances);
+            if (!stats) {
+                return null;
+            }
+            const marginRatio = stats.totalCost > 0 ? (stats.totalCost - stats.totalValue) / stats.totalCost : 0;
+            const score = Math.abs(marginRatio - targetMarginRatio);
+            return {chances: chances.slice(), stats, marginRatio, score};
+        }
+
+        function renderOptimizerResult(best, targetMarginRatio) {
+            if (!optimizerResult || !optimizerStatus) {
+                return;
+            }
+            if (!best) {
+                optimizerStatus.className = 'small text-danger mb-2';
+                optimizerStatus.textContent = 'Could not compute optimizer result with current settings.';
+                optimizerResult.innerHTML = '';
+                return;
+            }
+            const realizedMarginPct = (best.marginRatio * 100).toFixed(2);
+            const targetMarginPct = (targetMarginRatio * 100).toFixed(2);
+            const profitablePct = (best.stats.profitableRate * 100).toFixed(2);
+            optimizerStatus.className = 'small text-success mb-2';
+            optimizerStatus.textContent = 'Optimization finished. Best match found.';
+            let rows = '';
+            upgradeColumns.forEach((column, idx) => {
+                rows += '<tr><td>' + column + '</td><td><code>' + (best.chances[idx] || 0).toFixed(8) + '</code></td></tr>';
+            });
+            optimizerResult.innerHTML = '<div class="alert alert-light border">' +
+                '<div><strong>Target margin:</strong> ' + targetMarginPct + '% not-profitable</div>' +
+                '<div><strong>Estimated margin:</strong> ' + realizedMarginPct + '% not-profitable</div>' +
+                '<div><strong>Estimated profitable packs:</strong> ' + profitablePct + '%</div>' +
+                '<div><strong>Average disenchant / pack:</strong> ' + best.stats.averageValue.toFixed(2) + '</div>' +
+                '<div class="table-responsive mt-2"><table class="table table-sm table-bordered mb-0"><thead><tr><th>Upgrade Chance</th><th>Suggested Value</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+                '</div>';
+        }
+
+        function runPackOptimizer() {
+            if (!boosterUpdateForm || !optimizerRunButton) {
+                return;
+            }
+            const targetMarginRatio = Math.max(0, Math.min(0.95, (parseFloat((optimizerTargetMarginInput || {}).value || '10') || 10) / 100));
+            const candidatePackCount = Math.max(100, Math.min(50000, parseInt((optimizerPackCountInput || {}).value || '1200', 10) || 1200));
+            const candidateIterations = Math.max(20, Math.min(3000, parseInt((optimizerIterationsInput || {}).value || '320', 10) || 320));
+            const baseChances = upgradeColumns.map((column) => Math.max(0, Math.min(1, parseNumberInput(boosterUpdateForm, column, 1))));
+
+            optimizerStatus.className = 'small text-muted mb-2';
+            optimizerStatus.textContent = 'Optimizing...';
+            optimizerBest = null;
+            if (optimizerApplyButton) {
+                optimizerApplyButton.disabled = true;
+            }
+
+            let best = evaluateChanceCandidate(baseChances, candidatePackCount, targetMarginRatio);
+            const scaleCandidates = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.05, 1.1];
+            scaleCandidates.forEach((scale) => {
+                const scaled = baseChances.map((chance) => Math.max(0, Math.min(1, chance * scale)));
+                const candidate = evaluateChanceCandidate(scaled, candidatePackCount, targetMarginRatio);
+                if (candidate && (!best || candidate.score < best.score)) {
+                    best = candidate;
+                }
+            });
+
+            for (let i = 0; i < candidateIterations; i++) {
+                const candidate = (best ? best.chances : baseChances).map((chance, idx) => {
+                    const noiseScale = 0.22 / Math.sqrt(1 + (i / 40));
+                    const jitter = (Math.random() * 2 - 1) * noiseScale;
+                    const weight = idx <= 1 ? 0.45 : 1;
+                    return Math.max(0, Math.min(1, chance + jitter * weight));
+                });
+                const evaluated = evaluateChanceCandidate(candidate, candidatePackCount, targetMarginRatio);
+                if (evaluated && (!best || evaluated.score < best.score)) {
+                    best = evaluated;
+                }
+            }
+
+            optimizerBest = best;
+            renderOptimizerResult(best, targetMarginRatio);
+            if (optimizerApplyButton) {
+                optimizerApplyButton.disabled = !best;
+            }
+        }
+
+        function applyOptimizerResult() {
+            if (!boosterUpdateForm || !optimizerBest) {
+                return;
+            }
+            upgradeColumns.forEach((column, idx) => {
+                const field = boosterUpdateForm.querySelector('[name="' + column + '"]');
+                if (!field) {
+                    return;
+                }
+                field.value = (optimizerBest.chances[idx] || 0).toFixed(10).replace(/0+$/, '').replace(/\.$/, '');
+            });
+            simulateBoosterResults();
         }
 
         function updateWaifuPreviewRarityClasses(rarity, firstGod) {
@@ -776,6 +938,12 @@ _%>
         }
         if (testRerollButton) {
             testRerollButton.addEventListener('click', simulateBoosterResults);
+        }
+        if (optimizerRunButton) {
+            optimizerRunButton.addEventListener('click', runPackOptimizer);
+        }
+        if (optimizerApplyButton) {
+            optimizerApplyButton.addEventListener('click', applyOptimizerResult);
         }
         if (waifuSearchButton) {
             waifuSearchButton.addEventListener('click', runWaifuSearch);

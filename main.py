@@ -232,6 +232,31 @@ def booleanConfig(name):
     return name in config and config[name].strip().lower() not in ["off", "no", "false"]
 
 
+def getFloatConfig(name, defaultValue):
+    try:
+        return float(config.get(name, defaultValue))
+    except (TypeError, ValueError):
+        return float(defaultValue)
+
+
+def getIntConfig(name, defaultValue):
+    try:
+        return int(float(config.get(name, defaultValue)))
+    except (TypeError, ValueError):
+        return int(defaultValue)
+
+
+def getLowPointsGainMultiplier(currentPoints, lowPointsThresholdA, lowPointsThresholdB, lowPointsThresholdC,
+                               lowPointsMultiplierX, lowPointsMultiplierY, lowPointsMultiplierZ):
+    if currentPoints < lowPointsThresholdA:
+        return lowPointsMultiplierX
+    if currentPoints < lowPointsThresholdB:
+        return lowPointsMultiplierY
+    if currentPoints < lowPointsThresholdC:
+        return lowPointsMultiplierZ
+    return 1.0
+
+
 def placeBet(channel, userid, betms):
     cur = db.cursor()
     cur.execute("SELECT id FROM bets WHERE channel = %s AND status = 'open' LIMIT 1", [channel])
@@ -1733,6 +1758,10 @@ class NepBot(NepBotClass):
         super().__init__(config["username"])
         self.config = config
         self.mychannels = channels
+        self.startupJoinPending = set()
+        self.startupJoinActive = False
+        self.startupJoinGeneration = 0
+        self.startupJoinRetryCount = 0
         NepBot.instance = self
 
     def on_clearchat(self, message):
@@ -1780,6 +1809,15 @@ class NepBot(NepBotClass):
             logger.info("No Mod in %s!", str(params[0]))
             self.nomodalerted.append(params[0])
             self.message(params[0], "Hey! I noticed i am not a mod here! Please do mod me to avoid any issues!")
+
+        if len(params) > 0 and self.startupJoinActive:
+            joinedChannel = str(params[0]).lower()
+            if joinedChannel in self.startupJoinPending:
+                self.startupJoinPending.remove(joinedChannel)
+                logger.debug("Startup join confirmed for %s (%d remaining)", joinedChannel, len(self.startupJoinPending))
+                if len(self.startupJoinPending) == 0:
+                    logger.info("Startup join verification complete: all channels confirmed.")
+                    self.startupJoinActive = False
         return
 
     def on_roomstate(self, message):
@@ -2059,6 +2097,12 @@ class NepBot(NepBotClass):
                 passivePoints = int(config["passivePoints"])
                 pointsMult = float(config["pointsMultiplier"])
                 maraPointsMult = float(config["marathonPointsMultiplier"])
+                lowPointsThresholdA = getIntConfig("lowPointsThresholdA", 0)
+                lowPointsThresholdB = getIntConfig("lowPointsThresholdB", lowPointsThresholdA)
+                lowPointsThresholdC = getIntConfig("lowPointsThresholdC", lowPointsThresholdB)
+                lowPointsMultiplierX = getFloatConfig("lowPointsMultiplierX", 1.0)
+                lowPointsMultiplierY = getFloatConfig("lowPointsMultiplierY", 1.0)
+                lowPointsMultiplierZ = getFloatConfig("lowPointsMultiplierZ", 1.0)
 
                 doneusers = list(doneusers)
                 with busyLock:
@@ -2087,6 +2131,10 @@ class NepBot(NepBotClass):
                                         altPointGain = round(altPointGain * maraPointsMult)
                                         pointGain = max(pointGain, altPointGain)
                                     pointGain = int(pointGain * pointsMult)
+                                    lowPointsMultiplier = getLowPointsGainMultiplier(
+                                        int(viewerInfo[1]), lowPointsThresholdA, lowPointsThresholdB, lowPointsThresholdC,
+                                        lowPointsMultiplierX, lowPointsMultiplierY, lowPointsMultiplierZ)
+                                    pointGain = int(pointGain * lowPointsMultiplier)
                                     if viewerInfo[2] is None:
                                         maxPointGain = max(maxPointsInactive - viewerInfo[1], 0)
                                         if pointGain > maxPointGain:
@@ -2169,6 +2217,10 @@ class NepBot(NepBotClass):
                             altPointGain = round(altPointGain * maraPointsMult)
                             pointGain = max(pointGain, altPointGain)
                         pointGain = int(pointGain * pointsMult)
+                        lowPointsMultiplier = getLowPointsGainMultiplier(
+                            0, lowPointsThresholdA, lowPointsThresholdB, lowPointsThresholdC,
+                            lowPointsMultiplierX, lowPointsMultiplierY, lowPointsMultiplierZ)
+                        pointGain = int(pointGain * lowPointsMultiplier)
                         updateData.append((pointGain, viewer))
 
                     # done with this slice
@@ -2291,75 +2343,114 @@ class NepBot(NepBotClass):
         logger.info("Connected! joining channels...")
         super().on_connect()
         normalizedChannels = [channel.lower() for channel in self.mychannels]
+        self.startupJoinGeneration += 1
+        generation = self.startupJoinGeneration
+        self.startupJoinPending = set(normalizedChannels)
+        self.startupJoinActive = len(self.startupJoinPending) > 0
+        self.startupJoinRetryCount = 0
         # Twitch default join rate limit for normal accounts: 20 join attempts / 10 seconds.
         # Use the normal-account limit here to stay safe on legacy deployments.
         joinRateLimit = 20
         joinRateWindowSeconds = 10.0
         joinChunkSize = 20
+        joinVerifyDelaySeconds = 12.0
+        maxStartupJoinRetries = 3
         # Be conservative in this legacy stack: keep a margin below 512 to avoid edge-case overflow/rejection.
         maxJoinArgLength = 512 - len("JOIN ") - 2 - 64
-        joinChunks = []
-        joinChunk = []
-        joinChunkLength = 0
-
-        for channel in normalizedChannels:
-            separatorLength = 1 if len(joinChunk) > 0 else 0
-            channelLength = len(channel)
-            exceedsLengthLimit = joinChunkLength + separatorLength + channelLength > maxJoinArgLength
-            exceedsChannelLimit = len(joinChunk) >= joinChunkSize
-
-            if len(joinChunk) > 0 and (exceedsLengthLimit or exceedsChannelLimit):
-                joinChunks.append(joinChunk)
-                joinChunk = []
-                joinChunkLength = 0
-
-            separatorLength = 1 if len(joinChunk) > 0 else 0
-            joinChunk.append(channel)
-            joinChunkLength += separatorLength + channelLength
-
-        if len(joinChunk) > 0:
-            joinChunks.append(joinChunk)
-
-        if len(joinChunks) == 0:
-            return
-
         ioloop = tornado.ioloop.IOLoop.current()
-        joinChunkIndex = 0
-        rateWindowStart = time.time()
-        joinsSentInWindow = 0
 
-        def sendNextJoinChunk():
-            nonlocal joinChunkIndex, rateWindowStart, joinsSentInWindow
+        def buildJoinChunks(channelsToJoin):
+            joinChunks = []
+            joinChunk = []
+            joinChunkLength = 0
 
-            if joinChunkIndex >= len(joinChunks):
+            for channel in channelsToJoin:
+                separatorLength = 1 if len(joinChunk) > 0 else 0
+                channelLength = len(channel)
+                exceedsLengthLimit = joinChunkLength + separatorLength + channelLength > maxJoinArgLength
+                exceedsChannelLimit = len(joinChunk) >= joinChunkSize
+
+                if len(joinChunk) > 0 and (exceedsLengthLimit or exceedsChannelLimit):
+                    joinChunks.append(joinChunk)
+                    joinChunk = []
+                    joinChunkLength = 0
+
+                separatorLength = 1 if len(joinChunk) > 0 else 0
+                joinChunk.append(channel)
+                joinChunkLength += separatorLength + channelLength
+
+            if len(joinChunk) > 0:
+                joinChunks.append(joinChunk)
+
+            return joinChunks
+
+        def scheduleJoinSequence(channelsToJoin):
+            joinChunks = buildJoinChunks(channelsToJoin)
+            if len(joinChunks) == 0:
                 return
 
-            channels = joinChunks[joinChunkIndex]
+            joinChunkIndex = 0
+            rateWindowStart = time.time()
+            joinsSentInWindow = 0
 
-            now = time.time()
-            elapsed = now - rateWindowStart
-            if elapsed >= joinRateWindowSeconds:
-                rateWindowStart = now
-                joinsSentInWindow = 0
+            def sendNextJoinChunk():
+                nonlocal joinChunkIndex, rateWindowStart, joinsSentInWindow
 
-            if joinsSentInWindow > 0 and joinsSentInWindow + len(channels) > joinRateLimit:
-                sleepSeconds = joinRateWindowSeconds - (time.time() - rateWindowStart)
-                if sleepSeconds > 0:
-                    logger.debug("Rate limiting JOINs: waiting %.2fs", sleepSeconds)
-                    ioloop.call_later(sleepSeconds, sendNextJoinChunk)
+                if generation != self.startupJoinGeneration or not self.startupJoinActive:
                     return
-                rateWindowStart = time.time()
-                joinsSentInWindow = 0
 
-            logger.debug("Joining %s", ",".join(channels))
-            self.rawmsg("JOIN", ",".join(channels))
-            joinsSentInWindow += len(channels)
-            joinChunkIndex += 1
+                if joinChunkIndex >= len(joinChunks):
+                    ioloop.call_later(joinVerifyDelaySeconds, verifyPendingJoins)
+                    return
 
-            if joinChunkIndex < len(joinChunks):
+                channels = joinChunks[joinChunkIndex]
+
+                now = time.time()
+                elapsed = now - rateWindowStart
+                if elapsed >= joinRateWindowSeconds:
+                    rateWindowStart = now
+                    joinsSentInWindow = 0
+
+                if joinsSentInWindow > 0 and joinsSentInWindow + len(channels) > joinRateLimit:
+                    sleepSeconds = joinRateWindowSeconds - (time.time() - rateWindowStart)
+                    if sleepSeconds > 0:
+                        logger.debug("Rate limiting JOINs: waiting %.2fs", sleepSeconds)
+                        ioloop.call_later(sleepSeconds, sendNextJoinChunk)
+                        return
+                    rateWindowStart = time.time()
+                    joinsSentInWindow = 0
+
+                logger.debug("Joining %s", ",".join(channels))
+                self.rawmsg("JOIN", ",".join(channels))
+                joinsSentInWindow += len(channels)
+                joinChunkIndex += 1
                 ioloop.call_later(0, sendNextJoinChunk)
 
-        sendNextJoinChunk()
+            sendNextJoinChunk()
+
+        def verifyPendingJoins():
+            if generation != self.startupJoinGeneration or not self.startupJoinActive:
+                return
+
+            if len(self.startupJoinPending) == 0:
+                logger.info("Startup join verification complete: all channels confirmed.")
+                self.startupJoinActive = False
+                return
+
+            if self.startupJoinRetryCount >= maxStartupJoinRetries:
+                missingChannels = sorted(self.startupJoinPending)
+                logger.warning("Startup join verification incomplete after %d retries. Missing channels (%d): %s",
+                               self.startupJoinRetryCount, len(missingChannels), ",".join(missingChannels))
+                self.startupJoinActive = False
+                return
+
+            self.startupJoinRetryCount += 1
+            missingChannels = sorted(self.startupJoinPending)
+            logger.warning("Retrying startup joins for %d unconfirmed channels (attempt %d/%d)",
+                           len(missingChannels), self.startupJoinRetryCount, maxStartupJoinRetries)
+            scheduleJoinSequence(missingChannels)
+
+        scheduleJoinSequence(normalizedChannels)
 
     def on_raw(self, message):
         # print("Raw message: " + str(message))
