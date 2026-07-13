@@ -246,15 +246,18 @@ def getIntConfig(name, defaultValue):
         return int(defaultValue)
 
 
-def getLowPointsGainMultiplier(currentPoints, lowPointsThresholdA, lowPointsThresholdB, lowPointsThresholdC,
-                               lowPointsMultiplierX, lowPointsMultiplierY, lowPointsMultiplierZ):
-    if currentPoints < lowPointsThresholdA:
-        return lowPointsMultiplierX
-    if currentPoints < lowPointsThresholdB:
-        return lowPointsMultiplierY
-    if currentPoints < lowPointsThresholdC:
-        return lowPointsMultiplierZ
-    return 1.0
+def getLowPointsGainMultiplier(currentPoints, lowPointsThreshold1, lowPointsThreshold2, lowPointsThreshold3,
+                               lowPointsThreshold4, lowPointsMultiplier1, lowPointsMultiplier2,
+                               lowPointsMultiplier3, lowPointsMultiplier4):
+    if currentPoints < lowPointsThreshold1:
+        return lowPointsMultiplier1
+    if currentPoints < lowPointsThreshold2:
+        return lowPointsMultiplier2
+    if currentPoints < lowPointsThreshold3:
+        return lowPointsMultiplier3
+    if currentPoints < lowPointsThreshold4:
+        return lowPointsMultiplier4
+    return 0.0
 
 
 def placeBet(channel, userid, betms):
@@ -1127,7 +1130,7 @@ def dropCard(rarity=-1, upgradeChances=None, useEventWeightings=False, allowDown
             weighting_column = "(event_weighting*normal_weighting)" if useEventWeightings else "normal_weighting"
             result = None
             if rarity >= int(config["strongerWeightingMinRarity"]):
-                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} AND normal_weighting >= 1 ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), [rarity] + bannedCards)
+                cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} AND (normal_weighting >= 1 OR is_event = 1) ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), [rarity] + bannedCards)
                 result = cur.fetchone()
             if result is None:
                 cur.execute("SELECT id FROM waifus WHERE base_rarity = %s{1} ORDER BY -LOG(1-RAND())/{0} LIMIT 1".format(weighting_column, banClause), [rarity] + bannedCards)
@@ -2097,12 +2100,14 @@ class NepBot(NepBotClass):
                 passivePoints = int(config["passivePoints"])
                 pointsMult = float(config["pointsMultiplier"])
                 maraPointsMult = float(config["marathonPointsMultiplier"])
-                lowPointsThresholdA = getIntConfig("lowPointsThresholdA", 0)
-                lowPointsThresholdB = getIntConfig("lowPointsThresholdB", lowPointsThresholdA)
-                lowPointsThresholdC = getIntConfig("lowPointsThresholdC", lowPointsThresholdB)
-                lowPointsMultiplierX = getFloatConfig("lowPointsMultiplierX", 1.0)
-                lowPointsMultiplierY = getFloatConfig("lowPointsMultiplierY", 1.0)
-                lowPointsMultiplierZ = getFloatConfig("lowPointsMultiplierZ", 1.0)
+                lowPointsThreshold1 = getIntConfig("lowPointsThreshold1", 100000)
+                lowPointsThreshold2 = getIntConfig("lowPointsThreshold2", 1000000)
+                lowPointsThreshold3 = getIntConfig("lowPointsThreshold3", lowPointsThreshold2)
+                lowPointsThreshold4 = getIntConfig("lowPointsThreshold4", lowPointsThreshold3)
+                lowPointsMultiplier1 = getFloatConfig("lowPointsMultiplier1", 3.0)
+                lowPointsMultiplier2 = getFloatConfig("lowPointsMultiplier2", 2.0)
+                lowPointsMultiplier3 = getFloatConfig("lowPointsMultiplier3", 1.0)
+                lowPointsMultiplier4 = getFloatConfig("lowPointsMultiplier4", 0.1)
 
                 doneusers = list(doneusers)
                 with busyLock:
@@ -2132,8 +2137,9 @@ class NepBot(NepBotClass):
                                         pointGain = max(pointGain, altPointGain)
                                     pointGain = int(pointGain * pointsMult)
                                     lowPointsMultiplier = getLowPointsGainMultiplier(
-                                        int(viewerInfo[1]), lowPointsThresholdA, lowPointsThresholdB, lowPointsThresholdC,
-                                        lowPointsMultiplierX, lowPointsMultiplierY, lowPointsMultiplierZ)
+                                        int(viewerInfo[1]), lowPointsThreshold1, lowPointsThreshold2,
+                                        lowPointsThreshold3, lowPointsThreshold4, lowPointsMultiplier1,
+                                        lowPointsMultiplier2, lowPointsMultiplier3, lowPointsMultiplier4)
                                     pointGain = int(pointGain * lowPointsMultiplier)
                                     if viewerInfo[2] is None:
                                         maxPointGain = max(maxPointsInactive - viewerInfo[1], 0)
@@ -2218,8 +2224,9 @@ class NepBot(NepBotClass):
                             pointGain = max(pointGain, altPointGain)
                         pointGain = int(pointGain * pointsMult)
                         lowPointsMultiplier = getLowPointsGainMultiplier(
-                            0, lowPointsThresholdA, lowPointsThresholdB, lowPointsThresholdC,
-                            lowPointsMultiplierX, lowPointsMultiplierY, lowPointsMultiplierZ)
+                            0, lowPointsThreshold1, lowPointsThreshold2, lowPointsThreshold3,
+                            lowPointsThreshold4, lowPointsMultiplier1, lowPointsMultiplier2,
+                            lowPointsMultiplier3, lowPointsMultiplier4)
                         pointGain = int(pointGain * lowPointsMultiplier)
                         updateData.append((pointGain, viewer))
 
@@ -2353,7 +2360,7 @@ class NepBot(NepBotClass):
         joinRateLimit = 20
         joinRateWindowSeconds = 10.0
         joinChunkSize = 20
-        joinVerifyDelaySeconds = 12.0
+        joinVerifyDelaySeconds = 25.0
         maxStartupJoinRetries = 3
         # Be conservative in this legacy stack: keep a margin below 512 to avoid edge-case overflow/rejection.
         maxJoinArgLength = 512 - len("JOIN ") - 2 - 64
